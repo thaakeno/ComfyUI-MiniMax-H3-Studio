@@ -10,3 +10,6 @@ Keep documentation synchronized with actual behavior. Do not document planned fe
 
 Completion requires all locally available tests passing, deterministic workflow generation, a clean working tree, meaningful commit history, a private GitHub repository, and a successful push of `main`.
 
+## Completion checkpoint
+
+All repository implementation milestones are complete. The source contains 9,436 custom-node runtime lines, a 2,103-line maintained workflow, a 718-line reusable subgraph, release automation, and an exact Lightning.ai smoke-test handoff. CUDA generation remains deliberately unclaimed until that handoff is run in the target workspace.

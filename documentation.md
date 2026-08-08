@@ -21,5 +21,14 @@ Local checks cover deterministic prompt compilation, reference indexing, resolut
 
 ## Repository map
 
-The final map will be filled as modules land. Runtime Python lives under `h3studio/`, browser code under `web/`, workflows under `example_workflows/` and `subgraphs/`, tests under `tests/`, and release/validation utilities under `tools/`.
+Runtime Python lives under `h3studio/`, browser code under `web/`, workflows under `example_workflows/` and `subgraphs/`, tests under `tests/`, documentation under `docs/`, and release/validation utilities under `tools/`.
 
+## Verification ledger
+
+- Backend and integration: 85 passed.
+- Frontend state, migration, mention, and resolution: seven passed.
+- Python compilation, Ruff, JavaScript syntax, whitespace, and local-import checks: passed.
+- Workflow regeneration and topology validation: passed; 17 top-level nodes and six subgraph nodes.
+- Registration audit: passed; 16 registered H3 Studio classes and eight used by the maintained workflow.
+- Release-source audit: passed; no model artifacts or detected credentials.
+- CUDA generation and image-quality comparison: intentionally deferred to `docs/LIGHTNING_TEST_PLAN.md`.

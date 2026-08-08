@@ -167,3 +167,6 @@ Subgraph widget promotion remains unstable. Mitigation: keep the custom Studio U
 - No silent downloads or network calls during node execution.
 - Runtime behavior wins over line-count targets; generated workflow formatting remains deterministic.
 
+## Completion record
+
+Milestones 1–7 are complete locally. The final source has 9,436 custom-node runtime lines, a 2,103-line primary workflow, and a 718-line reusable sampling/decode subgraph. Lightning CUDA validation is an explicit environment smoke test, not unfinished repository implementation.
