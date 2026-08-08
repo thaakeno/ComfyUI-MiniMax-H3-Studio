@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: uv sync --extra dev --locked
+      - run: npm run check
+      - run: uv run pytest -q
+      - run: python tools/release_check.py
+      - name: Build tracked-source archive
+        shell: bash
+        run: |
+          archive="ComfyUI-MiniMax-H3-Studio-${GITHUB_REF_NAME}.zip"
+          git archive --format=zip --prefix=ComfyUI-MiniMax-H3-Studio/ --output="$archive" HEAD
+          sha256sum "$archive" > "$archive.sha256"
+      - uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          generate_release_notes: true
+          files: |
+            ComfyUI-MiniMax-H3-Studio-${{ github.ref_name }}.zip
+            ComfyUI-MiniMax-H3-Studio-${{ github.ref_name }}.zip.sha256

@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: uv sync --extra dev --locked
+      - run: uv run pytest -q
+      - run: uv run ruff check h3studio tests/backend tools
+      - run: npm run check
+      - run: python tools/generate_workflows.py --check
+      - run: python tools/validate_workflows.py
+      - run: python tools/audit_nodes.py
+      - run: python tools/release_check.py

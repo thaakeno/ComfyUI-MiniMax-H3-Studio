@@ -18,7 +18,8 @@ def validate_graph(graph, label: str, *, subgraph=False):
     node_map = {node["id"]: node for node in nodes}
     links = graph.get("links", [])
     normalized = [
-        (link[0], link[1], link[2], link[3], link[4], link[5]) if isinstance(link, list)
+        (link[0], link[1], link[2], link[3], link[4], link[5])
+        if isinstance(link, list)
         else (link["id"], link["origin_id"], link["origin_slot"], link["target_id"], link["target_slot"], link["type"])
         for link in links
     ]
@@ -62,7 +63,9 @@ def main():
         errors.append(f"{path.name}: expected 1,800-2,800 meaningful lines, got {lines}")
     if errors:
         raise SystemExit("\n".join(errors))
-    print(f"Workflow graph is structurally valid: {len(workflow['nodes'])} top-level nodes, {len(subgraphs[0]['nodes'])} subgraph nodes, {lines:,} lines.")
+    print(
+        f"Workflow graph is structurally valid: {len(workflow['nodes'])} top-level nodes, {len(subgraphs[0]['nodes'])} subgraph nodes, {lines:,} lines."
+    )
 
 
 if __name__ == "__main__":
