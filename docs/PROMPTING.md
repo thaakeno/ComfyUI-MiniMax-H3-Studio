@@ -32,7 +32,7 @@ Disconnect all image references and describe the still. Auto mode selects FL2VA.
 
 The first pass uses a full native ComfyUI Qwen3-VL checkpoint to inspect analyzer-only image copies and produce factual source descriptions, roles, and retention. Those records are cached by analyzer, prompt, detail setting, and image pixels. Changing only the seed does not inspect the images again.
 
-The optional **Detailed second pass** is text-only. It reuses the analyzer by default or uses a separately selected full Qwen3-VL 8B checkpoint, requests 250-500 words, validates image assignments, directional constraints, and named-style traits, then retries once before a complete deterministic fallback. The chosen output format still decides whether the final H3 prompt is a one-line instruction or the four-section production brief.
+The optional **Detailed prompt expansion** is text-only. It reuses the analyzer by default or uses a separately selected full Qwen3-VL 8B checkpoint, targets 200-450 words, accepts valid instructions from 180 words, validates image assignments, directional/contact constraints, and named-style traits, then retries once only when substantive validation fails. The chosen output format still decides whether the final H3 prompt is a one-line instruction or the four-section production brief.
 
 The H3 ConvRot 32B Qwen encoder remains the conditioning encoder. Its generation head is absent, so it cannot replace either full analyzer/writer checkpoint.
 

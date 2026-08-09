@@ -2,6 +2,28 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [0.1.0-alpha.11] - 2026-08-09
+
+### Added
+
+- Added two independent Benchmark Lab profile selectors, enabling Base-vs-LoRA and direct LightX-vs-PDD/LoRA-vs-LoRA comparisons.
+- Added an optional Mamad8 T=1 Image VAE selector and an identical-latent VAE decoder A/B mode; normal multi-frame decoding remains on the original H3 video VAE.
+- Added the experimental single-frame Image VAE profile, complete `hf download` installation instructions, and workflow notes covering model sources, upscaling, outpainting, and the current inpainting boundary.
+
+### Fixed
+
+- Removed the A/B crash when “Director selected accelerator” resolved to a Base profile; Base is now a valid comparison profile instead of an error after expensive prompt analysis.
+- Replaced the subgraph `ExecutionBlocker` gate with ComfyUI's official lazy-image switch, so benchmark mode cannot schedule a seventh normal generation.
+- Repaired generic visual-analyzer role assignments from prompt grammar after pixel analysis; person/character sources and object/style/outfit donors now update auto-managed role and retention controls correctly.
+- Promoted holding/carrying requests into validated visible contact geometry instead of allowing an object to float independently in front of the subject.
+- Accepted valid 180+ word 4B writer results instead of wasting a second generation solely because they fell slightly below the former arbitrary 250-word threshold.
+
+### Changed
+
+- Grouped matrix execution by profile to reduce repeated adapter swapping and reused identical native-capped variants when profile, seed, prompt, and actual canvas match.
+- Renamed and clarified the detailed prompt-expansion control; the maintained workflow keeps it enabled, while intentionally disabling it now clearly explains the shorter 40–90 word result.
+- Replaced the private-development README with a shorter public-ready guide while preserving inspiration, license boundaries, verification commands, and model links.
+
 ## [0.1.0-alpha.10] - 2026-08-09
 
 ### Added

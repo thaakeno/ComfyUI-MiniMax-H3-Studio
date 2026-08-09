@@ -9,7 +9,7 @@ H3 Studio owns still-image direction, reference metadata, prompt compilation, H3
 ```text
 user prompt + ordered image links + role metadata
                     |
-              H3 Studio state v4
+              H3 Studio state v8
                     |
         deterministic compiler or optional VLM
                     |
@@ -42,10 +42,12 @@ The graph-to-prompt hook merges integrated uploads and optional virtual media li
 - `resolution.py` performs deterministic dimensions.
 - `routing.py` makes route selection explicit.
 - `prompting/` owns four-section production briefs and VLM adapters.
-- `loader.py` loads shared encoder/VAE objects and lazily switches transformer models.
+- `loader.py` loads shared encoder/VAE objects, optional full analyzer/writer checkpoints, optional T=1 Image VAE, and lazily switches transformer models.
 - `director.py` exposes the normal ComfyUI path.
 - `acceleration.py` is the MIT interoperability boundary for optional external backends. It contains no Mamad8 PDD implementation; it discovers and invokes the separately installed registered nodes.
 - `image_runtime.py` contains attributed resolution, prepare, sampling, decode, and selection foundations adapted from Image Studio.
+- `benchmark.py` plans fair profile/resolution matrices, direct LoRA comparisons, and identical-latent decoder tests.
+- `nodes/benchmark.py` executes those plans and exposes the lazy branch switch that prevents normal and benchmark sampling from running together.
 
 ## Why the Director remains top-level
 

@@ -44,3 +44,10 @@ The optional REF2VA PDD profiles interoperate with `mamad8c/ComfyUI-MiniMaxH3-PD
 https://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8
 
 H3 Studio does not bundle, copy, modify, or relicense that implementation. Its MIT-licensed adapter only discovers the node IDs registered by the separately installed package and invokes their public execution surface. The external package and its model artifacts remain separate dependencies under their own terms.
+
+## Optional Mamad8 Image VAE
+
+The experimental `minimax_h3_t1_image_vae_step1597.safetensors` image decoder is distributed separately by Mamad8 and is not bundled:
+https://huggingface.co/Mamad8/MiniMax-H3-Image-VAE
+
+H3 Studio only exposes an optional loader and identical-latent decoder comparison. The model remains under the terms published with its Hugging Face repository. It is restricted to `T=1` still-image experiments; the original H3 video VAE remains the default and the only supported multi-frame decoder.
