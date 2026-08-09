@@ -47,11 +47,13 @@ ASPECT_RATIOS: Dict[str, Tuple[int, int]] = {
     "21:9 ultrawide": (21, 9),
 }
 
+IMAGE_VAE_FRAME_PROFILE = "experimental image VAE | 1 frame"
 RECOMMENDED_FRAME_PROFILE = "recommended | 5 frames"
 BALANCED_FRAME_PROFILE = "extended quality | 9 frames"
 HIGH_FRAME_PROFILE = "high quality | 13 frames"
 MAX_QUALITY_FRAME_PROFILE = "maximum quality | 20 frames (slow)"
 FRAME_PRESETS: Dict[str, int] = {
+    IMAGE_VAE_FRAME_PROFILE: 1,
     RECOMMENDED_FRAME_PROFILE: 5,
     BALANCED_FRAME_PROFILE: 9,
     HIGH_FRAME_PROFILE: 13,

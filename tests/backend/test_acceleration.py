@@ -27,12 +27,15 @@ def test_pdd_profiles_keep_checkpoint_artifacts_paired() -> None:
 
 def test_artifact_resolution_prefers_official_filename_and_rejects_ambiguity() -> None:
     expected = "LORA_h3_pdd_af384_step900_s.safetensors"
-    assert resolve_artifact(
-        [f"nested/{expected}", "h3_pdd_step900_lora_copy.safetensors"],
-        expected=expected,
-        tokens=("h3", "pdd", "step900", "lora"),
-        kind="student LoRA",
-    ) == f"nested/{expected}"
+    assert (
+        resolve_artifact(
+            [f"nested/{expected}", "h3_pdd_step900_lora_copy.safetensors"],
+            expected=expected,
+            tokens=("h3", "pdd", "step900", "lora"),
+            kind="student LoRA",
+        )
+        == f"nested/{expected}"
+    )
     with pytest.raises(PDDBackendError, match="Several possible"):
         resolve_artifact(
             ["a/h3_pdd_step900_lora.safetensors", "b/h3_pdd_step900_lora.safetensors"],

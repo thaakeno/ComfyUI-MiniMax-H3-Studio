@@ -25,7 +25,10 @@ def test_console_report_includes_config_references_and_both_prompts() -> None:
     report = format_execution_report(context)
     assert "H3 STUDIO EXECUTION" in report
     assert "Seed          : 42" in report
-    assert "Prompt shaping: compile_only | image analysis off | detailed second pass off | reference priority 85%" in report
+    assert (
+        "Prompt shaping: compile_only | image analysis off | detailed second pass off | reference priority 85%"
+        in report
+    )
     assert "@Image 1: face.png | role=identity | retention=fully_preserved" in report
     assert "Original prompt:" in report
     assert "Compiled H3 prompt:" in report

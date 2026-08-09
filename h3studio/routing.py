@@ -50,7 +50,9 @@ def choose_route(requested: str, mode: str, reference_count: int) -> RouteDecisi
         if mode == MODE_TEXT_TO_IMAGE:
             return RouteDecision(requested, ROUTE_FL2VA, mode, reference_count, "native empty/keyframe conditioning")
         if mode == MODE_IMAGE_TO_IMAGE:
-            return RouteDecision(requested, ROUTE_FL2VA, mode, reference_count, "source image used as first-frame anchor")
+            return RouteDecision(
+                requested, ROUTE_FL2VA, mode, reference_count, "source image used as first-frame anchor"
+            )
         if mode == MODE_REFERENCE_EDIT:
             return RouteDecision(requested, ROUTE_REF2VA, mode, reference_count, "ordered full-reference conditioning")
         raise RouteError(f"Cannot auto-route unsupported mode {mode!r}.")
@@ -74,4 +76,3 @@ def choose_route(requested: str, mode: str, reference_count: int) -> RouteDecisi
             experimental=True,
         )
     return RouteDecision(requested, requested, mode, reference_count, "explicit user selection")
-

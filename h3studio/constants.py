@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-VERSION: Final = "0.1.0-alpha.10"
+VERSION: Final = "0.1.0-alpha.11"
 STATE_SCHEMA_VERSION: Final = 8
 CONTEXT_SCHEMA_VERSION: Final = 1
 
@@ -160,12 +160,12 @@ PROMPT_SECTION_NAMES: Final = (
 ROLE_KEYWORDS: Final = {
     "identity": ("identity", "same person", "same character", "recognizable", "likeness"),
     "face": ("face", "facial", "eyes", "jaw", "portrait", "head", "hair", "hairstyle", "haircut"),
-    "character": ("character", "person", "subject", "hero", "villain"),
+    "character": ("character", "person", "man", "woman", "boy", "girl", "subject", "hero", "villain"),
     "style": ("style", "rendering", "aesthetic", "art direction", "linework", "anime"),
     "composition": ("composition", "framing", "layout", "camera angle", "perspective"),
     "pose": ("pose", "stance", "gesture", "body position"),
     "outfit": ("outfit", "clothes", "clothing", "wardrobe", "costume", "jacket", "dress"),
-    "object": ("object", "product", "prop", "item", "vehicle", "weapon"),
+    "object": ("object", "thing", "product", "prop", "item", "accessory", "glasses", "vehicle", "weapon"),
     "environment": ("environment", "background", "location", "setting", "scene"),
     "layout": ("poster", "layout", "graphic design", "magazine", "advertisement"),
     "typography": ("typography", "text", "title", "logo", "lettering", "headline"),

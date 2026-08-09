@@ -142,7 +142,9 @@ class ReferenceImage:
             str(value.get("filename") or value.get("name") or storage_name or f"image_{ordinal}.png")
         )
         raw_tags = value.get("tags") or ()
-        tags = tuple(str(item).strip() for item in raw_tags if str(item).strip()) if isinstance(raw_tags, Sequence) else ()
+        tags = (
+            tuple(str(item).strip() for item in raw_tags if str(item).strip()) if isinstance(raw_tags, Sequence) else ()
+        )
         return cls(
             id=str(value.get("id") or stable_reference_id(filename, ordinal)),
             filename=filename,
@@ -306,11 +308,13 @@ def infer_role(context: str, *, fallback: str = "auto") -> str:
     return max(scored)[2] if scored else canonical_role(fallback)
 
 
-def infer_roles_from_prompt(prompt: str, references: Sequence[ReferenceImage], window: int = 120) -> tuple[ReferenceImage, ...]:
+def infer_roles_from_prompt(
+    prompt: str, references: Sequence[ReferenceImage], window: int = 120
+) -> tuple[ReferenceImage, ...]:
     mentions = list(iter_mentions(prompt))
     inferred: list[ReferenceImage] = []
     for reference in references:
-        if "visually_analyzed" in reference.tags or (reference.role != "auto" and not reference.role_auto):
+        if reference.role != "auto" and not reference.role_auto:
             inferred.append(reference)
             continue
         matching = [mention for mention in mentions if mention.ordinal == reference.ordinal]
@@ -320,7 +324,9 @@ def infer_roles_from_prompt(prompt: str, references: Sequence[ReferenceImage], w
             # adjacent mentions. This keeps "person from @Image 2 with the
             # clothes in @Image 1" from assigning both roles to both images.
             left_candidates = [prompt.rfind(mark, max(0, mention.start - window), mention.start) for mark in ".!?\n;"]
-            right_candidates = [prompt.find(mark, mention.end, min(len(prompt), mention.end + window)) for mark in ".!?\n;"]
+            right_candidates = [
+                prompt.find(mark, mention.end, min(len(prompt), mention.end + window)) for mark in ".!?\n;"
+            ]
             left = max(left_candidates) + 1
             valid_right = [candidate for candidate in right_candidates if candidate >= 0]
             right = min(valid_right) + 1 if valid_right else min(len(prompt), mention.end + window)
@@ -333,7 +339,9 @@ def infer_roles_from_prompt(prompt: str, references: Sequence[ReferenceImage], w
                 neighbor = following[0]
                 right = min(right, (mention.end + neighbor.start) // 2)
             snippets.append(prompt[left:right])
-        role = infer_role(" ".join(snippets), fallback="auto")
+        # Prompt grammar is authoritative for an auto-managed card. The VLM's
+        # source-pixel role remains the fallback when the sentence gives no cue.
+        role = infer_role(" ".join(snippets), fallback=reference.role)
         inferred.append(replace(reference, role=role, role_auto=True))
     return tuple(inferred)
 

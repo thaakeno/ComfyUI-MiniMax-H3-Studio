@@ -119,4 +119,3 @@ class DiagnosticBag:
             hint = f" — {item.hint}" if item.hint else ""
             lines.append(f"{item.level.upper()} {item.code}{location}{ref}: {item.message}{hint}")
         return "\n".join(lines)
-

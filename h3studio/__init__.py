@@ -9,4 +9,3 @@ from .constants import STATE_SCHEMA_VERSION, VERSION
 from .state import StudioState
 
 __all__ = ["STATE_SCHEMA_VERSION", "StudioState", "VERSION"]
-

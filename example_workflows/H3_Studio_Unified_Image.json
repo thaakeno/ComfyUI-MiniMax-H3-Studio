@@ -1,8 +1,8 @@
 {
   "id": "51ffc0bb-1b7a-4a1c-a183-1ce99edb4e5e",
   "revision": 0,
-  "last_node_id": 28,
-  "last_link_id": 15,
+  "last_node_id": 29,
+  "last_link_id": 16,
   "nodes": [
     {
       "id": 10,
@@ -212,8 +212,9 @@
           "name": "studio_context",
           "type": "H3_STUDIO_CONTEXT",
           "links": [
+            1,
             10,
-            14
+            13
           ]
         },
         {
@@ -383,6 +384,14 @@
           }
         },
         {
+          "name": "image_vae",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "image_vae"
+          }
+        },
+        {
           "name": "image_analyzer",
           "type": "COMBO",
           "link": null,
@@ -406,7 +415,7 @@
           "links": [
             2,
             3,
-            13
+            12
           ]
         },
         {
@@ -434,6 +443,7 @@
         "minimax_h3_ref2va_pruned_w4a8_mixed.safetensors",
         "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
         "minimax_h3_video_vae_int8_convrot.safetensors",
+        "Disabled - original H3 video VAE only",
         "Auto · Qwen3-VL 4B",
         "Same as image analyzer"
       ],
@@ -654,8 +664,7 @@
           "name": "image",
           "type": "IMAGE",
           "links": [
-            11,
-            12
+            11
           ]
         },
         {
@@ -697,7 +706,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 11
+          "link": 15
         }
       ],
       "outputs": [],
@@ -727,7 +736,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 12
+          "link": 16
         },
         {
           "name": "filename_prefix",
@@ -767,35 +776,35 @@
         {
           "name": "h3_bundle",
           "type": "H3_STUDIO_BUNDLE",
-          "link": 13
+          "link": 12
         },
         {
           "name": "studio_context",
           "type": "H3_STUDIO_CONTEXT",
-          "link": 14
+          "link": 13
         },
         {
-          "name": "enabled",
-          "type": "BOOLEAN",
-          "link": null,
-          "widget": {
-            "name": "enabled"
-          }
-        },
-        {
-          "name": "baseline_profile",
+          "name": "comparison_kind",
           "type": "COMBO",
           "link": null,
           "widget": {
-            "name": "baseline_profile"
+            "name": "comparison_kind"
           }
         },
         {
-          "name": "accelerator_profile",
+          "name": "profile_a",
           "type": "COMBO",
           "link": null,
           "widget": {
-            "name": "accelerator_profile"
+            "name": "profile_a"
+          }
+        },
+        {
+          "name": "profile_b",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "profile_b"
           }
         },
         {
@@ -828,30 +837,23 @@
           "name": "comparison_grid",
           "type": "IMAGE",
           "links": [
-            15
+            14
           ]
         },
         {
           "name": "comparison_report",
           "type": "STRING",
           "links": null
-        },
-        {
-          "name": "normal_generation_context",
-          "type": "H3_STUDIO_CONTEXT",
-          "links": [
-            1
-          ]
         }
       ],
-      "title": "A/B Matrix - 0.4 / 1 / 2 MP",
+      "title": "Benchmark Lab - profiles / resolution / VAE",
       "properties": {
         "Node name for S&R": "H3StudioABComparison"
       },
       "widgets_values": [
-        false,
+        "Sampling profiles x resolution",
         "Base Quality - RES 20",
-        "Director selected accelerator",
+        "LightX v0.1 - ER-SDE 4",
         "Same seed for all - fair comparison",
         1,
         640
@@ -860,32 +862,61 @@
       "bgcolor": "#332640"
     },
     {
-      "id": 18,
-      "type": "PreviewImage",
+      "id": 19,
+      "type": "H3StudioLazyImageSwitch",
       "pos": [
-        340,
-        1260
+        820,
+        1140
       ],
       "size": [
-        640,
-        560
+        420,
+        180
       ],
       "flags": {},
       "order": 7,
       "mode": 0,
       "inputs": [
         {
-          "name": "images",
+          "name": "benchmark_enabled",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "benchmark_enabled"
+          }
+        },
+        {
+          "name": "normal_image",
           "type": "IMAGE",
-          "link": 15
+          "link": 11
+        },
+        {
+          "name": "benchmark_image",
+          "type": "IMAGE",
+          "link": 14
         }
       ],
-      "outputs": [],
-      "title": "A/B Matrix - labeled comparison",
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            15,
+            16
+          ]
+        },
+        {
+          "name": "selected_mode",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Run mode - normal or A/B only",
       "properties": {
-        "Node name for S&R": "PreviewImage"
+        "Node name for S&R": "H3StudioLazyImageSwitch"
       },
-      "widgets_values": [],
+      "widgets_values": [
+        false
+      ],
       "color": "#60467a",
       "bgcolor": "#332640"
     },
@@ -974,7 +1005,7 @@
       },
       "widgets_values": [
         "settings",
-        "Analyze image pixels uses a full native ComfyUI Qwen3-VL checkpoint for factual source descriptions. Detailed second pass then reuses that model text-only by default, or a selected full 8B checkpoint, to create and validate a 250-500 word direction before the chosen one-line or four-section format is compiled. Both stages cache seed-only reruns. The H3 ConvRot encoder remains separate because it has no language-generation head. No model is downloaded automatically."
+        "Analyze image pixels uses a full native ComfyUI Qwen3-VL checkpoint for factual source descriptions and then repairs auto roles from your @Image sentence. Detailed prompt expansion reuses that model text-only by default, or a selected full 8B checkpoint, to create and validate a 200-450 word direction. Both stages cache seed-only reruns. The selected H3 ConvRot file remains the conditioning encoder; it is not assumed to expose a chat-generation head. No model is downloaded automatically."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1244,7 +1275,7 @@
       },
       "widgets_values": [
         "optional / experimental",
-        "Enable the A/B node only when you want six complete generations. Same seed is the fairest comparison; New seed each row keeps each Base/LoRA pair fair while testing three seeds; New seed every image is a diversity sweep, not an isolated A/B. Every cell labels requested and actual resolution, profile, seed, and CUDA-synchronized sampling-only time. While enabled, the node blocks the normal branch so no seventh image is generated. H3's native cap can make 1 MP and 2 MP resolve to the same dimensions."
+        "Turn Benchmark ON only in the purple Run mode switch. ComfyUI lazy evaluation then requests the matrix and never schedules the normal sampler. Choose any Profile A and Profile B, including LightX-vs-PDD. Same seed is the fair default; New seed every image is only a diversity sweep. Identical native-capped variants are reused instead of sampled twice. VAE mode samples one T=1 latent once and decodes it through both the original video VAE and optional Mamad8 Image VAE, isolating decoder differences."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1289,7 +1320,52 @@
       },
       "widgets_values": [
         "models",
-        "Core MiniMax H3 models, 32B conditioning encoder, and video VAE:\nhttps://huggingface.co/Comfy-Org/MiniMax-H3\n\nFull Qwen3-VL 4B/8B analyzer and prompt-writer checkpoints:\nhttps://huggingface.co/Comfy-Org/Qwen3-VL\n\nLightX H3 acceleration files:\nhttps://huggingface.co/Kijai/MiniMax-H3_comfy\n\nTAEH3 live-preview decoder:\nhttps://huggingface.co/Kijai/MiniMax-H3-TAE\n\nMamad8 PDD REF2VA LoRA and heads:\nhttps://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8\n\nRequired PDD node package:\nhttps://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8\n\nH3 Studio never downloads models automatically."
+        "Core MiniMax H3 models, 32B conditioning encoder, and video VAE:\nhttps://huggingface.co/Comfy-Org/MiniMax-H3\n\nFull Qwen3-VL 4B/8B analyzer and prompt writer:\nhttps://huggingface.co/Comfy-Org/Qwen3-VL\n\nExperimental T=1 Image VAE:\nhttps://huggingface.co/Mamad8/MiniMax-H3-Image-VAE\n\nLightX:\nhttps://huggingface.co/Kijai/MiniMax-H3_comfy\n\nTAEH3 preview:\nhttps://huggingface.co/Kijai/MiniMax-H3-TAE\n\nPDD artifacts and required node:\nhttps://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8\nhttps://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8\n\nNothing downloads automatically."
+      ],
+      "color": "#22322f",
+      "bgcolor": "#17211f"
+    },
+    {
+      "id": 29,
+      "type": "H3StudioWorkflowNote",
+      "pos": [
+        2040,
+        260
+      ],
+      "size": [
+        480,
+        390
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "section",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "section"
+          }
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "text"
+          }
+        }
+      ],
+      "outputs": [],
+      "title": "Upscaling, outpainting, and inpainting",
+      "properties": {
+        "Node name for S&R": "H3StudioWorkflowNote",
+        "purpose": "Documentation only; never enters the generation graph."
+      },
+      "widgets_values": [
+        "optional / experimental",
+        "Upscaling is safest after H3's selected still: use ComfyUI's built-in Upscale Model Loader + Image Upscale With Model and a trusted image upscaler. H3 semantic outpainting works by increasing the target aspect ratio and explicitly placing the original reference within the new frame. Exact mask inpainting is not implemented here: H3 Studio has no verified mask-conditioned H3 route, and ComfyUI's VAE Encode for Inpainting requires a model trained for that contract. The node will not pretend semantic reference editing is pixel-locked inpainting."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1298,8 +1374,8 @@
   "links": [
     [
       1,
-      17,
-      2,
+      10,
+      0,
       12,
       1,
       "H3_STUDIO_CONTEXT"
@@ -1380,20 +1456,12 @@
       11,
       13,
       0,
-      14,
-      0,
+      19,
+      1,
       "IMAGE"
     ],
     [
       12,
-      13,
-      0,
-      15,
-      0,
-      "IMAGE"
-    ],
-    [
-      13,
       11,
       0,
       17,
@@ -1401,7 +1469,7 @@
       "H3_STUDIO_BUNDLE"
     ],
     [
-      14,
+      13,
       10,
       0,
       17,
@@ -1409,10 +1477,26 @@
       "H3_STUDIO_CONTEXT"
     ],
     [
-      15,
+      14,
       17,
       0,
-      18,
+      19,
+      2,
+      "IMAGE"
+    ],
+    [
+      15,
+      19,
+      0,
+      14,
+      0,
+      "IMAGE"
+    ],
+    [
+      16,
+      19,
+      0,
+      15,
       0,
       "IMAGE"
     ]

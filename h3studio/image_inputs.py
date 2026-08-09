@@ -42,7 +42,9 @@ def collect_images(kwargs: dict[str, Any]) -> tuple[tuple[Any, ...], tuple[str, 
         raw_storage_name = str(kwargs.get(f"media_filename_{index}") or "").strip()
         storage_name = clean_storage_name(raw_storage_name)
         if image is None and raw_storage_name and not storage_name:
-            raise ValueError(f"Image {len(images) + 1} has an invalid ComfyUI input filename. Remove it and upload it again.")
+            raise ValueError(
+                f"Image {len(images) + 1} has an invalid ComfyUI input filename. Remove it and upload it again."
+            )
         if image is None and not storage_name:
             continue
         media_type = str(kwargs.get(f"media_type_{index}") or "image").strip().lower()

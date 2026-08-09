@@ -285,11 +285,15 @@ class QwenVLAdapter:
             generated = model.generate(**inputs, **generation_kwargs)
         input_length = inputs["input_ids"].shape[1]
         trimmed = generated[:, input_length:]
-        output = processor.batch_decode(trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0].strip()
+        output = processor.batch_decode(trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[
+            0
+        ].strip()
         if not request.keep_loaded:
             cls.unload()
         public_kwargs = {key: value for key, value in generation_kwargs.items() if key != "generator"}
-        return VLMResult(output, request.model_path, handle.device, request.quantization, len(pil_images), public_kwargs)
+        return VLMResult(
+            output, request.model_path, handle.device, request.quantization, len(pil_images), public_kwargs
+        )
 
 
 def enhance_state(

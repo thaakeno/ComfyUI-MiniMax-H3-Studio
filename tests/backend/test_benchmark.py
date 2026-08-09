@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from h3studio.benchmark import (
     SEED_STRATEGIES,
     build_ab_variants,
@@ -25,9 +23,18 @@ def test_ab_matrix_builds_resolution_rows_with_baseline_then_accelerator() -> No
     assert variants[1].profile == "pdd_ref2va_4_900"
 
 
-def test_director_base_profile_requires_an_explicit_accelerator() -> None:
-    with pytest.raises(ValueError, match="Choose LightX or PDD explicitly"):
-        resolve_accelerator("Director selected accelerator", "base_quality_20")
+def test_director_base_profile_is_valid_instead_of_crashing_after_analysis() -> None:
+    assert resolve_accelerator("Director selected accelerator", "base_quality_20") == "base_quality_20"
+
+
+def test_ab_supports_lora_against_lora() -> None:
+    variants = build_ab_variants(
+        "LightX v0.1 - ER-SDE 4",
+        "PDD REF2VA - 4-step - ckpt 900",
+        "base_quality_20",
+    )
+    assert {item.profile for item in variants} == {"lightx_er_sde_4", "pdd_ref2va_4_900"}
+    assert all(item.accelerated for item in variants)
 
 
 def test_ab_labels_say_whether_a_lora_is_active() -> None:

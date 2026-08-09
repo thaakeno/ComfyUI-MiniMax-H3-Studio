@@ -48,6 +48,7 @@ LEGACY_MODE_REFERENCE = "reference"
 LEGACY_RESOLUTIONS = ("480P", "768P", "1024P", "Custom")
 LEGACY_REF_SIZES = ("1k", "2k")
 FRAME_PROFILE_TO_RUNTIME = {
+    "image_vae_1": "experimental image VAE | 1 frame",
     "recommended_5": "recommended | 5 frames",
     "balanced_9": "extended quality | 9 frames",
     "quality_13": "high quality | 13 frames",
@@ -106,7 +107,9 @@ def _state_from_widgets(
         existing = existing_by_ordinal.get(ordinal)
         storage_name = storage_names[ordinal - 1] if ordinal <= len(storage_names) else None
         role = str(kwargs.get(f"role_{ordinal}") or (existing.role if existing else "auto"))
-        retention = str(kwargs.get(f"retention_{ordinal}") or (existing.retention if existing else "attribute_transfer"))
+        retention = str(
+            kwargs.get(f"retention_{ordinal}") or (existing.retention if existing else "attribute_transfer")
+        )
         description = str(kwargs.get(f"description_{ordinal}") or (existing.description if existing else ""))
         references.append(
             ReferenceImage(
@@ -223,7 +226,16 @@ class H3StudioDirector:
         # upstream image tensors through its normal cache.
         return "|".join(
             str(kwargs.get(key, ""))
-            for key in ("prompt", "mode", "aspect_ratio", "megapixels", "seed", "route", "sampling_profile", "studio_state")
+            for key in (
+                "prompt",
+                "mode",
+                "aspect_ratio",
+                "megapixels",
+                "seed",
+                "route",
+                "sampling_profile",
+                "studio_state",
+            )
         )
 
     @classmethod
@@ -404,8 +416,17 @@ class H3StudioCondition:
         frame_preset = FRAME_PROFILE_TO_RUNTIME[studio_context.state.generation.frame_profile]
         references = list(used_images) + [None] * (9 - len(used_images))
         cache_key = (
-            h3_bundle.fl2va_name, h3_bundle.ref2va_name, h3_bundle.clip_name, h3_bundle.video_vae_name,
-            route, runtime_mode, studio_context.prompt, studio_context.width, studio_context.height, frame_preset,
+            h3_bundle.fl2va_name,
+            h3_bundle.ref2va_name,
+            h3_bundle.clip_name,
+            h3_bundle.video_vae_name,
+            h3_bundle.image_vae_name,
+            route,
+            runtime_mode,
+            studio_context.prompt,
+            studio_context.width,
+            studio_context.height,
+            frame_preset,
             self._image_cache_key(studio_context),
         )
         with _CONDITIONING_CACHE_LOCK:
@@ -441,17 +462,22 @@ class H3StudioCondition:
                 _CONDITIONING_CACHE_VALUE = (conditioning, latent, fitted, requested_frames, runtime_info)
         model = h3_bundle.model_for(route)
         run_info = f"{studio_context.summary()}\n\nRuntime: {runtime_info}{route_note}"
+        final_vae = (
+            h3_bundle.image_vae_for_decode()
+            if studio_context.state.generation.frame_profile == "image_vae_1"
+            else h3_bundle.video_vae
+        )
         generation = H3StudioGeneration(
             model=model,
             conditioning=conditioning,
             latent=latent,
-            video_vae=h3_bundle.video_vae,
+            video_vae=final_vae,
             requested_frames=requested_frames,
             context=studio_context,
             fitted_source=fitted,
             run_info=run_info,
         )
-        return model, generation, conditioning, latent, h3_bundle.video_vae, requested_frames, run_info
+        return model, generation, conditioning, latent, final_vae, requested_frames, run_info
 
 
 class H3StudioOutput:
@@ -552,4 +578,10 @@ class H3StudioContextInspector:
     def inspect(studio_context):
         if not isinstance(studio_context, H3StudioContext):
             raise ValueError("Connect an H3 Studio context.")
-        return studio_context.prompt, studio_context.summary(), studio_context.width, studio_context.height, studio_context.seed
+        return (
+            studio_context.prompt,
+            studio_context.summary(),
+            studio_context.width,
+            studio_context.height,
+            studio_context.seed,
+        )

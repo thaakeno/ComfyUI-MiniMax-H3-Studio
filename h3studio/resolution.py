@@ -164,7 +164,9 @@ def plan_resolution(
         capped = True
 
     actual_mp = width * height / 1_000_000
-    ratio_label = aspect_ratio if aspect_ratio in ASPECT_RATIOS and aspect_ratio != "custom" else label_for_ratio(width / height)
+    ratio_label = (
+        aspect_ratio if aspect_ratio in ASPECT_RATIOS and aspect_ratio != "custom" else label_for_ratio(width / height)
+    )
     return ResolutionPlan(
         width=width,
         height=height,
@@ -191,4 +193,3 @@ def plan_from_dimensions(width: int, height: int, *, cap_native: bool = False) -
         custom_height=aligned_height,
         cap_native=cap_native,
     )
-

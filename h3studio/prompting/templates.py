@@ -52,4 +52,3 @@ ROLE_PHRASES = {
     "lighting": "lighting direction, quality, exposure, shadows and highlights",
     "texture": "surface texture, material response, grain and fine rendering character",
 }
-

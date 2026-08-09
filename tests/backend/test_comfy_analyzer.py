@@ -93,8 +93,26 @@ class FakeWriter:
 
     def decode(self, generated, *, skip_special_tokens):
         words = [
-            "Create", "one", "coherent", "portrait", "of", "@Image1", "outside", "with", "clear", "identity",
-            "deliberate", "framing", "natural", "lighting", "credible", "materials", "and", "a", "readable", "silhouette",
+            "Create",
+            "one",
+            "coherent",
+            "portrait",
+            "of",
+            "@Image1",
+            "outside",
+            "with",
+            "clear",
+            "identity",
+            "deliberate",
+            "framing",
+            "natural",
+            "lighting",
+            "credible",
+            "materials",
+            "and",
+            "a",
+            "readable",
+            "silhouette",
         ]
         instruction = " ".join(words + ["visually"] * 235)
         return json.dumps({"instruction": instruction})
@@ -190,10 +208,12 @@ def test_analyzer_rewrite_that_drops_an_image_falls_back_to_original(monkeypatch
     monkeypatch.setattr(analyzer_module, "_CACHE_KEY", None)
     monkeypatch.setattr(analyzer_module, "_CACHE_VALUE", None)
     clip = FakeClip()
-    clip.decode = lambda *_args, **_kwargs: """{"instruction":"Only use @Image1.","references":[
+    clip.decode = lambda *_args, **_kwargs: (
+        """{"instruction":"Only use @Image1.","references":[
       {"ordinal":1,"role":"character","retention":"fully_preserved","description":"Pale clown in a ruffled costume."},
       {"ordinal":2,"role":"object","retention":"attribute_transfer","description":"Rectangular black glasses."}
     ]}"""
+    )
     original = "Make @Image1 wear the glasses from @Image2"
     references = (ReferenceImage("one", "one.png", 1), ReferenceImage("two", "two.png", 2))
 

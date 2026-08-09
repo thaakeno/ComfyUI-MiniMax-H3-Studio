@@ -73,4 +73,3 @@ class H3StudioGeneration:
     context: H3StudioContext
     fitted_source: Any
     run_info: str
-

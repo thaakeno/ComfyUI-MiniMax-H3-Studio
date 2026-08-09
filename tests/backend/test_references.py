@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from h3studio.errors import MissingReferenceError
@@ -95,6 +97,19 @@ def test_role_inference_respects_explicit_role() -> None:
     refs = (reference(1, role="identity"),)
     inferred = infer_roles_from_prompt("Use @Image 1 for style", refs)
     assert inferred[0].role == "identity"
+
+
+def test_prompt_repairs_auto_role_after_visual_analysis() -> None:
+    refs = (
+        replace(reference(1), role="reference", role_auto=True, retention_auto=True, tags=("visually_analyzed",)),
+        replace(reference(2), role="reference", role_auto=True, retention_auto=True, tags=("visually_analyzed",)),
+    )
+    inferred = infer_roles_from_prompt(
+        "Show the man from @Image1 holding the fluffy thing from @Image2 in both hands",
+        refs,
+    )
+    assert inferred[0].role == "character"
+    assert inferred[1].role == "object"
 
 
 def test_role_inference_uses_nearby_mention_language() -> None:

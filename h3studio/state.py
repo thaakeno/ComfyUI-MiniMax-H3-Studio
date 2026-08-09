@@ -161,7 +161,7 @@ class GenerationOptions:
         if sampling not in SAMPLING_PROFILES:
             sampling = "base_quality_20"
         frame_profile = str(value.get("frame_profile") or "recommended_5")
-        if frame_profile not in {"recommended_5", "balanced_9", "quality_13", "maximum_20"}:
+        if frame_profile not in {"image_vae_1", "recommended_5", "balanced_9", "quality_13", "maximum_20"}:
             frame_profile = "recommended_5"
         frame_selection = str(value.get("frame_selection") or "decode_recommended")
         if frame_selection not in {"decode_recommended", "first", "middle", "last", "automatic_quality", "fixed"}:

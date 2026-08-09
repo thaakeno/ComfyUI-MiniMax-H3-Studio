@@ -104,9 +104,7 @@ def resolve_artifact(
             f"Several possible {kind} artifacts matched ({listed}). Keep the official filename {expected!r} "
             "or remove the ambiguous duplicates."
         )
-    raise PDDBackendError(
-        f"Missing {kind} artifact {expected!r}. Download the matching checkpoint from {repository}."
-    )
+    raise PDDBackendError(f"Missing {kind} artifact {expected!r}. Download the matching checkpoint from {repository}.")
 
 
 def registered_pdd_nodes(node_mappings: Mapping[str, Any]) -> dict[str, Any]:
@@ -212,15 +210,10 @@ def build_lightx_backend(model: Any, profile_key: str):
     from .nodes.image_runtime import H3StudioSamplingPreset
 
     runtime_profile = (
-        "LightX v0.1 | ER-SDE 4 steps"
-        if profile_key == "lightx_er_sde_4"
-        else "LightX v0.1 | SA-Solver 4 steps"
+        "LightX v0.1 | ER-SDE 4 steps" if profile_key == "lightx_er_sde_4" else "LightX v0.1 | SA-Solver 4 steps"
     )
     built_model, sampler, sigmas, base_info = H3StudioSamplingPreset().build(patched_model, runtime_profile)
-    info = (
-        f"{base_info} | adapter=LightX v0.1 | lora={lora_name} @ {strength:g} | "
-        f"lora_backend={patch_backend}"
-    )
+    info = f"{base_info} | adapter=LightX v0.1 | lora={lora_name} @ {strength:g} | lora_backend={patch_backend}"
     return built_model, sampler, sigmas, info
 
 

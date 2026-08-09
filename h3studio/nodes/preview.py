@@ -125,7 +125,9 @@ def _limit_latent(torch, value, max_resolution: int):
     scale = max_resolution / longest
     latent_height = max(1, round(value.shape[-2] * scale))
     latent_width = max(1, round(value.shape[-1] * scale))
-    return torch.nn.functional.interpolate(value, size=(latent_height, latent_width), mode="bilinear", align_corners=False)
+    return torch.nn.functional.interpolate(
+        value, size=(latent_height, latent_width), mode="bilinear", align_corners=False
+    )
 
 
 def _jpeg_data_url(torch, image, quality: int) -> tuple[str, int, int]:
@@ -263,7 +265,11 @@ class H3StudioTAEH3Preview:
                 f"TAEH3 preview file '{tiny_vae}' was not found. Put it in ComfyUI/models/vae_approx/."
             )
         cache_key = (
-            id(model), checkpoint_path, str(unique_id or ""), int(max_resolution), int(jpeg_quality),
+            id(model),
+            checkpoint_path,
+            str(unique_id or ""),
+            int(max_resolution),
+            int(jpeg_quality),
             max(1, int(preview_every_n_steps)),
         )
         with _PREVIEW_MODEL_CACHE_LOCK:

@@ -13,8 +13,7 @@ import torch
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from ..benchmark import (
-    ACCELERATOR_PROFILES,
-    BASELINE_PROFILES,
+    PROFILE_CHOICES,
     SEED_STRATEGIES,
     ABVariantSpec,
     build_ab_variants,
@@ -26,6 +25,10 @@ from .image_runtime import H3StudioDecode, H3StudioFrameSelector
 from .loader import H3StudioBundle
 
 LOGGER = logging.getLogger(__name__)
+COMPARISON_KINDS = (
+    "Sampling profiles x resolution",
+    "VAE decode - same T=1 latent",
+)
 _RESOLUTION_SENTENCE = re.compile(
     r"Create one finished [^\n]+? image at approximately \d+(?:\.\d+)? megapixels "
     r"\(\d+\s*[xX×]\s*\d+\)\.",
@@ -80,6 +83,13 @@ def _synchronize_cuda() -> None:
 
 
 def _sample_one(model, conditioning, latent, video_vae, context: H3StudioContext):
+    sampled, sampling_seconds, sampling_info = _sample_latent(model, conditioning, latent, context)
+    image, decode_info, _decode_seconds = _decode_single(sampled, video_vae)
+    del sampled
+    return image, sampling_seconds, sampling_info, decode_info
+
+
+def _sample_latent(model, conditioning, latent, context: H3StudioContext):
     from comfy_extras.nodes_custom_sampler import BasicGuider, RandomNoise, SamplerCustomAdvanced
 
     shifted_model, sampler, sigmas, sampling_info = H3StudioContextSamplingPreset().build(model, context)
@@ -91,7 +101,13 @@ def _sample_one(model, conditioning, latent, video_vae, context: H3StudioContext
     _synchronize_cuda()
     sampling_seconds = time.perf_counter() - started
 
-    frames, _count, decode_info, recommended_index = H3StudioDecode().decode(sampled, video_vae)
+    return sampled, sampling_seconds, sampling_info
+
+
+def _decode_single(sampled, vae):
+    _synchronize_cuda()
+    started = time.perf_counter()
+    frames, _count, decode_info, recommended_index = H3StudioDecode().decode(sampled, vae)
     selected, _debug, selected_index, _score, selection_info = H3StudioFrameSelector().select(
         frames,
         "decode_recommended",
@@ -105,8 +121,14 @@ def _sample_one(model, conditioning, latent, video_vae, context: H3StudioContext
         recommended_index=recommended_index,
     )
     image = selected[:1].detach().to(device="cpu", dtype=torch.float32).clamp(0.0, 1.0)
-    del sampled, frames, selected
-    return image, sampling_seconds, sampling_info, f"{decode_info} {selection_info} selected={selected_index}"
+    _synchronize_cuda()
+    decode_seconds = time.perf_counter() - started
+    del frames, selected
+    return (
+        image,
+        f"{decode_info} {selection_info} selected={selected_index} | decode {decode_seconds:.3f}s",
+        decode_seconds,
+    )
 
 
 def _font(size: int, *, bold: bool = False):
@@ -163,23 +185,49 @@ def _comparison_grid(results: list[_ABResult], seed_strategy: str, cell_size: in
         profile = short_profile_label(result.spec.profile, result.spec.accelerated)
         timing = "failed" if result.sampling_seconds is None else f"sampling {result.sampling_seconds:.2f}s"
         draw.text((x + 10, label_y + 8), f"{requested} - {actual}", fill="#f3f4f6", font=_font(16, bold=True))
-        draw.text((x + 10, label_y + 37), f"seed {result.spec.seed} - {profile} - {timing}", fill="#67e8d0", font=_font(15))
+        draw.text(
+            (x + 10, label_y + 37), f"seed {result.spec.seed} - {profile} - {timing}", fill="#67e8d0", font=_font(15)
+        )
 
     array = np.asarray(grid, dtype=np.uint8).copy()
     return torch.from_numpy(array).to(dtype=torch.float32).div_(255.0).unsqueeze(0)
 
 
+def _vae_comparison_grid(items, *, cell_size: int, seed: int, sampling_seconds: float, canvas: str) -> torch.Tensor:
+    gap, header_height, label_height = 10, 58, 82
+    width = 2 * cell_size + 3 * gap
+    height = header_height + cell_size + label_height + 2 * gap
+    grid = Image.new("RGB", (width, height), "#080b10")
+    draw = ImageDraw.Draw(grid)
+    draw.text((gap, 14), "H3 Studio VAE A/B - identical sampled T=1 latent", fill="#e5e7eb", font=_font(22, bold=True))
+    for column, (label, image, decode_seconds, note) in enumerate(items):
+        x, y = gap + column * (cell_size + gap), header_height + gap
+        grid.paste(_to_pil(image, cell_size), (x, y))
+        label_y = y + cell_size
+        draw.rectangle((x, label_y, x + cell_size, label_y + label_height), fill="#171c24")
+        draw.text((x + 10, label_y + 8), label, fill="#f3f4f6", font=_font(16, bold=True))
+        draw.text((x + 10, label_y + 34), f"seed {seed} - {canvas}", fill="#67e8d0", font=_font(14))
+        draw.text(
+            (x + 10, label_y + 57),
+            f"sampling shared {sampling_seconds:.2f}s - decode {decode_seconds:.2f}s {note}",
+            fill="#9ca3af",
+            font=_font(13),
+        )
+    array = np.asarray(grid, dtype=np.uint8).copy()
+    return torch.from_numpy(array).to(dtype=torch.float32).div_(255.0).unsqueeze(0)
+
+
 class H3StudioABComparison:
-    """Generate a six-cell, explicitly seeded resolution and LoRA comparison grid."""
+    """Generate a six-cell comparison for any two sampling profiles."""
 
     CATEGORY = "H3 Studio/Benchmark"
     FUNCTION = "compare"
-    RETURN_TYPES = ("IMAGE", "STRING", "H3_STUDIO_CONTEXT")
-    RETURN_NAMES = ("comparison_grid", "comparison_report", "normal_generation_context")
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("comparison_grid", "comparison_report")
     DESCRIPTION = (
         "Runs 0.40, 1.00 and 2.00 MP with fixed, paired-row, or per-image seeds. Each resolution compares a native "
-        "no-LoRA Base profile against LightX/PDD, measures the synchronized sampling call, and labels every seed. "
-        "When enabled it blocks the normal branch, so the matrix performs exactly six generations rather than seven."
+        "sampling profiles, including Base-vs-LoRA or LoRA-vs-LoRA, measures the synchronized sampler call, and labels "
+        "every seed. Put it behind H3 Studio's lazy output switch so benchmark mode executes no normal generation."
     )
 
     @classmethod
@@ -188,17 +236,26 @@ class H3StudioABComparison:
             "required": {
                 "h3_bundle": ("H3_STUDIO_BUNDLE",),
                 "studio_context": ("H3_STUDIO_CONTEXT",),
-                "enabled": (
-                    "BOOLEAN",
-                    {"default": False, "tooltip": "OFF passes context to normal generation. ON runs six matrix generations and blocks the normal branch."},
+                "comparison_kind": (
+                    list(COMPARISON_KINDS),
+                    {
+                        "default": COMPARISON_KINDS[0],
+                        "tooltip": "Compare any two sampling profiles across resolutions, or isolate decoder quality using one identical T=1 latent.",
+                    },
                 ),
-                "baseline_profile": (
-                    list(BASELINE_PROFILES.keys()),
-                    {"default": "Base Quality - RES 20", "tooltip": "No-LoRA reference column."},
+                "profile_a": (
+                    list(PROFILE_CHOICES.keys()),
+                    {
+                        "default": "Base Quality - RES 20",
+                        "tooltip": "Left column. May be Base, LightX, PDD, or the Director's current profile.",
+                    },
                 ),
-                "accelerator_profile": (
-                    list(ACCELERATOR_PROFILES.keys()),
-                    {"default": "Director selected accelerator", "tooltip": "LoRA/PDD comparison column."},
+                "profile_b": (
+                    list(PROFILE_CHOICES.keys()),
+                    {
+                        "default": "LightX v0.1 - ER-SDE 4",
+                        "tooltip": "Right column. Choose another LoRA here for a direct LoRA-vs-LoRA test.",
+                    },
                 ),
                 "seed_strategy": (
                     list(SEED_STRATEGIES),
@@ -234,9 +291,9 @@ class H3StudioABComparison:
         self,
         h3_bundle,
         studio_context,
-        enabled: bool,
-        baseline_profile: str,
-        accelerator_profile: str,
+        comparison_kind: str,
+        profile_a: str,
+        profile_b: str,
         seed_strategy: str,
         seed_step: int,
         grid_cell_size: int,
@@ -246,15 +303,44 @@ class H3StudioABComparison:
         if not isinstance(studio_context, H3StudioContext):
             raise ValueError("Connect H3 Studio Director's studio_context output.")
         cell_size = max(320, min(1024, int(grid_cell_size)))
-        if not enabled:
-            disabled = _placeholder("A/B Matrix is disabled\nEnable it to run six comparison generations.", cell_size)
-            array = np.asarray(disabled, dtype=np.uint8).copy()
-            image = torch.from_numpy(array).to(dtype=torch.float32).div_(255.0).unsqueeze(0)
-            return image, "A/B Matrix disabled; the normal generation branch remains active.", studio_context
-
+        if comparison_kind == COMPARISON_KINDS[1]:
+            generation = replace(studio_context.state.generation, frame_profile="image_vae_1")
+            vae_context = replace(studio_context, state=replace(studio_context.state, generation=generation))
+            LOGGER.info(
+                "[H3 Studio - VAE A/B] Preparing one T=1 latent | seed=%d | %dx%d",
+                vae_context.seed,
+                vae_context.width,
+                vae_context.height,
+            )
+            model, _generation, conditioning, latent, _final_vae, _frames, _info = H3StudioCondition().condition(
+                h3_bundle, vae_context
+            )
+            sampled, sampling_seconds, sampling_info = _sample_latent(model, conditioning, latent, vae_context)
+            original_image, original_info, original_seconds = _decode_single(sampled, h3_bundle.video_vae)
+            image_vae = h3_bundle.image_vae_for_decode()
+            image_image, image_info, image_seconds = _decode_single(sampled, image_vae)
+            del sampled
+            canvas = f"{vae_context.width}x{vae_context.height}"
+            report = "\n".join(
+                (
+                    f"H3 Studio VAE A/B | seed={vae_context.seed} | canvas={canvas} | profile={generation.sampling_profile}",
+                    f"Shared sampling={sampling_seconds:.3f}s | {sampling_info}",
+                    f"Original H3 video VAE T=1 | decode={original_seconds:.3f}s | {original_info}",
+                    f"Mamad8 experimental image VAE T=1 | decode={image_seconds:.3f}s | {image_info}",
+                    "Both cells decode the exact same sampled latent; this isolates decoder behavior.",
+                )
+            )
+            LOGGER.info("[H3 Studio - VAE A/B] Complete\n%s", report)
+            items = (
+                ("Original H3 video VAE - T=1", original_image, original_seconds, "baseline"),
+                ("Mamad8 image VAE - T=1", image_image, image_seconds, "experimental"),
+            )
+            return _vae_comparison_grid(
+                items, cell_size=cell_size, seed=vae_context.seed, sampling_seconds=sampling_seconds, canvas=canvas
+            ), report
         variants = build_ab_variants(
-            baseline_profile,
-            accelerator_profile,
+            profile_a,
+            profile_b,
             studio_context.state.generation.sampling_profile,
             studio_context.seed,
             seed_strategy,
@@ -270,64 +356,91 @@ class H3StudioABComparison:
             pass
 
         LOGGER.info(
-            "[H3 Studio - A/B] Starting six-run matrix | base seed=%d | strategy=%s | baseline=%s | accelerator=%s",
+            "[H3 Studio - A/B] Starting matrix | base seed=%d | strategy=%s | profile A=%s | profile B=%s",
             studio_context.seed,
             seed_strategy,
             variants[0].profile,
             variants[1].profile,
         )
-        for row in range(3):
-            row_specs = variants[row * 2 : row * 2 + 2]
-            condition_context = _variant_context(studio_context, row_specs[0])
+        prepared: dict[tuple[int, int, int, str], tuple[Any, Any, Any, Any, str]] = {}
+        variant_contexts = [_variant_context(studio_context, spec) for spec in variants]
+        for context in variant_contexts:
+            key = (context.width, context.height, context.seed, context.compile_result.native_prompt)
+            if key in prepared:
+                continue
             try:
                 model, _generation, conditioning, latent, video_vae, _frames, _info = H3StudioCondition().condition(
                     h3_bundle,
-                    condition_context,
+                    context,
                 )
                 condition_error = ""
             except Exception as exc:
                 model = conditioning = latent = video_vae = None
                 condition_error = f"Conditioning failed: {exc}"
                 LOGGER.exception("[H3 Studio - A/B] %s", condition_error)
+            prepared[key] = (model, conditioning, latent, video_vae, condition_error)
 
-            for spec in row_specs:
-                context = _variant_context(studio_context, spec)
-                result = _ABResult(
-                    spec=spec,
-                    width=context.width,
-                    height=context.height,
-                    actual_megapixels=context.resolution.actual_megapixels,
+        indexed_results: dict[int, _ABResult] = {}
+        # Group by profile to avoid repeatedly swapping patched and unpatched models.
+        execution_order = sorted(range(len(variants)), key=lambda index: (variants[index].profile, index))
+        result_cache: dict[tuple[str, int, int, int, str], _ABResult] = {}
+        for index in execution_order:
+            spec = variants[index]
+            context = variant_contexts[index]
+            result = _ABResult(
+                spec=spec,
+                width=context.width,
+                height=context.height,
+                actual_megapixels=context.resolution.actual_megapixels,
+            )
+            prepared_key = (context.width, context.height, context.seed, context.compile_result.native_prompt)
+            model, conditioning, latent, video_vae, condition_error = prepared[prepared_key]
+            cache_key = (spec.profile, spec.seed, context.width, context.height, context.compile_result.native_prompt)
+            cached_result = result_cache.get(cache_key)
+            if cached_result is not None:
+                result.image = cached_result.image
+                result.sampling_seconds = cached_result.sampling_seconds
+                result.sampling_info = cached_result.sampling_info + " | reused identical actual canvas"
+                LOGGER.info(
+                    "[H3 Studio - A/B] Reused identical variant | %s | %dx%d | seed=%d",
+                    spec.profile,
+                    context.width,
+                    context.height,
+                    spec.seed,
                 )
-                if condition_error:
-                    result.error = condition_error
-                else:
-                    label = short_profile_label(spec.profile, spec.accelerated)
-                    LOGGER.info(
-                        "[H3 Studio - A/B] Running %.2f MP requested -> %dx%d actual | seed=%d | %s",
-                        spec.requested_megapixels,
-                        context.width,
-                        context.height,
-                        context.seed,
-                        label,
+            elif condition_error:
+                result.error = condition_error
+            else:
+                label = short_profile_label(spec.profile, spec.accelerated)
+                LOGGER.info(
+                    "[H3 Studio - A/B] Running %.2f MP requested -> %dx%d actual | seed=%d | %s",
+                    spec.requested_megapixels,
+                    context.width,
+                    context.height,
+                    context.seed,
+                    label,
+                )
+                try:
+                    image, seconds, sampling_info, decode_info = _sample_one(
+                        model,
+                        conditioning,
+                        latent,
+                        video_vae,
+                        context,
                     )
-                    try:
-                        image, seconds, sampling_info, decode_info = _sample_one(
-                            model,
-                            conditioning,
-                            latent,
-                            video_vae,
-                            context,
-                        )
-                        result.image = image
-                        result.sampling_seconds = seconds
-                        result.sampling_info = f"{sampling_info} | {decode_info}"
-                        LOGGER.info("[H3 Studio - A/B] Complete | %s | sampling %.2fs", label, seconds)
-                    except Exception as exc:
-                        result.error = f"{type(exc).__name__}: {exc}"
-                        LOGGER.exception("[H3 Studio - A/B] Variant failed | %s", label)
-                results.append(result)
-                if progress is not None:
-                    progress.update(1)
+                    result.image = image
+                    result.sampling_seconds = seconds
+                    result.sampling_info = f"{sampling_info} | {decode_info}"
+                    LOGGER.info("[H3 Studio - A/B] Complete | %s | sampling %.2fs", label, seconds)
+                except Exception as exc:
+                    result.error = f"{type(exc).__name__}: {exc}"
+                    LOGGER.exception("[H3 Studio - A/B] Variant failed | %s", label)
+            result_cache[cache_key] = result
+            indexed_results[index] = result
+            if progress is not None:
+                progress.update(1)
+
+        results = [indexed_results[index] for index in range(len(variants))]
 
         report_lines = [
             f"H3 Studio A/B Matrix | base_seed={studio_context.seed} | strategy={seed_strategy} | same prompt and references",
@@ -344,12 +457,54 @@ class H3StudioABComparison:
             )
         report = "\n".join(report_lines)
         LOGGER.info("[H3 Studio - A/B] Matrix complete\n%s", report)
-        try:
-            from comfy_execution.graph_utils import ExecutionBlocker
-        except ImportError as exc:  # pragma: no cover - current ComfyUI always provides it
-            raise RuntimeError("Update ComfyUI: A/B branch gating requires ExecutionBlocker support.") from exc
-        return _comparison_grid(results, seed_strategy, cell_size), report, ExecutionBlocker(None)
+        return _comparison_grid(results, seed_strategy, cell_size), report
 
 
-NODE_CLASS_MAPPINGS = {"H3StudioABComparison": H3StudioABComparison}
-NODE_DISPLAY_NAME_MAPPINGS = {"H3StudioABComparison": "H3 Studio - Seeded A/B Matrix"}
+class H3StudioLazyImageSwitch:
+    """Request only the normal image or benchmark image branch from ComfyUI."""
+
+    CATEGORY = "H3 Studio/Benchmark"
+    FUNCTION = "select"
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("image", "selected_mode")
+    DESCRIPTION = "Official lazy-evaluation switch: benchmark ON never evaluates the normal sampler branch, and OFF never evaluates the matrix."
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "benchmark_enabled": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "OFF runs one normal image. ON runs only the selected A/B matrix—never an extra seventh image.",
+                    },
+                ),
+                "normal_image": ("IMAGE", {"lazy": True}),
+                "benchmark_image": ("IMAGE", {"lazy": True}),
+            }
+        }
+
+    def check_lazy_status(self, benchmark_enabled: bool, normal_image=None, benchmark_image=None):
+        selected = "benchmark_image" if benchmark_enabled else "normal_image"
+        return [selected] if locals()[selected] is None else []
+
+    @staticmethod
+    def select(benchmark_enabled: bool, normal_image=None, benchmark_image=None):
+        if benchmark_enabled:
+            if benchmark_image is None:
+                raise ValueError("Benchmark image branch was not connected.")
+            return benchmark_image, "A/B benchmark"
+        if normal_image is None:
+            raise ValueError("Normal image branch was not connected.")
+        return normal_image, "Normal generation"
+
+
+NODE_CLASS_MAPPINGS = {
+    "H3StudioABComparison": H3StudioABComparison,
+    "H3StudioLazyImageSwitch": H3StudioLazyImageSwitch,
+}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "H3StudioABComparison": "H3 Studio - Seeded A/B Matrix",
+    "H3StudioLazyImageSwitch": "H3 Studio - Normal / Benchmark Output",
+}

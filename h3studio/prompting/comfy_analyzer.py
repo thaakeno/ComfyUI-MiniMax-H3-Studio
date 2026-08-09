@@ -37,9 +37,11 @@ Turn behavioral edits into visible constraints. Resolve pronouns. Use character 
 Before answering, silently verify every @Image assignment and requested change. Do not emit prose outside JSON."""
 
 WRITER_SYSTEM_INSTRUCTION = """You are the senior image prompt director for MiniMax H3.
-You receive the user's exact request and factual source-image observations from a separate vision pass. You are not viewing pixels now. Expand them into one precise 250-500 word production instruction inside JSON: {"instruction":"..."}.
+You receive the user's exact request and factual source-image observations from a separate vision pass. You are not viewing pixels now. Expand them into one precise 200-450 word production instruction inside JSON: {"instruction":"..."}.
 
 Preserve every requested action, direction, expression, object, environment, exact wording, negative constraint, and @Image assignment. Never replace @Image tags with Picture, Subject, filenames, Markdown, or internal identifiers. Resolve pronouns and make physical relationships explicit. References are source material, never extra panels, floating objects, duplicate bodies, mannequins, or a collage.
+
+Treat interaction verbs as hard visible geometry. For "hold," describe which hand or both hands grip or support the object, visible finger contact, plausible weight, overlap, scale, and occlusion; the object may not merely float or sit independently in front of the subject. Apply the same concrete contact logic to wearing, carrying, eating, touching, and looking.
 
 Describe the final composition, framing, viewpoint, body and gaze direction, expression, object interaction, lighting, palette, materials, depth, and rendering treatment where they help the request. Do not add unrelated story elements. Source observations are facts, not requested edits; never claim an absent edit was already visible.
 
@@ -109,8 +111,8 @@ def _extract_writer_instruction(text: str) -> str:
 def _writer_failures(candidate: str, original_prompt: str) -> list[str]:
     failures: list[str] = []
     count = len(candidate.split())
-    if count < 250:
-        failures.append(f"instruction has {count} words; minimum is 250")
+    if count < 180:
+        failures.append(f"instruction has {count} words; minimum is 180")
     if count > 500:
         failures.append(f"instruction has {count} words; maximum is 500")
     if not set(mention_ordinals(original_prompt)).issubset(set(mention_ordinals(candidate))):
@@ -120,14 +122,26 @@ def _writer_failures(candidate: str, original_prompt: str) -> list[str]:
         "right": ("right", "frame-right"),
         "left": ("left", "frame-left"),
         "smile": ("smile", "smiling"),
-        "hold": ("hold", "holding", "grasp"),
+        "hold": ("hold", "holding", "grasp", "support"),
         "eat": ("eat", "eating", "bite", "biting"),
     }
     for trigger, alternatives in constraints.items():
         if trigger in source and not any(term in result for term in alternatives):
             failures.append(f"requested {trigger!r} constraint was omitted")
+    if "hold" in source:
+        contact_terms = ("hand", "finger", "grip", "contact", "support", "palm", "wrap")
+        if not any(term in result for term in contact_terms):
+            failures.append("holding instruction lacks visible hand-object contact geometry")
     if "jojo" in source:
-        traits = ("jojo's bizarre adventure", "angular", "black contour", "cel shad", "cross-hatch", "contrast", "saturated")
+        traits = (
+            "jojo's bizarre adventure",
+            "angular",
+            "black contour",
+            "cel shad",
+            "cross-hatch",
+            "contrast",
+            "saturated",
+        )
         missing = [trait for trait in traits if trait not in result]
         if missing:
             failures.append("JoJo style lacks concrete traits: " + ", ".join(missing))
@@ -150,7 +164,7 @@ def _deterministic_writer_fallback(prompt: str, references: Sequence[ReferenceIm
     sections = (
         f"Create one coherent finished still image that visibly fulfills this exact direction: {prompt}.",
         f"Reference contract: {assignments}.",
-        "Preserve every named subject, assignment, action, direction, expression, prop, environment, and negative constraint. Resolve pronouns to the referenced subject and make gaze, head direction, body orientation, facial expression, and object interactions unambiguous in the final frame.",
+        "Preserve every named subject, assignment, action, direction, expression, prop, environment, and negative constraint. Resolve pronouns to the referenced subject and make gaze, head direction, body orientation, facial expression, and object interactions unambiguous in the final frame. For any request to hold or carry an object, show the named hand or both hands visibly gripping or supporting its weight, with fingers wrapped around it, correct contact, overlap, scale, and occlusion; never merely place the object independently in front of the subject.",
         "Use each source only for its assigned identity, object, wardrobe, style, pose, layout, lighting, or environmental function. References are source material, not additional subjects. Do not create a reference sheet, collage, split screen, floating accessory, duplicate body, mannequin, source panel, or unrequested source background. Do not let one source overwrite unrelated traits assigned to another.",
         "Compose a deliberate single frame with clear visual hierarchy, readable silhouette, coherent anatomy, credible perspective, intentional framing, and enough spatial separation for every requested detail to remain legible. Choose a camera distance and viewpoint that make the requested pose, gaze, expression, and transferred objects immediately visible. Establish a specific foreground, subject plane, and background relationship without distracting from the requested edit.",
         "Use motivated lighting with controlled highlights and shadows, consistent material response, purposeful depth, and a unified color relationship. Preserve recognizable identity through facial structure, proportions, silhouette, signature color placement, and source-specific design cues while changing only what the instruction requests. Make transferred accessories sit naturally on the target with correct scale, occlusion, contact, and perspective.",
@@ -180,7 +194,9 @@ def _run_prompt_writer(
         LOGGER.info("[H3 Studio - Prompt Director] Loading writer: %s", writer_name or "selected model")
         clip = clip_loader()
     if clip is None:
-        raise ValueError("Two-pass prompt direction is enabled, but no full Qwen3-VL prompt writer is selected in H3 Studio Loader.")
+        raise ValueError(
+            "Two-pass prompt direction is enabled, but no full Qwen3-VL prompt writer is selected in H3 Studio Loader."
+        )
     records = "\n".join(
         f"@Image{item.ordinal}: role={item.effective_role}; retention={item.retention}; source observation={item.description or 'no visual description available'}"
         for item in references
@@ -269,7 +285,9 @@ def analyze_references(
     else:
         detail_label = "native original pixels" if max_image_edge == 0 else f"max edge {max_image_edge}px"
         started = time.perf_counter()
-        LOGGER.info("[H3 Studio - Vision] Cache MISS (%s) | %d reference(s) | %s", miss_reason, len(images), detail_label)
+        LOGGER.info(
+            "[H3 Studio - Vision] Cache MISS (%s) | %d reference(s) | %s", miss_reason, len(images), detail_label
+        )
         if clip is None and callable(clip_loader):
             LOGGER.info("[H3 Studio - Vision] Loading analyzer: %s", identity)
             clip = clip_loader()
@@ -314,7 +332,11 @@ def analyze_references(
         )
         with _CACHE_LOCK:
             _CACHE_KEY, _CACHE_VALUE = key, (payload, note)
-        LOGGER.info("[H3 Studio - Vision] Complete in %.2fs | %d factual source record(s)", time.perf_counter() - started, len(analyzed))
+        LOGGER.info(
+            "[H3 Studio - Vision] Complete in %.2fs | %d factual source record(s)",
+            time.perf_counter() - started,
+            len(analyzed),
+        )
     if deep_enhancement:
         enhanced, writer_note = _run_prompt_writer(
             writer_clip,
@@ -350,23 +372,27 @@ def _apply_payload(references: Sequence[ReferenceImage], payload: dict[str, Any]
         can_retention = reference.retention_auto or reference.role == "auto"
         can_description = reference.description_auto or not reference.description.strip()
         role = str(item.get("role") or reference.role).strip().lower() if can_role else reference.role
-        retention = str(item.get("retention") or reference.retention).strip().lower() if can_retention else reference.retention
+        retention = (
+            str(item.get("retention") or reference.retention).strip().lower() if can_retention else reference.retention
+        )
         observed = " ".join(str(item.get("description") or "").split())
         description = observed if observed and can_description else reference.description
         if role not in REFERENCE_ROLES:
             role = reference.role
         if retention not in _RETENTIONS:
             retention = reference.retention
-        analyzed.append(replace(
-            reference,
-            role=role,
-            retention=retention,
-            description=description,
-            role_auto=can_role,
-            retention_auto=can_retention,
-            description_auto=bool(observed and can_description),
-            tags=tuple(dict.fromkeys((*reference.tags, "visually_analyzed"))),
-        ))
+        analyzed.append(
+            replace(
+                reference,
+                role=role,
+                retention=retention,
+                description=description,
+                role_auto=can_role,
+                retention_auto=can_retention,
+                description_auto=bool(observed and can_description),
+                tags=tuple(dict.fromkeys((*reference.tags, "visually_analyzed"))),
+            )
+        )
     return tuple(analyzed)
 
 

@@ -53,6 +53,7 @@ export const SAMPLING_PROFILES = Object.freeze([
 ]);
 
 export const FRAME_PROFILES = Object.freeze([
+  ["image_vae_1", "Experimental Image VAE Â· 1 frame"],
   ["recommended_5", "Recommended · 5 frames"],
   ["balanced_9", "Balanced · 9 frames"],
   ["quality_13", "High Quality · 13 frames"],

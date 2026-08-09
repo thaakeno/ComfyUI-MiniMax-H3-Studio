@@ -128,7 +128,9 @@ def test_single_prompt_is_one_line_and_explicit_for_source_edit() -> None:
     )
     result = PromptCompiler().compile(state)
     assert "\n" not in result.native_prompt
-    assert result.native_prompt.startswith("Edit <Picture 1>, the single locked source image: change his hair to green.")
+    assert result.native_prompt.startswith(
+        "Edit <Picture 1>, the single locked source image: change his hair to green."
+    )
     assert "Preserve the same identity" in result.native_prompt
     assert "reference sheet" in result.native_prompt
 

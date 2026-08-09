@@ -40,12 +40,17 @@ def _hard_constraints(prompt: str) -> tuple[str, ...]:
 
     lowered = str(prompt or "").lower()
     constraints: list[str] = []
-    if re.search(r"\b(?:look|looking|gaze|face|turn(?:ed)?(?: his| her| their)? head)\b[^.!?]{0,35}\bto (?:the )?right\b", lowered):
+    if re.search(
+        r"\b(?:look|looking|gaze|face|turn(?:ed)?(?: his| her| their)? head)\b[^.!?]{0,35}\bto (?:the )?right\b",
+        lowered,
+    ):
         constraints.append(
             "The requested person must visibly turn the head and direct the eyes toward frame-right; "
             "do not preserve a frontal head direction or frontal gaze from any reference."
         )
-    if re.search(r"\b(?:look|looking|gaze|face|turn(?:ed)?(?: his| her| their)? head)\b[^.!?]{0,35}\bto (?:the )?left\b", lowered):
+    if re.search(
+        r"\b(?:look|looking|gaze|face|turn(?:ed)?(?: his| her| their)? head)\b[^.!?]{0,35}\bto (?:the )?left\b", lowered
+    ):
         constraints.append(
             "The requested person must visibly turn the head and direct the eyes toward frame-left; "
             "do not preserve a frontal head direction or frontal gaze from any reference."
@@ -164,15 +169,18 @@ def _description(prompt: str, references: Sequence[ReferenceImage], state: Studi
     else:
         adherence_text = "Use the request as the concept while allowing substantial visual interpretation."
     mode = resolve_mode(state.generation.mode, len(references))
-    reference_text = "\n".join(
-        (
-            f"- {reference.mention}: locked FL2VA source image; preserve every unmentioned detail and perform only "
-            "the explicit edit."
-            if mode == MODE_IMAGE_TO_IMAGE
-            else f"- {reference.mention}: use {_role_phrase(reference)} only; retention = {reference.retention}."
+    reference_text = (
+        "\n".join(
+            (
+                f"- {reference.mention}: locked FL2VA source image; preserve every unmentioned detail and perform only "
+                "the explicit edit."
+                if mode == MODE_IMAGE_TO_IMAGE
+                else f"- {reference.mention}: use {_role_phrase(reference)} only; retention = {reference.retention}."
+            )
+            for reference in references
         )
-        for reference in references
-    ) or "- No reference images."
+        or "- No reference images."
+    )
     hard_constraints = _hard_constraints(prompt)
     hard_text = (
         "\n".join(f"- {constraint}" for constraint in hard_constraints)
@@ -245,9 +253,6 @@ def _infer_retentions(
 
     resolved: list[ReferenceImage] = []
     for reference in references:
-        if "visually_analyzed" in reference.tags:
-            resolved.append(reference)
-            continue
         auto_managed = reference.retention_auto or reference.role_auto or reference.role == "auto"
         if not auto_managed:
             resolved.append(reference)
@@ -282,7 +287,9 @@ class PromptCompiler:
     def compile(self, state: StudioState, *, strict: bool = True) -> CompileResult:
         prompt = normalize_user_prompt(state.prompt)
         if not prompt:
-            raise PromptFormatError("Prompt is empty.", hint="Describe the final still image before queuing the workflow.")
+            raise PromptFormatError(
+                "Prompt is empty.", hint="Describe the final still image before queuing the workflow."
+            )
 
         bag = DiagnosticBag(list(state.diagnostics))
         bag.extend(validate_mentions(prompt, state.references).items)
@@ -316,8 +323,12 @@ class PromptCompiler:
                 hint="Type @ to assign each image a precise job.",
             )
 
-        definitions = "\n".join(_definition(reference, resolved_mode) for reference in references) or "N/A - no reference images."
-        retention = "\n".join(_retention(reference, resolved_mode) for reference in references) or "N/A - no reference images."
+        definitions = (
+            "\n".join(_definition(reference, resolved_mode) for reference in references) or "N/A - no reference images."
+        )
+        retention = (
+            "\n".join(_retention(reference, resolved_mode) for reference in references) or "N/A - no reference images."
+        )
         sections = ImagePromptSections(
             subject_definitions=definitions,
             summary=_summary(prompt, references, resolved_mode),

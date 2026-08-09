@@ -356,6 +356,9 @@ function generationSection(node, state, refresh) {
   const sampling = selectControl(generation.sampling_profile, SAMPLING_PROFILES, "Sampling speed", (value) => update({ sampling_profile: value }));
   sampling.title = samplingHelp(generation.sampling_profile);
   const frames = selectControl(generation.frame_profile, FRAME_PROFILES, "Temporal packet length", (value) => update({ frame_profile: value }));
+  frames.title = generation.frame_profile === "image_vae_1"
+    ? "Experimental image-only mode: sample one temporal latent and decode it with the optional Mamad8 Image VAE selected in H3 Studio Loader. Do not use this VAE for video."
+    : "H3 normally benefits from a short temporal packet; the workflow selects one stable decoded still.";
   const seed = numberControl(generation.seed, { min: 0, max: Number.MAX_SAFE_INTEGER, step: 1 }, "Seed", (value) => update({ seed: Math.max(0, Math.trunc(value)) }));
   const random = iconButton("Randomize seed", "↻", () => update({ seed: randomSeed() }));
   const seedWrap = element("div", { className: "h3s-seed-row" }, [seed, random]);
@@ -453,7 +456,7 @@ function promptSection(node, state, refresh) {
       on: { change: (event) => update({ deep_enhancement: event.target.checked }) },
     }),
     element("span", { className: "h3s-switch-track" }),
-    element("span", { className: "h3s-switch-label", text: "Detailed second pass" }),
+    element("span", { className: "h3s-switch-label", text: "Detailed prompt expansion" }),
   ]);
   const adherenceValue = element("span", { className: "h3s-inline-value", text: `${Math.round(options.adherence * 100)}%` });
   const adherence = rangeControl(options.adherence, { min: 0, max: 1, step: 0.05 }, "Reference adherence", (value) => {
@@ -479,7 +482,7 @@ function promptSection(node, state, refresh) {
       controlRow("Analyzer detail", analyzerResolution), controlRow("Prompt director", directorToggle),
       controlRow("Reference priority", adherenceWrap),
     ]),
-    element("p", { className: "h3s-context-help", text: `${explanations[options.enhance_mode]} ${analyzerHelp} ${options.deep_enhancement ? "The cached second pass uses the Loader's Prompt writer without image tokens to create and validate a 250-500 word production direction; it retries once before a complete deterministic fallback." : "Detailed second pass is off, so the vision model supplies only its shorter rewrite."} Reference priority controls how strongly the written prompt tells H3 to preserve reference details; it is not a LoRA strength.` }),
+    element("p", { className: "h3s-context-help", text: `${explanations[options.enhance_mode]} ${analyzerHelp} ${options.deep_enhancement ? "Detailed expansion is ON: the cached text-only writer produces and validates a full 200-450 word production direction." : "Detailed expansion is OFF: pixel analysis still describes and assigns references, but the generated instruction stays intentionally short (about 40-90 words)."} Reference priority controls how strongly the written prompt tells H3 to preserve reference details; it is not a LoRA strength.` }),
   ]);
   return section("Direction", body, null, "Choose how H3 Studio prepares your words before Qwen3-VL encodes them for H3.");
 }

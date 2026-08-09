@@ -84,4 +84,3 @@ def test_resolution_summary_is_readable() -> None:
     assert "×" in summary
     assert "MP" in summary
     assert "1:1" in summary
-

@@ -26,6 +26,7 @@ NONE_MODEL = "None"
 AUTO_ANALYZER = "Auto · Qwen3-VL 4B"
 DISABLED_ANALYZER = "Disabled"
 SAME_AS_ANALYZER = "Same as image analyzer"
+DISABLED_IMAGE_VAE = "Disabled - original H3 video VAE only"
 _WEIGHT_SUFFIXES = (".safetensors", ".gguf", ".ckpt", ".pt", ".pth", ".bin")
 _H3_TOKENS = ("minimax", "h3", "fl2va", "ref2va")
 LOGGER = logging.getLogger(__name__)
@@ -75,12 +76,16 @@ def _filtered(values: Iterable[str], predicate, fallback: str) -> list[str]:
 
 def fl2va_choices() -> list[str]:
     values = _filenames("diffusion_models", "unet")
-    return [NONE_MODEL] + _filtered(values, lambda value: _is_h3(value) and _is_fl(value), "minimax_h3_fl2va.safetensors")
+    return [NONE_MODEL] + _filtered(
+        values, lambda value: _is_h3(value) and _is_fl(value), "minimax_h3_fl2va.safetensors"
+    )
 
 
 def ref2va_choices() -> list[str]:
     values = _filenames("diffusion_models", "unet")
-    return [NONE_MODEL] + _filtered(values, lambda value: _is_h3(value) and _is_ref(value), "minimax_h3_ref2va.safetensors")
+    return [NONE_MODEL] + _filtered(
+        values, lambda value: _is_h3(value) and _is_ref(value), "minimax_h3_ref2va.safetensors"
+    )
 
 
 def clip_choices() -> list[str]:
@@ -129,6 +134,18 @@ def _resolve_prompt_writer(name: str, analyzer_name: str | None) -> str | None:
 def vae_choices() -> list[str]:
     values = _filenames("vae")
     return _filtered(values, lambda value: "minimaxh3video" in _compact(value), "minimax_h3_video_vae_fp16.safetensors")
+
+
+def image_vae_choices() -> list[str]:
+    """Experimental T=1 image-specialized H3 decoders."""
+
+    values = _filenames("vae")
+    selected = [
+        value
+        for value in values
+        if "minimaxh3" in _compact(value) and ("imagevae" in _compact(value) or "t1" in _compact(value))
+    ]
+    return [DISABLED_IMAGE_VAE, *selected]
 
 
 def _registered_class(*names: str):
@@ -182,12 +199,14 @@ class H3StudioBundle:
     ref2va_name: str
     clip_name: str
     video_vae_name: str
+    image_vae_name: str | None
     analyzer_name: str | None
     prompt_writer_name: str | None
     clip: Any
     video_vae: Any
     analyzer_clip: Any = None
     prompt_writer_clip: Any = None
+    image_vae: Any = None
     _model: Any = field(default=None, init=False, repr=False)
     _model_name: str = field(default="", init=False, repr=False)
     _model_kind: str = field(default="", init=False, repr=False)
@@ -222,6 +241,17 @@ class H3StudioBundle:
                 self.prompt_writer_clip = _load_analyzer_clip(self.prompt_writer_name)
             return self.prompt_writer_clip
 
+    def image_vae_for_decode(self):
+        if not self.image_vae_name:
+            raise ValueError(
+                "Select Mamad8's experimental MiniMax H3 Image VAE in H3 Studio Loader, or use the normal 5-frame decoder."
+            )
+        with self._lock:
+            if self.image_vae is None:
+                LOGGER.info("[H3 Studio] Loading optional T=1 image VAE=%s", self.image_vae_name)
+                self.image_vae = _load_vae(self.image_vae_name)
+            return self.image_vae
+
     def model_for(self, kind: str):
         kind = "ref2va" if kind == "ref2va" else "fl2va"
         name = self.selected_name(kind)
@@ -247,6 +277,7 @@ class H3StudioBundle:
         return (
             f"FL2VA={self.fl2va_name} | REF2VA={self.ref2va_name} | "
             f"CLIP={self.clip_name} | Video VAE={self.video_vae_name} | "
+            f"Image VAE={self.image_vae_name or 'disabled'} | "
             f"Image analyzer={self.analyzer_name or 'disabled/missing'} | "
             f"Prompt writer={self.prompt_writer_name or 'disabled/missing'}"
         )
@@ -266,10 +297,23 @@ class H3StudioLoader:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "fl2va_model": (fl2va_choices(), {"default": next((v for v in fl2va_choices() if v != NONE_MODEL), NONE_MODEL)}),
-                "ref2va_model": (ref2va_choices(), {"default": next((v for v in ref2va_choices() if v != NONE_MODEL), NONE_MODEL)}),
+                "fl2va_model": (
+                    fl2va_choices(),
+                    {"default": next((v for v in fl2va_choices() if v != NONE_MODEL), NONE_MODEL)},
+                ),
+                "ref2va_model": (
+                    ref2va_choices(),
+                    {"default": next((v for v in ref2va_choices() if v != NONE_MODEL), NONE_MODEL)},
+                ),
                 "text_encoder": (clip_choices(),),
                 "video_vae": (vae_choices(),),
+                "image_vae": (
+                    image_vae_choices(),
+                    {
+                        "default": DISABLED_IMAGE_VAE,
+                        "tooltip": "Optional Mamad8 T=1 image decoder. Experimental and image-only; never replaces the normal H3 video VAE.",
+                    },
+                ),
                 "image_analyzer": (analyzer_choices(), {"default": AUTO_ANALYZER}),
                 "prompt_writer": (
                     prompt_writer_choices(),
@@ -285,7 +329,15 @@ class H3StudioLoader:
     def IS_CHANGED(cls, **kwargs):
         return "|".join(
             str(kwargs.get(key, ""))
-            for key in ("fl2va_model", "ref2va_model", "text_encoder", "video_vae", "image_analyzer", "prompt_writer")
+            for key in (
+                "fl2va_model",
+                "ref2va_model",
+                "text_encoder",
+                "video_vae",
+                "image_vae",
+                "image_analyzer",
+                "prompt_writer",
+            )
         )
 
     @staticmethod
@@ -294,6 +346,7 @@ class H3StudioLoader:
         ref2va_model: str,
         text_encoder: str,
         video_vae: str,
+        image_vae: str = DISABLED_IMAGE_VAE,
         image_analyzer: str = AUTO_ANALYZER,
         prompt_writer: str = SAME_AS_ANALYZER,
     ):
@@ -308,6 +361,7 @@ class H3StudioLoader:
             ref2va_name=ref2va_model,
             clip_name=text_encoder,
             video_vae_name=video_vae,
+            image_vae_name=None if image_vae == DISABLED_IMAGE_VAE or _is_none(image_vae) else image_vae,
             analyzer_name=analyzer_name,
             prompt_writer_name=prompt_writer_name,
             clip=clip,

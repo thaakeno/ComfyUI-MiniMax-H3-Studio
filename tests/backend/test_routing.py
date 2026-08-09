@@ -42,4 +42,3 @@ def test_invalid_mode_cannot_auto_route() -> None:
 def test_negative_reference_count_raises() -> None:
     with pytest.raises(RouteError):
         choose_route("auto", "text_to_image", -1)
-

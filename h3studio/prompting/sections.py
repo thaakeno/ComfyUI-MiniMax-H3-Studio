@@ -81,4 +81,3 @@ class ImagePromptSections:
             if issues:
                 raise PromptFormatError("; ".join(issues))
         return sections
-

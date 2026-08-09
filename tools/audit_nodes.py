@@ -20,9 +20,7 @@ def mapping_keys(path: Path):
     for candidate in ast.walk(tree):
         if (
             isinstance(candidate, ast.Assign)
-            and any(
-                isinstance(target, ast.Name) and target.id == "NODE_CLASS_MAPPINGS" for target in candidate.targets
-            )
+            and any(isinstance(target, ast.Name) and target.id == "NODE_CLASS_MAPPINGS" for target in candidate.targets)
             and isinstance(candidate.value, ast.Dict)
         ):
             for key in candidate.value.keys:
