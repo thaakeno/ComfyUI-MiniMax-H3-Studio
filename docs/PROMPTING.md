@@ -28,11 +28,13 @@ Set Image 1 to `identity / fully_preserved`, Image 2 to `style / attribute_trans
 
 Disconnect all image references and describe the still. Auto mode selects FL2VA. The compiler omits empty reference sections where appropriate and does not manufacture fake `@Image` labels.
 
-## VLM analysis
+## Two-pass Qwen3-VL direction
 
-VLM mode is useful when reference contents need actual visual inspection instead of word-neighborhood inference. Select an instruction-capable local vision-language checkpoint that supports generation through Transformers. The analyzer receives strict system instructions for the four-section production-brief shape and returns text to the deterministic normalizer.
+The first pass uses a full native ComfyUI Qwen3-VL checkpoint to inspect analyzer-only image copies and produce factual source descriptions, roles, and retention. Those records are cached by analyzer, prompt, detail setting, and image pixels. Changing only the seed does not inspect the images again.
 
-The H3 ConvRot Qwen encoder remains the conditioning encoder. Do not assume every encoder-format checkpoint can independently generate an analysis response.
+The optional **Detailed second pass** is text-only. It reuses the analyzer by default or uses a separately selected full Qwen3-VL 8B checkpoint, requests 250-500 words, validates image assignments, directional constraints, and named-style traits, then retries once before a complete deterministic fallback. The chosen output format still decides whether the final H3 prompt is a one-line instruction or the four-section production brief.
+
+The H3 ConvRot 32B Qwen encoder remains the conditioning encoder. Its generation head is absent, so it cannot replace either full analyzer/writer checkpoint.
 
 ## Common failures
 

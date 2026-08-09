@@ -1,7 +1,7 @@
 {
   "id": "51ffc0bb-1b7a-4a1c-a183-1ce99edb4e5e",
   "revision": 0,
-  "last_node_id": 27,
+  "last_node_id": 28,
   "last_link_id": 15,
   "nodes": [
     {
@@ -212,7 +212,6 @@
           "name": "studio_context",
           "type": "H3_STUDIO_CONTEXT",
           "links": [
-            1,
             10,
             14
           ]
@@ -285,7 +284,7 @@
         "base_quality_20",
         "recommended_5",
         "",
-        "{\"schema_version\":7,\"prompt\":\"Describe the final still image.\",\"references\":[],\"prompt_options\":{\"enhance_mode\":\"compile_only\",\"analyze_images\":true,\"analyzer_resolution\":512,\"adherence\":0.85,\"detail_level\":\"detailed\",\"preserve_user_text\":true,\"infer_roles\":true,\"system_instruction\":\"\",\"analyzer_model\":\"\",\"analyzer_device\":\"auto\",\"analyzer_quantization\":\"auto\",\"analyzer_max_tokens\":1800,\"analyzer_keep_loaded\":false},\"generation\":{\"mode\":\"auto\",\"route\":\"auto\",\"seed\":42,\"aspect_ratio\":\"1:1\",\"megapixels\":1.0,\"custom_width\":1024,\"custom_height\":1024,\"cap_native_resolution\":true,\"sampling_profile\":\"base_quality_20\",\"frame_profile\":\"recommended_5\",\"frame_selection\":\"decode_recommended\",\"reference_short_edge\":2048,\"source_image_ordinal\":1},\"ui\":{\"advanced_open\":false,\"reference_details\":{}}}",
+        "{\"schema_version\":8,\"prompt\":\"Describe the final still image.\",\"references\":[],\"prompt_options\":{\"enhance_mode\":\"compile_only\",\"analyze_images\":true,\"deep_enhancement\":true,\"analyzer_resolution\":512,\"adherence\":0.85,\"detail_level\":\"detailed\",\"preserve_user_text\":true,\"infer_roles\":true,\"system_instruction\":\"\",\"analyzer_model\":\"\",\"analyzer_device\":\"auto\",\"analyzer_quantization\":\"auto\",\"analyzer_max_tokens\":1800,\"analyzer_keep_loaded\":false},\"generation\":{\"mode\":\"auto\",\"route\":\"auto\",\"seed\":42,\"aspect_ratio\":\"1:1\",\"megapixels\":1.0,\"custom_width\":1024,\"custom_height\":1024,\"cap_native_resolution\":true,\"sampling_profile\":\"base_quality_20\",\"frame_profile\":\"recommended_5\",\"frame_selection\":\"decode_recommended\",\"reference_short_edge\":2048,\"source_image_ordinal\":1},\"ui\":{\"advanced_open\":false,\"reference_details\":{}}}",
         "",
         "image",
         "",
@@ -345,7 +344,7 @@
       ],
       "size": [
         560,
-        180
+        220
       ],
       "flags": {},
       "order": 1,
@@ -390,6 +389,14 @@
           "widget": {
             "name": "image_analyzer"
           }
+        },
+        {
+          "name": "prompt_writer",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "prompt_writer"
+          }
         }
       ],
       "outputs": [
@@ -427,7 +434,8 @@
         "minimax_h3_ref2va_pruned_w4a8_mixed.safetensors",
         "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
         "minimax_h3_video_vae_int8_convrot.safetensors",
-        "Auto · Qwen3-VL 4B"
+        "Auto · Qwen3-VL 4B",
+        "Same as image analyzer"
       ],
       "color": "#31475c",
       "bgcolor": "#202e3c"
@@ -750,7 +758,7 @@
       ],
       "size": [
         780,
-        250
+        330
       ],
       "flags": {},
       "order": 6,
@@ -791,6 +799,22 @@
           }
         },
         {
+          "name": "seed_strategy",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "seed_strategy"
+          }
+        },
+        {
+          "name": "seed_step",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "seed_step"
+          }
+        },
+        {
           "name": "grid_cell_size",
           "type": "INT",
           "link": null,
@@ -811,9 +835,16 @@
           "name": "comparison_report",
           "type": "STRING",
           "links": null
+        },
+        {
+          "name": "normal_generation_context",
+          "type": "H3_STUDIO_CONTEXT",
+          "links": [
+            1
+          ]
         }
       ],
-      "title": "Same-seed A/B Matrix - 0.4 / 1 / 2 MP",
+      "title": "A/B Matrix - 0.4 / 1 / 2 MP",
       "properties": {
         "Node name for S&R": "H3StudioABComparison"
       },
@@ -821,6 +852,8 @@
         false,
         "Base Quality - RES 20",
         "Director selected accelerator",
+        "Same seed for all - fair comparison",
+        1,
         640
       ],
       "color": "#60467a",
@@ -941,7 +974,7 @@
       },
       "widgets_values": [
         "settings",
-        "Analyze images + production brief uses a full native ComfyUI Qwen3-VL 4B checkpoint to inspect actual reference pixels, assign roles and descriptions, then compile subject_definitions, summary, retention_analysis, and detailed_description. The H3 ConvRot encoder remains the separate conditioning encoder because it has no language-model head. No model is downloaded automatically."
+        "Analyze image pixels uses a full native ComfyUI Qwen3-VL checkpoint for factual source descriptions. Detailed second pass then reuses that model text-only by default, or a selected full 8B checkpoint, to create and validate a 250-500 word direction before the chosen one-line or four-section format is compiled. Both stages cache seed-only reruns. The H3 ConvRot encoder remains separate because it has no language-generation head. No model is downloaded automatically."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1211,7 +1244,52 @@
       },
       "widgets_values": [
         "optional / experimental",
-        "Enable the A/B node only when you want six complete generations. It holds the prompt, references, aspect ratio, frame profile, and seed constant. Each row requests 0.40, 1.00, or 2.00 MP; the left column is native Base without a LoRA and the right column is the selected LightX/PDD accelerator. Every cell labels requested and actual resolution, profile, seed, and CUDA-synchronized sampling-only time. H3's native cap means 1 MP and 2 MP may resolve to the same actual dimensions; the grid makes that visible instead of hiding it."
+        "Enable the A/B node only when you want six complete generations. Same seed is the fairest comparison; New seed each row keeps each Base/LoRA pair fair while testing three seeds; New seed every image is a diversity sweep, not an isolated A/B. Every cell labels requested and actual resolution, profile, seed, and CUDA-synchronized sampling-only time. While enabled, the node blocks the normal branch so no seventh image is generated. H3's native cap can make 1 MP and 2 MP resolve to the same dimensions."
+      ],
+      "color": "#22322f",
+      "bgcolor": "#17211f"
+    },
+    {
+      "id": 28,
+      "type": "H3StudioWorkflowNote",
+      "pos": [
+        1560,
+        1080
+      ],
+      "size": [
+        430,
+        560
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "section",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "section"
+          }
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "text"
+          }
+        }
+      ],
+      "outputs": [],
+      "title": "Model downloads - official and project sources",
+      "properties": {
+        "Node name for S&R": "H3StudioWorkflowNote",
+        "purpose": "Documentation only; never enters the generation graph."
+      },
+      "widgets_values": [
+        "models",
+        "Core MiniMax H3 models, 32B conditioning encoder, and video VAE:\nhttps://huggingface.co/Comfy-Org/MiniMax-H3\n\nFull Qwen3-VL 4B/8B analyzer and prompt-writer checkpoints:\nhttps://huggingface.co/Comfy-Org/Qwen3-VL\n\nLightX H3 acceleration files:\nhttps://huggingface.co/Kijai/MiniMax-H3_comfy\n\nTAEH3 live-preview decoder:\nhttps://huggingface.co/Kijai/MiniMax-H3-TAE\n\nMamad8 PDD REF2VA LoRA and heads:\nhttps://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8\n\nRequired PDD node package:\nhttps://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8\n\nH3 Studio never downloads models automatically."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1220,8 +1298,8 @@
   "links": [
     [
       1,
-      10,
-      0,
+      17,
+      2,
       12,
       1,
       "H3_STUDIO_CONTEXT"
@@ -1399,7 +1477,7 @@
         1500,
         190,
         530,
-        880
+        1510
       ],
       "color": "#5c5243",
       "font_size": 24,
@@ -2180,8 +2258,8 @@
     },
     "frontendVersion": "1.30.0",
     "h3studio": {
-      "schema_version": 7,
-      "template_version": "1.2.0",
+      "schema_version": 8,
+      "template_version": "1.3.0",
       "design_source": "Alier v1.3.7 geometry",
       "audio_prompt_sections": false,
       "hub_included": false

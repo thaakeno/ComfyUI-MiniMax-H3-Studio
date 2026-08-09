@@ -23,13 +23,13 @@ Run only these representative paths:
 
 For each run, record resolved dimensions, route diagnostic, sampling profile, decoded frame count, selected index, peak VRAM if convenient, and whether Preview/Save received exactly one final image.
 
-For the optional A/B Matrix smoke test, keep its default same-seed settings, select a real LightX/PDD accelerator, enable it, and queue once. Confirm the output contains six labeled cells in three resolution rows, every row has one no-LoRA Base result and one accelerated result, `1.00 MP` and `2.00 MP` disclose any identical native-capped dimensions, and every successful cell reports sampling-only seconds. The first cell may include lazy model initialization, so compare warm-cache timings with that caveat. Disable the matrix again after the test.
+For the optional A/B Matrix smoke test, keep its fair same-seed default, select a real LightX/PDD accelerator, enable it, and queue once. Confirm the output contains six labeled cells in three resolution rows, every cell shows its seed, every row has one no-LoRA Base result and one accelerated result, `1.00 MP` and `2.00 MP` disclose any identical native-capped dimensions, every successful cell reports sampling-only seconds, and the normal Preview/Save branch does not produce a seventh image. Then try the paired-row seed strategy and confirm both cells in each row share a seed while rows differ. The first cell may include lazy model initialization, so compare warm-cache timings with that caveat. Disable the matrix again after the test.
 
 If Mamad8 PDD is installed, run one additional three-reference comparison with `PDD REF2VA · 4-step · ckpt 900`. Confirm the console reports the matched step-900 LoRA and heads filenames, Euler, `trained_blocks`, four steps, strengths `2.0/1.0`, shifts `12/3`, and `contract=enforce`. Then temporarily rename neither file: instead select checkpoint 600 without its files and confirm H3 Studio fails with an actionable missing-artifact message rather than falling back.
 
 ## Prompt checks
 
-In Production Brief mode, inspect the compiled prompt and confirm section order, correct image ordinals, exact quoted text, and no audio fields. In VLM mode, use an explicit local instruction model path and verify ComfyUI performs no download. Confirm the enhanced output is materially richer than deterministic role inference before keeping that analyzer configuration.
+In Production Brief mode, inspect the compiled prompt and confirm section order, correct image ordinals, exact quoted text, and no audio fields. With image analysis and Detailed second pass enabled, verify the console shows one vision stage followed by one text-only writer stage, the enhanced instruction is 250-500 words, named styles include concrete rendering traits, and a seed-only rerun reports cache hits for both stages. Verify ComfyUI performs no download.
 
 ## Stop conditions
 

@@ -348,12 +348,13 @@ def build_subgraph():
 def build_workflow():
     links = Links()
     state = {
-        "schema_version": 7,
+        "schema_version": 8,
         "prompt": "Describe the final still image.",
         "references": [],
         "prompt_options": {
             "enhance_mode": "compile_only",
             "analyze_images": True,
+            "deep_enhancement": True,
             "analyzer_resolution": 512,
             "adherence": 0.85,
             "detail_level": "detailed",
@@ -386,7 +387,7 @@ def build_workflow():
     state_json = json.dumps(state, separators=(",", ":"), ensure_ascii=False)
     virtual_links = []
 
-    l_context_condition = links.add(10, 0, 12, 1, "H3_STUDIO_CONTEXT")
+    l_context_condition = links.add(17, 2, 12, 1, "H3_STUDIO_CONTEXT")
     l_bundle_condition = links.add(11, 0, 12, 0, "H3_STUDIO_BUNDLE")
     l_bundle_director = links.add(11, 0, 10, 23, "H3_STUDIO_BUNDLE")
     l_model_preview = links.add(12, 0, 16, 0, "MODEL")
@@ -438,7 +439,7 @@ def build_workflow():
             order=0,
             inputs=director_inputs,
             outputs=[
-                output("studio_context", "H3_STUDIO_CONTEXT", [l_context_condition, l_context_sub, l_context_ab]),
+                output("studio_context", "H3_STUDIO_CONTEXT", [l_context_sub, l_context_ab]),
                 output("compiled_prompt", "STRING", None),
                 output("state_json", "STRING", None),
                 output("width", "INT", None),
@@ -460,7 +461,7 @@ def build_workflow():
             "H3StudioLoader",
             "H3 models · lazy route loader",
             [-520, 260],
-            [560, 180],
+            [560, 220],
             order=1,
             inputs=[
                 socket("fl2va_model", "COMBO", widget="fl2va_model"),
@@ -468,6 +469,7 @@ def build_workflow():
                 socket("text_encoder", "COMBO", widget="text_encoder"),
                 socket("video_vae", "COMBO", widget="video_vae"),
                 socket("image_analyzer", "COMBO", widget="image_analyzer"),
+                socket("prompt_writer", "COMBO", widget="prompt_writer"),
             ],
             outputs=[
                 output("h3_bundle", "H3_STUDIO_BUNDLE", [l_bundle_condition, l_bundle_director, l_bundle_ab]),
@@ -481,6 +483,7 @@ def build_workflow():
                 "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
                 "minimax_h3_video_vae_int8_convrot.safetensors",
                 "Auto · Qwen3-VL 4B",
+                "Same as image analyzer",
             ],
             color="#31475c",
             bgcolor="#202e3c",
@@ -586,9 +589,9 @@ def build_workflow():
         node(
             17,
             "H3StudioABComparison",
-            "Same-seed A/B Matrix - 0.4 / 1 / 2 MP",
+            "A/B Matrix - 0.4 / 1 / 2 MP",
             [-520, 1260],
-            [780, 250],
+            [780, 330],
             order=6,
             inputs=[
                 socket("h3_bundle", "H3_STUDIO_BUNDLE", l_bundle_ab),
@@ -596,13 +599,16 @@ def build_workflow():
                 socket("enabled", "BOOLEAN", widget="enabled"),
                 socket("baseline_profile", "COMBO", widget="baseline_profile"),
                 socket("accelerator_profile", "COMBO", widget="accelerator_profile"),
+                socket("seed_strategy", "COMBO", widget="seed_strategy"),
+                socket("seed_step", "INT", widget="seed_step"),
                 socket("grid_cell_size", "INT", widget="grid_cell_size"),
             ],
             outputs=[
                 output("comparison_grid", "IMAGE", [l_ab_preview]),
                 output("comparison_report", "STRING", None),
+                output("normal_generation_context", "H3_STUDIO_CONTEXT", [l_context_condition]),
             ],
-            widgets=[False, "Base Quality - RES 20", "Director selected accelerator", 640],
+            widgets=[False, "Base Quality - RES 20", "Director selected accelerator", "Same seed for all - fair comparison", 1, 640],
             color="#60467a",
             bgcolor="#332640",
         ),
@@ -632,7 +638,7 @@ def build_workflow():
             21,
             "Prompt enhancement · what actually happens",
             "settings",
-            "Analyze images + production brief uses a full native ComfyUI Qwen3-VL 4B checkpoint to inspect actual reference pixels, assign roles and descriptions, then compile subject_definitions, summary, retention_analysis, and detailed_description. The H3 ConvRot encoder remains the separate conditioning encoder because it has no language-model head. No model is downloaded automatically.",
+            "Analyze image pixels uses a full native ComfyUI Qwen3-VL checkpoint for factual source descriptions. Detailed second pass then reuses that model text-only by default, or a selected full 8B checkpoint, to create and validate a 250-500 word direction before the chosen one-line or four-section format is compiled. Both stages cache seed-only reruns. The H3 ConvRot encoder remains separate because it has no language-generation head. No model is downloaded automatically.",
             [-910, -180],
             [520, 320],
             11,
@@ -686,10 +692,19 @@ def build_workflow():
             27,
             "A/B Matrix - quality and speed diagnosis",
             "optional / experimental",
-            "Enable the A/B node only when you want six complete generations. It holds the prompt, references, aspect ratio, frame profile, and seed constant. Each row requests 0.40, 1.00, or 2.00 MP; the left column is native Base without a LoRA and the right column is the selected LightX/PDD accelerator. Every cell labels requested and actual resolution, profile, seed, and CUDA-synchronized sampling-only time. H3's native cap means 1 MP and 2 MP may resolve to the same actual dimensions; the grid makes that visible instead of hiding it.",
+            "Enable the A/B node only when you want six complete generations. Same seed is the fairest comparison; New seed each row keeps each Base/LoRA pair fair while testing three seeds; New seed every image is a diversity sweep, not an isolated A/B. Every cell labels requested and actual resolution, profile, seed, and CUDA-synchronized sampling-only time. While enabled, the node blocks the normal branch so no seventh image is generated. H3's native cap can make 1 MP and 2 MP resolve to the same dimensions.",
             [1040, 1260],
             [480, 360],
             17,
+        ),
+        note(
+            28,
+            "Model downloads - official and project sources",
+            "models",
+            "Core MiniMax H3 models, 32B conditioning encoder, and video VAE:\nhttps://huggingface.co/Comfy-Org/MiniMax-H3\n\nFull Qwen3-VL 4B/8B analyzer and prompt-writer checkpoints:\nhttps://huggingface.co/Comfy-Org/Qwen3-VL\n\nLightX H3 acceleration files:\nhttps://huggingface.co/Kijai/MiniMax-H3_comfy\n\nTAEH3 live-preview decoder:\nhttps://huggingface.co/Kijai/MiniMax-H3-TAE\n\nMamad8 PDD REF2VA LoRA and heads:\nhttps://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8\n\nRequired PDD node package:\nhttps://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8\n\nH3 Studio never downloads models automatically.",
+            [1560, 1080],
+            [430, 560],
+            18,
         ),
     ]
     groups = [
@@ -728,7 +743,7 @@ def build_workflow():
         {
             "id": 5,
             "title": "REFERENCE GUIDE",
-            "bounding": [1500, 190, 530, 880],
+            "bounding": [1500, 190, 530, 1510],
             "color": "#5c5243",
             "font_size": 24,
             "flags": {},
@@ -764,8 +779,8 @@ def build_workflow():
             "ds": {"scale": 0.72, "offset": [1120, 330]},
             "frontendVersion": "1.30.0",
             "h3studio": {
-                "schema_version": 7,
-                "template_version": "1.2.0",
+                "schema_version": 8,
+                "template_version": "1.3.0",
                 "design_source": "Alier v1.3.7 geometry",
                 "audio_prompt_sections": False,
                 "hub_included": False,

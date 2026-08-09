@@ -2,6 +2,20 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [0.1.0-alpha.10] - 2026-08-09
+
+### Added
+
+- Added an optional cached text-only prompt-director pass that reuses the full Qwen3-VL analyzer by default, supports a separately selected full 8B checkpoint, targets 250-500 words, validates assignments and hard constraints, retries once, and has a complete deterministic fallback.
+- Added fixed, paired-row, and per-image seed strategies to the A/B Matrix; every generated cell and report line now displays its actual seed.
+- Added all model and optional-backend source links directly to the maintained workflow.
+
+### Fixed
+
+- Split factual pixel inspection from creative prompt expansion so source descriptions no longer need to carry the entire production-writing job.
+- Gated the normal sampling branch through the A/B node, so enabling a six-cell matrix no longer triggers an unwanted seventh generation.
+- Bumped state schema to 8 while preserving the old one-pass behavior for existing saved workflows.
+
 ## [0.1.0-alpha.9] - 2026-08-09
 
 ### Fixed
