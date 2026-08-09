@@ -462,7 +462,14 @@ function referenceCard(node, state, reference, index, refresh) {
     on: { change: (event) => mutate({ description: event.target.value }) },
   });
   const controls = element("div", { className: "h3s-reference-controls" }, [role, retention]);
-  return element("article", { className: "h3s-reference-card" }, [thumb, element("div", { className: "h3s-reference-body" }, [title, controls, description])]);
+  const inferredRole = node.__h3studioResult?.roles?.[index];
+  const roleHint = reference.role === "auto" && inferredRole && inferredRole !== "reference"
+    ? element("div", { className: "h3s-auto-role", text: `Auto detected from prompt: ${inferredRole}` })
+    : null;
+  return element("article", { className: "h3s-reference-card" }, [
+    thumb,
+    element("div", { className: "h3s-reference-body" }, [title, controls, roleHint, description].filter(Boolean)),
+  ]);
 }
 
 async function addImages(node, state, refresh, providedFiles = null) {
@@ -547,7 +554,14 @@ function referencesSection(node, state, refresh) {
     element("span", { className: "h3s-status-pill", text: `${state.references.length}/${MAX_REFERENCES}` }),
     addButton,
   ]);
-  return section("References", list, accessory);
+  const body = element("div", { className: "h3s-section-stack" }, [
+    element("p", {
+      className: "h3s-context-help",
+      text: "Auto assigns roles from the words around each @Image tag. It does not inspect image pixels; add a short description when exact visible traits, colors, clothing details, or identity features must appear in the compiled brief.",
+    }),
+    list,
+  ]);
+  return section("References", body, accessory);
 }
 
 function advancedSection(node, state, refresh) {
@@ -629,6 +643,7 @@ function installPanel(node) {
     this.__h3studioResult = {
       prompt: executionValue(message, "compiled_prompt")[0] || "",
       labels: executionValue(message, "reference_labels"),
+      roles: executionValue(message, "reference_roles"),
       diagnostics: executionValue(message, "diagnostics")[0] || "",
     };
     queueMicrotask(() => renderPanel(this));

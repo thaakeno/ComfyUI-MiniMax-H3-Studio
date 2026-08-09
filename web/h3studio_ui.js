@@ -15,8 +15,6 @@ const LOADER_CLASS = "H3StudioLoader";
 const OUTPUT_CLASS = "H3StudioOutput";
 const LINKS_PROP = "h3studio_virtual_media_links";
 const PROMPT_DOC_PROP = "h3studio_prompt_reference_doc";
-const RUNTIME_REF_PREFIX = "__H3STUDIO_REF_";
-const UNRESOLVED_REF_PREFIX = "__H3STUDIO_UNRESOLVED_REF_";
 const DIALOGUE_CLASS = "h3s-dialogue-block";
 const MODE_IMAGE = "image";
 const MODE_REFERENCE = "reference";
@@ -1313,9 +1311,9 @@ function buildRuntimePrompt(node, runtimeLinks) {
                 && String(link.media_type || "image").toLowerCase() === mediaType
             );
         }
-        if (index >= 0) return `${RUNTIME_REF_PREFIX}${index + 1}__`;
-        if (!isReferenceMode(node)) return String(part.token || "");
-        return `${UNRESOLVED_REF_PREFIX}${mediaType}__`;
+        if (index >= 0) return `@Image ${index + 1}`;
+        if (Number.isFinite(partOrdinal) && partOrdinal > 0) return `@Image ${partOrdinal}`;
+        return String(part.token || "");
     }).join("");
 }
 

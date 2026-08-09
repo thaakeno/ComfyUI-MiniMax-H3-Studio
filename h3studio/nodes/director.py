@@ -290,6 +290,7 @@ class H3StudioDirector:
             "ui": {
                 "compiled_prompt": [compile_result.native_prompt],
                 "reference_labels": reference_labels,
+                "reference_roles": [reference.effective_role for reference in compile_result.references],
                 "diagnostics": [diagnostics],
             },
             "result": result,

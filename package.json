@@ -1,6 +1,6 @@
 {
   "name": "comfyui-minimax-h3-studio",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "private": true,
   "type": "module",
   "description": "Frontend tests and tooling for MiniMax H3 Studio",

@@ -67,6 +67,22 @@ def test_compile_reference_prompt_uses_native_tags() -> None:
     assert "fully_preserved" in result.native_prompt
 
 
+def test_easy_runtime_tokens_and_zero_width_chip_spacing_compile_to_native_ids() -> None:
+    state = StudioState(
+        prompt=(
+            "Show the person from\u200b \u200b__H3STUDIO_REF_2__\u200b with the clothes in "
+            "\u200b__H3STUDIO_REF_1__\u200b somewhere outside"
+        ),
+        references=(ref(1), ref(2)),
+    )
+    result = PromptCompiler().compile(state)
+    assert "__H3STUDIO" not in result.native_prompt
+    assert "<Picture 1>" in result.native_prompt
+    assert "<Picture 2>" in result.native_prompt
+    assert result.references[0].role == "outfit"
+    assert result.references[1].role in {"character", "identity"}
+
+
 def test_compile_warns_when_connected_references_are_not_mentioned() -> None:
     result = PromptCompiler().compile(StudioState(prompt="Make a portrait", references=(ref(1, "identity"),)))
     assert any(item.code == "references_not_mentioned" for item in result.diagnostics)

@@ -21,10 +21,14 @@ from .templates import ROLE_PHRASES
 
 _SPACE_RE = re.compile(r"[ \t]+")
 _BLANK_RE = re.compile(r"\n{3,}")
+_INVISIBLE_RE = re.compile(r"[\u200b\u200c\u200d\ufeff]")
+_LEGACY_RUNTIME_REF_RE = re.compile(r"__H3STUDIO_REF_([1-9]\d*)__", re.IGNORECASE)
 
 
 def normalize_user_prompt(value: str) -> str:
     text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = _INVISIBLE_RE.sub("", text)
+    text = _LEGACY_RUNTIME_REF_RE.sub(lambda match: f"@Image {match.group(1)}", text)
     text = "\n".join(_SPACE_RE.sub(" ", line).rstrip() for line in text.splitlines())
     return _BLANK_RE.sub("\n\n", text).strip()
 
@@ -185,4 +189,3 @@ class PromptCompiler:
         rendered = sections.render()
         native_prompt = compile_mentions(rendered, base.references)
         return replace(base, sections=sections, rendered=rendered, native_prompt=native_prompt)
-

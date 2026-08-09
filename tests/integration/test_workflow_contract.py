@@ -83,3 +83,4 @@ def test_prompt_editor_and_empty_result_regression_contract():
     assert "node.onResize = function h3studioResize" not in source
     assert "Path to an instruction-capable local VLM" not in source
     assert "Image-analysis model" not in source
+    assert "__H3STUDIO_REF_" not in source

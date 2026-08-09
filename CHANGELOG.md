@@ -2,6 +2,17 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [0.1.0-alpha.7] - 2026-08-09
+
+### Fixed
+
+- Converted Easy-derived rich-editor runtime tokens back into canonical `@Image N` references before compilation, with a backend repair path for already-serialized `__H3STUDIO_REF_N__` prompts and zero-width chip spacing.
+- Isolated role inference between adjacent mentions, so prompts such as “person from @Image 2 with the clothes in @Image 1” assign character and outfit roles to the correct references.
+
+### Changed
+
+- Reference cards now show the role inferred from the prompt after execution and explain that exact visual traits require card descriptions because the deterministic compiler does not inspect pixels.
+
 ## [0.1.0-alpha.6] - 2026-08-09
 
 ### Added

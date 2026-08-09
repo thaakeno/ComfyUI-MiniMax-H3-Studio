@@ -307,13 +307,22 @@ def infer_roles_from_prompt(prompt: str, references: Sequence[ReferenceImage], w
         matching = [mention for mention in mentions if mention.ordinal == reference.ordinal]
         snippets = []
         for mention in matching:
-            # Prefer the sentence containing the mention. A broad symmetric
-            # window frequently leaks the role assigned to the next image.
+            # Bound context at sentence edges and at the midpoint between
+            # adjacent mentions. This keeps "person from @Image 2 with the
+            # clothes in @Image 1" from assigning both roles to both images.
             left_candidates = [prompt.rfind(mark, max(0, mention.start - window), mention.start) for mark in ".!?\n;"]
             right_candidates = [prompt.find(mark, mention.end, min(len(prompt), mention.end + window)) for mark in ".!?\n;"]
             left = max(left_candidates) + 1
             valid_right = [candidate for candidate in right_candidates if candidate >= 0]
             right = min(valid_right) + 1 if valid_right else min(len(prompt), mention.end + window)
+            previous = [item for item in mentions if left <= item.start < mention.start]
+            following = [item for item in mentions if mention.end < item.end <= right]
+            if previous:
+                neighbor = previous[-1]
+                left = max(left, (neighbor.end + mention.start) // 2)
+            if following:
+                neighbor = following[0]
+                right = min(right, (mention.end + neighbor.start) // 2)
             snippets.append(prompt[left:right])
         role = infer_role(" ".join(snippets), fallback="auto")
         inferred.append(replace(reference, role=role))

@@ -70,6 +70,7 @@ export function installTheme() {
     .h3s-icon-button.h3s-danger:hover { color: #ff9a9a; border-color: color-mix(in srgb, #ff6b6b 45%, var(--h3s-border)); }
     .h3s-icon-button:disabled { cursor: default; opacity: .35; }
     .h3s-reference-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .h3s-auto-role { width: fit-content; padding: 2px 6px; border-radius: 999px; color: var(--h3s-accent); background: color-mix(in srgb, var(--h3s-accent) 10%, transparent); font-size: 8px; font-weight: 650; }
     .h3s-reference-description { width: 100%; min-height: 38px; max-height: 74px; padding: 5px 7px; resize: vertical; border: 1px solid var(--h3s-border); border-radius: 6px; outline: none; color: var(--h3s-text); background: var(--h3s-surface); font: 10px/1.35 ui-sans-serif, system-ui; }
     .h3s-empty { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 14px 10px; border: 1px dashed var(--h3s-border); border-radius: 8px; color: var(--h3s-muted); text-align: center; }
     .h3s-empty strong { color: var(--h3s-text); font-size: 11px; }
