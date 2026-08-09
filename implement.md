@@ -12,4 +12,4 @@ Completion requires all locally available tests passing, deterministic workflow 
 
 ## Completion checkpoint
 
-All repository implementation milestones are complete. The source contains 9,436 custom-node runtime lines, a 2,103-line maintained workflow, a 718-line reusable subgraph, release automation, and an exact Lightning.ai smoke-test handoff. CUDA generation remains deliberately unclaimed until that handoff is run in the target workspace.
+All repository implementation milestones are complete. Alpha 2 contains 9,747 custom-node runtime lines, a clean 1,840-line maintained workflow, a 718-line reusable subgraph, integrated image uploads, release automation, and an exact Lightning.ai smoke-test handoff. CUDA generation remains deliberately unclaimed until that handoff is run in the target workspace.

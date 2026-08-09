@@ -12,11 +12,13 @@ from ..constants import (
     MAX_REFERENCE_IMAGES,
     MODE_AUTO,
     MODE_REFERENCE_EDIT,
+    MODES,
     REFERENCE_ROLES,
     ROUTES,
     SAMPLING_PROFILES,
 )
 from ..context import H3StudioContext, H3StudioGeneration
+from ..image_inputs import collect_images
 from ..prompting.compiler import PromptCompiler
 from ..prompting.vlm import enhance_state
 from ..references import ReferenceImage, stable_reference_id
@@ -46,25 +48,6 @@ def _sampling_profile(value: str) -> str:
     return value if value in SAMPLING_PROFILES else "base_quality_20"
 
 
-def _collect_images(kwargs: dict[str, Any]) -> tuple[tuple[Any, ...], tuple[str, ...]]:
-    images: list[Any] = []
-    filenames: list[str] = []
-    direct = kwargs.get("media")
-    if direct is not None:
-        images.append(direct)
-        filenames.append(str(kwargs.get("media_filename") or "image_1.png"))
-    for index in range(1, MAX_REFERENCE_IMAGES + 1):
-        image = kwargs.get(f"media_{index}")
-        if image is None:
-            continue
-        media_type = str(kwargs.get(f"media_type_{index}") or "image").strip().lower()
-        if media_type not in {"", "image"}:
-            raise ValueError("H3 Studio image workflows accept image references only; remove video/audio media links.")
-        images.append(image)
-        filenames.append(str(kwargs.get(f"media_filename_{index}") or f"image_{len(images)}.png"))
-    return tuple(images[:MAX_REFERENCE_IMAGES]), tuple(filenames[:MAX_REFERENCE_IMAGES])
-
-
 def _state_from_widgets(
     prompt: str,
     mode: str,
@@ -82,6 +65,7 @@ def _state_from_widgets(
     studio_state: str,
     images: tuple[Any, ...],
     filenames: tuple[str, ...],
+    storage_names: tuple[str | None, ...],
     kwargs: dict[str, Any],
 ) -> StudioState:
     try:
@@ -92,6 +76,7 @@ def _state_from_widgets(
     existing_by_ordinal = {reference.ordinal: reference for reference in persisted.references}
     for ordinal, filename in enumerate(filenames, start=1):
         existing = existing_by_ordinal.get(ordinal)
+        storage_name = storage_names[ordinal - 1] if ordinal <= len(storage_names) else None
         role = str(kwargs.get(f"role_{ordinal}") or (existing.role if existing else "auto"))
         retention = str(kwargs.get(f"retention_{ordinal}") or (existing.retention if existing else "attribute_transfer"))
         description = str(kwargs.get(f"description_{ordinal}") or (existing.description if existing else ""))
@@ -100,13 +85,17 @@ def _state_from_widgets(
                 id=existing.id if existing else stable_reference_id(filename, ordinal),
                 filename=filename,
                 ordinal=ordinal,
+                storage_name=storage_name,
                 role=role if role in REFERENCE_ROLES else "auto",
                 retention=retention,
                 description=description,
                 enabled=True,
             )
         )
-    resolved_mode = MODE_REFERENCE_EDIT if str(mode) == LEGACY_MODE_REFERENCE else MODE_AUTO
+    if str(studio_state or "").strip() and persisted.generation.mode in MODES:
+        resolved_mode = persisted.generation.mode
+    else:
+        resolved_mode = MODE_REFERENCE_EDIT if str(mode) == LEGACY_MODE_REFERENCE else MODE_AUTO
     prompt_options = replace(
         persisted.prompt_options,
         enhance_mode=enhance_mode if enhance_mode in ENHANCE_MODES else ENHANCE_COMPILE,
@@ -229,7 +218,7 @@ class H3StudioDirector:
         **kwargs,
     ):
         del resolution, seconds, advanced, fps, keyframe_role, ref_image_size, reference_mention_mode
-        images, filenames = _collect_images(kwargs)
+        images, filenames, storage_names = collect_images(kwargs)
         state = _state_from_widgets(
             prompt,
             mode,
@@ -247,6 +236,7 @@ class H3StudioDirector:
             studio_state,
             images,
             filenames,
+            storage_names,
             kwargs,
         )
         compiler = PromptCompiler()

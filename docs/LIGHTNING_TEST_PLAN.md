@@ -8,7 +8,7 @@ Capture the ComfyUI commit/version, frontend version, GPU, Python/PyTorch versio
 
 ## Import and UI
 
-Start ComfyUI and confirm there are no H3 Studio import errors. Open the bundled workflow. Confirm the Director shows the rich prompt editor, generation controls, and three reference cards—not a plain promoted subgraph textbox. Type `@` and insert each available image. Save, reload, and confirm order, roles, retention, descriptions, aspect, megapixels, seed, and prompt survive.
+Start ComfyUI and confirm there are no H3 Studio import errors. Open the bundled workflow. Confirm it opens at `0/9` with no missing-file errors and the model nodes do not overlap the Director. Click **Add images** inside the Director, upload three real images, confirm all thumbnails appear, then type `@` and insert each image. Save, reload, and confirm order, storage-backed thumbnails, roles, retention, descriptions, aspect, megapixels, seed, and prompt survive.
 
 ## Generation matrix
 

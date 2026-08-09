@@ -29,6 +29,23 @@ def clean_filename(value: str) -> str:
     return PurePosixPath(normalized).name[:240]
 
 
+def clean_storage_name(value: str) -> str:
+    """Normalize a ComfyUI input-relative filename without allowing traversal."""
+
+    normalized = str(value or "").replace("\\", "/").strip()
+    annotation = ""
+    for suffix in (" [input]", " [output]", " [temp]"):
+        if normalized.endswith(suffix):
+            normalized = normalized[: -len(suffix)].strip()
+            annotation = suffix
+            break
+    path = PurePosixPath(normalized)
+    if not normalized or path.is_absolute() or ".." in path.parts:
+        return ""
+    safe = "/".join(part for part in path.parts if part not in {"", "."})[:500]
+    return f"{safe}{annotation}" if safe else ""
+
+
 def stable_reference_id(filename: str, ordinal: int) -> str:
     stem = PurePosixPath(clean_filename(filename)).stem or f"image_{ordinal}"
     stem = _SAFE_ID_RE.sub("-", stem).strip("-").lower()[:40] or f"image-{ordinal}"
@@ -56,6 +73,7 @@ class ReferenceImage:
     id: str
     filename: str
     ordinal: int
+    storage_name: str | None = None
     role: str = "auto"
     retention: str = "attribute_transfer"
     description: str = ""
@@ -102,6 +120,8 @@ class ReferenceImage:
             "source_slot": self.source_slot,
             "tags": list(self.tags),
         }
+        if self.storage_name:
+            payload["storage_name"] = self.storage_name
         for key in ("source_node_id", "width", "height", "fingerprint"):
             value = getattr(self, key)
             if value is not None:
@@ -111,13 +131,17 @@ class ReferenceImage:
     @classmethod
     def from_dict(cls, value: Mapping[str, Any], fallback_ordinal: int) -> ReferenceImage:
         ordinal = _positive_int(value.get("ordinal"), fallback_ordinal)
-        filename = clean_filename(str(value.get("filename") or value.get("name") or f"image_{ordinal}.png"))
+        storage_name = clean_storage_name(str(value.get("storage_name") or ""))
+        filename = clean_filename(
+            str(value.get("filename") or value.get("name") or storage_name or f"image_{ordinal}.png")
+        )
         raw_tags = value.get("tags") or ()
         tags = tuple(str(item).strip() for item in raw_tags if str(item).strip()) if isinstance(raw_tags, Sequence) else ()
         return cls(
             id=str(value.get("id") or stable_reference_id(filename, ordinal)),
             filename=filename,
             ordinal=ordinal,
+            storage_name=storage_name or None,
             role=canonical_role(value.get("role")),
             retention=canonical_retention(value.get("retention")),
             description=str(value.get("description") or "").strip(),

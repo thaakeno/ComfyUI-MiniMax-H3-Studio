@@ -65,9 +65,10 @@ def main():
                 errors.append(f"possible credential in {relative}: {pattern.pattern[:24]}")
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     version = metadata["project"]["version"]
+    display_version = re.sub(r"a(\d+)$", r"-alpha.\1", version)
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    if version not in changelog:
-        errors.append(f"project version {version} is absent from CHANGELOG.md")
+    if version not in changelog and display_version not in changelog:
+        errors.append(f"project version {version} ({display_version}) is absent from CHANGELOG.md")
     workflow = json.loads((ROOT / "example_workflows" / "H3_Studio_Unified_Image.json").read_text(encoding="utf-8"))
     if workflow.get("extra", {}).get("h3studio", {}).get("hub_included") is not False:
         errors.append("workflow does not explicitly exclude H3 Hub")

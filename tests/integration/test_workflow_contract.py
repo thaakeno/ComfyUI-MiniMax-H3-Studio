@@ -21,21 +21,23 @@ def test_director_is_top_level_and_sampling_is_subgraphed():
     }
 
 
-def test_workflow_stores_nine_image_capacity_and_three_ordered_examples():
+def test_workflow_opens_without_placeholder_images():
     workflow = load_workflow()
     director = next(node for node in workflow["nodes"] if node["type"] == "H3StudioDirector")
     links = director["properties"]["h3studio_virtual_media_links"]
-    assert [item["source_id"] for item in links] == [1, 2, 3]
-    assert [item["order"] for item in links] == [1, 2, 3]
-    assert all(item["media_type"] == "image" for item in links)
+    assert links == []
+    assert not any(node["type"] == "LoadImage" for node in workflow["nodes"])
+    serialized = json.dumps(workflow).lower()
+    assert "replace me" not in serialized
+    assert "image_1.png" not in serialized
 
 
 def test_persisted_studio_state_is_image_only_and_versioned():
     workflow = load_workflow()
     director = next(node for node in workflow["nodes"] if node["type"] == "H3StudioDirector")
     state = json.loads(director["widgets_values"][20])
-    assert state["schema_version"] == 2
-    assert len(state["references"]) == 3
+    assert state["schema_version"] == 3
+    assert state["references"] == []
     assert state["generation"]["route"] == "auto"
     serialized = json.dumps(workflow).lower()
     assert "overall_soundscape" not in serialized
@@ -48,3 +50,21 @@ def test_primary_graph_has_one_conditioning_pass():
     conditions = [node for node in workflow["nodes"] if node["type"] == "H3StudioCondition"]
     assert len(conditions) == 1
     assert not any(node["type"] == "CLIPTextEncode" for node in workflow["nodes"])
+
+
+def test_no_dead_context_inspector_is_bundled():
+    workflow = load_workflow()
+    assert not any(node["type"] == "H3StudioContextInspector" for node in workflow["nodes"])
+
+
+def test_functional_nodes_do_not_overlap():
+    workflow = load_workflow()
+    functional = [node for node in workflow["nodes"] if node["type"] != "H3StudioWorkflowNote"]
+    for index, left in enumerate(functional):
+        lx, ly = left["pos"]
+        lw, lh = left["size"]
+        for right in functional[index + 1 :]:
+            rx, ry = right["pos"]
+            rw, rh = right["size"]
+            overlap = lx < rx + rw and lx + lw > rx and ly < ry + rh and ly + lh > ry
+            assert not overlap, f"{left['title']} overlaps {right['title']}"

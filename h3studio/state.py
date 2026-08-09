@@ -289,5 +289,9 @@ def migrate_state_dict(value: Mapping[str, Any]) -> dict[str, Any]:
         migrated["generation"] = generation
         migrated["prompt_options"] = prompt_options
         migrated["schema_version"] = 2
+        version = 2
+    if version == 2:
+        # Schema 3 adds an optional storage_name to references uploaded inside
+        # the Director. Existing link-backed references need no transformation.
+        migrated["schema_version"] = 3
     return migrated
-

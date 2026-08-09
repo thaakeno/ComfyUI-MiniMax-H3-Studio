@@ -25,10 +25,10 @@ Runtime Python lives under `h3studio/`, browser code under `web/`, workflows und
 
 ## Verification ledger
 
-- Backend and integration: 85 passed.
-- Frontend state, migration, mention, and resolution: seven passed.
+- Backend and integration: 92 passed.
+- Frontend state, migration, upload-storage, mention, and resolution: nine passed.
 - Python compilation, Ruff, JavaScript syntax, whitespace, and local-import checks: passed.
-- Workflow regeneration and topology validation: passed; 17 top-level nodes and six subgraph nodes.
-- Registration audit: passed; 16 registered H3 Studio classes and eight used by the maintained workflow.
+- Workflow regeneration and topology validation: passed; 13 aligned top-level nodes, six subgraph nodes, no placeholder loaders, dead inspector, or functional-node overlap.
+- Registration audit: passed; 16 registered H3 Studio classes and seven used by the maintained workflow.
 - Release-source audit: passed; no model artifacts or detected credentials.
 - CUDA generation and image-quality comparison: intentionally deferred to `docs/LIGHTNING_TEST_PLAN.md`.

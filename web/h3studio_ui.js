@@ -1317,6 +1317,42 @@ function buildRuntimePrompt(node, runtimeLinks) {
     }).join("");
 }
 
+function studioStateReferences(node) {
+    const raw = String(getWidgetValue(node, "studio_state", "") || "").trim();
+    if (!raw) return [];
+    try {
+        const decoded = JSON.parse(raw);
+        return Array.isArray(decoded?.references) ? decoded.references.slice(0, MAX_MEDIA) : [];
+    } catch {
+        return [];
+    }
+}
+
+function runtimeReferences(node, output) {
+    const links = normalizeLinks(node);
+    const byKey = new Map(links.map((link) => [`${Number(link.source_id)}:${Number(link.source_slot) || 0}`, link]));
+    const used = new Set();
+    const ordered = [];
+    for (const reference of studioStateReferences(node)) {
+        const storageName = String(reference?.storage_name || "").trim();
+        if (reference?.source_node_id == null && storageName) {
+            ordered.push({ media_type: "image", storage_name: storageName, source_id: null, source_slot: 0 });
+            continue;
+        }
+        const key = `${Number(reference?.source_node_id)}:${Number(reference?.source_slot) || 0}`;
+        const link = byKey.get(key);
+        if (!link || !output[String(link.source_id)]) continue;
+        used.add(key);
+        ordered.push(link);
+    }
+    for (const link of links) {
+        const key = `${Number(link.source_id)}:${Number(link.source_slot) || 0}`;
+        if (used.has(key) || !output[String(link.source_id)]) continue;
+        ordered.push(link);
+    }
+    return ordered.slice(0, MAX_MEDIA);
+}
+
 function patchGraphToPrompt() {
     if (patchedPrompt || typeof app.graphToPrompt !== "function") return;
     patchedPrompt = true;
@@ -1336,16 +1372,19 @@ function patchGraphToPrompt() {
                 delete promptNode.inputs[`media_filename_${index}`];
             }
             if (node.__h3sEditor) syncPromptFromEditor(node, false);
-            const runtimeLinks = normalizeLinks(node).filter((link) => Boolean(output[String(link.source_id)]));
+            const runtimeLinks = runtimeReferences(node, output);
             runtimeLinks.forEach((link, index) => {
-                const source = output[String(link.source_id)];
-                const slot = Number(link.source_slot) || 0;
-                promptNode.inputs[`media_${index + 1}`] = [String(link.source_id), slot];
-                promptNode.inputs[`media_type_${index + 1}`] = String(link.media_type || "image");
-                promptNode.inputs[`media_filename_${index + 1}`] = sourceFilename(
-                    app.graph?.getNodeById?.(Number(link.source_id)),
-                    "image",
-                );
+                if (link.source_id != null) {
+                    const slot = Number(link.source_slot) || 0;
+                    promptNode.inputs[`media_${index + 1}`] = [String(link.source_id), slot];
+                    promptNode.inputs[`media_filename_${index + 1}`] = sourceFilename(
+                        app.graph?.getNodeById?.(Number(link.source_id)),
+                        "image",
+                    );
+                } else {
+                    promptNode.inputs[`media_filename_${index + 1}`] = String(link.storage_name || "");
+                }
+                promptNode.inputs[`media_type_${index + 1}`] = "image";
             });
             promptNode.inputs.prompt = buildRuntimePrompt(node, runtimeLinks);
             promptNode.inputs.mode = canonicalOption("mode", getWidgetValue(node, "mode", MODE_IMAGE));
@@ -1430,27 +1469,47 @@ function truncateMentionLabel(value, maxLength = 22) {
 function mentionOptions(node) {
     if (!isReferenceMode(node)) return [];
     const links = normalizeLinks(node);
-    const mediaOrder = { image: 0, video: 1, audio: 2 };
-    const orderedLinks = links
-        .map((link, index) => ({ link, index }))
-        .sort((left, right) => {
-            const leftType = String(left.link.media_type || "image").toLowerCase();
-            const rightType = String(right.link.media_type || "image").toLowerCase();
-            return (mediaOrder[leftType] ?? 0) - (mediaOrder[rightType] ?? 0) || left.index - right.index;
-        })
-        .map((entry) => entry.link);
-    const counts = { image: 0, video: 0, audio: 0 };
+    const byKey = new Map(links.map((link) => [`${Number(link.source_id)}:${Number(link.source_slot) || 0}`, link]));
+    const used = new Set();
+    const orderedReferences = [];
+    for (const reference of studioStateReferences(node)) {
+        const storageName = String(reference?.storage_name || "").trim();
+        if (reference?.source_node_id == null && storageName) {
+            orderedReferences.push({ reference, storageName, link: null });
+            continue;
+        }
+        const key = `${Number(reference?.source_node_id)}:${Number(reference?.source_slot) || 0}`;
+        const link = byKey.get(key);
+        if (!link) continue;
+        used.add(key);
+        orderedReferences.push({ reference, storageName: "", link });
+    }
+    for (const link of links) {
+        const key = `${Number(link.source_id)}:${Number(link.source_slot) || 0}`;
+        if (!used.has(key)) orderedReferences.push({ reference: null, storageName: "", link });
+    }
     const mode = referenceMentionMode(node);
-    return orderedLinks.map((link) => {
-        const type = String(link.media_type || "image");
-        counts[type] = (counts[type] || 0) + 1;
-        const ordinal = counts[type];
-        const tag = type === "image" ? `<Picture ${ordinal}>` : type === "video" ? `<Video ${ordinal}>` : `<Audio ${ordinal}>`;
-        const source = app.graph?.getNodeById?.(Number(link.source_id));
-        watchMediaSourceNode(source);
-        const filename = sourceFilename(source, type);
+    return orderedReferences.slice(0, MAX_MEDIA).map(({ reference, storageName, link }, index) => {
+        const ordinal = index + 1;
+        const type = "image";
+        const tag = `<Picture ${ordinal}>`;
+        const source = link ? app.graph?.getNodeById?.(Number(link.source_id)) : null;
+        if (source) watchMediaSourceNode(source);
+        const filename = storageName
+            ? (String(reference?.filename || storageName).split(/[\\/]/).pop() || `Image ${ordinal}`)
+            : sourceFilename(source, type);
         const fullLabel = filename || sourceLabel(source);
         const label = mode === "index" ? `${LABELS[type] || type}${ordinal}` : truncateMentionLabel(fullLabel);
+        let previewUrl = "";
+        if (storageName) {
+            const clean = storageName.replace(/\s+\[(?:input|output|temp)\]$/i, "").replaceAll("\\", "/");
+            const parts = clean.split("/").filter(Boolean);
+            const storedFilename = parts.pop() || "";
+            const annotation = storageName.match(/\s+\[(input|output|temp)\]$/i)?.[1]?.toLowerCase() || "input";
+            previewUrl = `/view?${new URLSearchParams({ filename: storedFilename, subfolder: parts.join("/"), type: annotation, preview: "webp;90" })}`;
+        } else {
+            previewUrl = sourcePreviewUrl(source, type);
+        }
         return {
             type,
             tag,
@@ -1459,10 +1518,10 @@ function mentionOptions(node) {
             fullLabel,
             ordinal,
             referenceMode: mode,
-            source: sourceLabel(source),
-            sourceId: Number(link.source_id),
-            sourceSlot: Number(link.source_slot) || 0,
-            previewUrl: sourcePreviewUrl(source, type),
+            source: source ? sourceLabel(source) : "H3 Studio upload",
+            sourceId: link ? Number(link.source_id) : null,
+            sourceSlot: link ? Number(link.source_slot) || 0 : 0,
+            previewUrl,
         };
     });
 }
@@ -1618,6 +1677,8 @@ function requestMentionPreviewRefresh() {
         refreshMentionPreviews();
     }, 0);
 }
+
+globalThis.addEventListener?.("h3studio:references-changed", requestMentionPreviewRefresh);
 
 function watchMediaSourceNode(node) {
     if (!node) return;
@@ -3662,6 +3723,7 @@ function ensurePromptEditor(node) {
     setWidgetOption(domWidget, "canvasOnly", false);
     domWidget.__h3sEditorType = domWidget.type;
     domWidget.__h3sEditorComputeSize = domWidget.computeSize;
+    domWidget.computeSize = (width) => [width, 240];
     const domIndex = node.widgets?.indexOf(domWidget) ?? -1;
     const promptIndex = node.widgets?.indexOf(widget) ?? -1;
     if (domIndex >= 0 && promptIndex >= 0 && domIndex !== promptIndex + 1) {

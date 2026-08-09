@@ -31,6 +31,15 @@ def test_reference_round_trip() -> None:
     assert restored.references[0].description == "a woman"
 
 
+def test_uploaded_reference_storage_round_trip() -> None:
+    state = StudioState(
+        references=(ReferenceImage("ref", "portrait.png", 1, storage_name="h3studio/portrait.png"),),
+    )
+    restored = StudioState.from_json(state.to_json())
+    assert restored.references[0].filename == "portrait.png"
+    assert restored.references[0].storage_name == "h3studio/portrait.png"
+
+
 def test_invalid_json_raises_domain_error() -> None:
     with pytest.raises(StateDecodeError):
         StudioState.from_json("not json")
@@ -53,7 +62,7 @@ def test_v1_settings_are_migrated() -> None:
         "settings": {"mode": "text_to_image", "seed": 9, "enhance_mode": "off", "adherence": 0.4},
     }
     migrated = migrate_state_dict(old)
-    assert migrated["schema_version"] == 2
+    assert migrated["schema_version"] == 3
     assert migrated["generation"]["seed"] == 9
     assert migrated["prompt_options"]["enhance_mode"] == "off"
 
@@ -76,4 +85,3 @@ def test_json_payload_is_compact_by_default() -> None:
     payload = StudioState(prompt="x").to_json()
     assert "\n" not in payload
     assert json.loads(payload)["prompt"] == "x"
-

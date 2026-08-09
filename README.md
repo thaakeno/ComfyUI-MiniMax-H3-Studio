@@ -25,7 +25,7 @@ This repository keeps the strongest parts and changes the architecture:
 
 ## Studio Director
 
-Connect up to nine `Load Image` outputs to the Director's `Media` dot. The images appear as ordered cards with thumbnails and these controls:
+Click **Add images** inside the Director to upload up to nine references directly into ComfyUI. Each successful upload immediately becomes an ordered card with a real thumbnail and `@Image N` identity. No external loader is required, no placeholder is treated as a reference, and the workflow opens at `0/9` ready for text-to-image. Existing `Load Image` outputs can still be connected to the Director's `Media` dot when an advanced graph needs them.
 
 | Control | Meaning |
 | --- | --- |
@@ -108,13 +108,12 @@ Exact filenames depend on the checkpoint distribution. The bundled workflow cont
 
 `example_workflows/H3_Studio_Unified_Image.json` is generated, not hand-drifted. It preserves the visual hierarchy and spacious geometry of Alier's v1.3.7 “mine” workflow while keeping the product UI at the top level.
 
-The workflow has five visible stages:
+The workflow has four aligned visible stages:
 
-1. Optional reference image loaders.
-2. The H3 Studio Director and lazy model loader.
-3. One conditioning and route pass.
-4. The reusable sampling/exact-still subgraph.
-5. Preview and save output.
+1. The H3 Studio Director with integrated uploads.
+2. The lazy model loader and one conditioning/route pass.
+3. The reusable sampling/exact-still subgraph.
+4. Preview and save output.
 
 `subgraphs/H3_Studio_Sampling_and_Decode.json` is also supplied independently. It contains only typed sampling, decode, and still-selection plumbing. This is deliberate: ComfyUI does not reliably promote a custom DOM mention editor through subgraph widgets, while native typed sockets remain stable.
 
@@ -160,7 +159,7 @@ These checks do not prove GPU generation. Run the concise [Lightning smoke-test 
 
 The backend is split into state, references, resolution, routing, prompt sections, templates, VLM adapter, loader, and node modules. Frontend additions are split into state, DOM helpers, theme, and Studio controls. The adapted Easy mention runtime remains isolated so future upstream comparison is possible.
 
-State is versioned (`schema_version: 2`) and migrates old settings into typed prompt/generation sections. Workflows store the full Studio state plus compatibility widget values, so the node remains inspectable even if the frontend extension is temporarily unavailable.
+State is versioned (`schema_version: 3`) and migrates old settings into typed prompt/generation sections. Schema 3 keeps the safe ComfyUI storage name of an integrated upload separate from its display filename. Workflows store the full Studio state plus compatibility widget values, so the node remains inspectable even if the frontend extension is temporarily unavailable.
 
 Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PROMPTING.md](docs/PROMPTING.md), and [CONTRIBUTING.md](CONTRIBUTING.md) before changing serialization or route behavior.
 
@@ -176,7 +175,7 @@ The attribution and embedded MIT notice are preserved in [THIRD_PARTY_NOTICES.md
 
 ## Release policy
 
-Private alpha releases use tags such as `v0.1.0-alpha.1`. A release archive is built from tracked source only and excludes caches, models, generated images, private reports, and local environments. CI must pass before the release workflow uploads the archive and checksums.
+Private alpha releases use tags such as `v0.1.0-alpha.2`. A release archive is built from tracked source only and excludes caches, models, generated images, private reports, and local environments. CI must pass before the release workflow uploads the archive and checksums.
 
 See [CHANGELOG.md](CHANGELOG.md) for the exact release surface.
 

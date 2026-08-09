@@ -33,7 +33,7 @@ The `H3StudioContext` is the boundary between direction and generation. It conta
 - `core/theme.js` owns semantic theme integration and compact tool styling.
 - `studio_extension.js` binds the panel to `H3StudioDirector` and mirrors state into compatibility widgets.
 
-The graph-to-prompt hook converts virtual media links into actual `media_N` inputs at queue time and injects resolved filenames. Video and audio are rejected; the media capacity is nine images in every mode.
+The graph-to-prompt hook merges integrated uploads and optional virtual media links into one ordered reference plan. Linked nodes become `media_N` tensor connections; integrated uploads become safe `media_filename_N` values loaded through ComfyUI's canonical image loader. Video and audio are rejected; the capacity is nine images in every mode.
 
 ## Backend boundary
 

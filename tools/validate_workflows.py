@@ -58,6 +58,23 @@ def main():
     missing = required - node_types
     if missing:
         errors.append(f"{path.name}: missing required nodes {sorted(missing)}")
+    if "LoadImage" in node_types:
+        errors.append(f"{path.name}: bundled workflow must not contain required placeholder LoadImage nodes")
+    if "H3StudioContextInspector" in node_types:
+        errors.append(f"{path.name}: bundled workflow contains an unconsumed inspector node")
+    functional = [node for node in workflow.get("nodes", []) if node.get("type") != "H3StudioWorkflowNote"]
+    for index, left in enumerate(functional):
+        lx, ly = left["pos"]
+        lw, lh = left["size"]
+        for right in functional[index + 1 :]:
+            rx, ry = right["pos"]
+            rw, rh = right["size"]
+            if lx < rx + rw and lx + lw > rx and ly < ry + rh and ly + lh > ry:
+                errors.append(f"{path.name}: functional nodes overlap: {left['title']!r} and {right['title']!r}")
+    serialized = json.dumps(workflow, ensure_ascii=False).lower()
+    for placeholder in ("replace me", "image_1.png", "image_2.png", "image_3.png"):
+        if placeholder in serialized:
+            errors.append(f"{path.name}: placeholder content remains: {placeholder!r}")
     lines = path.read_text(encoding="utf-8").count("\n")
     if not 1800 <= lines <= 2800:
         errors.append(f"{path.name}: expected 1,800-2,800 meaningful lines, got {lines}")

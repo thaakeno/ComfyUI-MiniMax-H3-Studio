@@ -10,10 +10,11 @@ import {
   rewriteMentions,
   serializeState,
 } from "../../web/js/core/state.js";
+import { parseStorageName, previewUrlForStorage, storageNameFromUpload } from "../../web/js/features/image_upload.js";
 
 test("default state is an immediately usable text-to-image request", () => {
   const state = defaultState();
-  assert.equal(state.schema_version, 2);
+  assert.equal(state.schema_version, 3);
   assert.equal(state.generation.mode, "auto");
   assert.deepEqual(state.references, []);
 });
@@ -41,7 +42,7 @@ test("schema one settings migrate into their typed sections", () => {
     schema_version: 1,
     settings: { mode: "reference_edit", megapixels: 1.4, enhance_mode: "vlm", adherence: 0.7 },
   });
-  assert.equal(state.schema_version, 2);
+  assert.equal(state.schema_version, 3);
   assert.equal(state.generation.mode, "reference_edit");
   assert.equal(state.generation.megapixels, 1.4);
   assert.equal(state.prompt_options.enhance_mode, "vlm");
@@ -83,4 +84,24 @@ test("custom dimensions determine custom aspect while area follows megapixels", 
   assert.equal(plan.height % 32, 0);
   assert.ok(Math.abs(plan.width / plan.height - 16 / 9) < 0.08);
   assert.ok(Math.abs(plan.actualMegapixels - 0.5) < 0.06);
+});
+
+test("uploaded ComfyUI storage names survive state normalization", () => {
+  const state = normalizeState({
+    schema_version: 3,
+    references: [{ filename: "portrait.png", storage_name: "h3studio/portrait.png", ordinal: 1 }],
+  });
+  assert.equal(state.references[0].filename, "portrait.png");
+  assert.equal(state.references[0].storage_name, "h3studio/portrait.png");
+  assert.equal(parseState(serializeState(state)).references[0].storage_name, "h3studio/portrait.png");
+});
+
+test("upload responses produce loadable storage names and previews", () => {
+  const storage = storageNameFromUpload({ name: "face.png", subfolder: "h3studio", type: "input" });
+  assert.equal(storage, "h3studio/face.png");
+  assert.deepEqual(parseStorageName(storage), { filename: "face.png", subfolder: "h3studio", type: "input" });
+  const preview = previewUrlForStorage(storage);
+  assert.match(preview, /^\/view\?/);
+  assert.match(preview, /filename=face.png/);
+  assert.match(preview, /subfolder=h3studio/);
 });

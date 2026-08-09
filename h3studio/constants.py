@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Final
 
-VERSION: Final = "0.1.0"
-STATE_SCHEMA_VERSION: Final = 2
+VERSION: Final = "0.1.0-alpha.2"
+STATE_SCHEMA_VERSION: Final = 3
 CONTEXT_SCHEMA_VERSION: Final = 1
 
 CANVAS_MULTIPLE: Final = 32
@@ -146,4 +146,3 @@ ROLE_KEYWORDS: Final = {
     "lighting": ("lighting", "light", "shadow", "illumination", "exposure"),
     "texture": ("texture", "grain", "material", "surface", "hatching"),
 }
-

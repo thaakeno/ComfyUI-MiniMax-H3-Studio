@@ -26,6 +26,12 @@ export function installTheme() {
     .h3s-studio-mark { width: 7px; height: 18px; border-radius: 999px; background: var(--h3s-accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--h3s-accent) 60%, transparent); }
     .h3s-studio-title { overflow: hidden; color: var(--h3s-text); font-size: 12px; font-weight: 700; letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; }
     .h3s-status-pill { flex: none; padding: 3px 7px; border: 1px solid var(--h3s-border); border-radius: 999px; color: var(--h3s-muted); background: var(--h3s-surface); font-size: 10px; }
+    .h3s-reference-heading-actions { display: flex; align-items: center; gap: 5px; }
+    .h3s-add-image { min-height: 25px; padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--h3s-accent) 45%, var(--h3s-border)); border-radius: 6px; color: var(--h3s-text); background: color-mix(in srgb, var(--h3s-accent) 12%, var(--h3s-bg)); cursor: pointer; font: 650 10px/1.2 ui-sans-serif, system-ui; }
+    .h3s-add-image:hover { background: color-mix(in srgb, var(--h3s-accent) 20%, var(--h3s-bg)); }
+    .h3s-add-image:focus-visible { outline: 2px solid color-mix(in srgb, var(--h3s-accent) 70%, transparent); outline-offset: 1px; }
+    .h3s-add-image:disabled { cursor: default; opacity: .45; }
+    .h3s-upload-error { padding: 7px 8px; border: 1px solid color-mix(in srgb, #ff7f7f 45%, var(--h3s-border)); border-radius: 6px; color: #ffb0b0; background: color-mix(in srgb, #ff6b6b 9%, var(--h3s-bg)); font-size: 10px; }
     .h3s-section { display: flex; flex-direction: column; gap: 7px; padding: 9px; border: 1px solid var(--h3s-border); border-radius: 9px; background: var(--h3s-surface); }
     .h3s-section-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .h3s-section-title { color: var(--h3s-muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }

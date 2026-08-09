@@ -1,4 +1,4 @@
-export const STATE_SCHEMA_VERSION = 2;
+export const STATE_SCHEMA_VERSION = 3;
 export const MAX_REFERENCES = 9;
 
 export const ASPECT_RATIOS = Object.freeze({
@@ -115,9 +115,12 @@ function choice(value, choices, fallback) {
 
 export function normalizeReference(value, ordinal) {
   const source = object(value);
+  const storageName = String(source.storage_name || "").replaceAll("\\", "/").trim();
+  const displayName = String(source.filename || storageName || `image_${ordinal}.png`).split(/[\\/]/).pop().replace(/\s+\[(?:input|output|temp)\]$/i, "");
   return {
     id: String(source.id || `ref_${ordinal}`),
-    filename: String(source.filename || `image_${ordinal}.png`).split(/[\\/]/).pop(),
+    filename: displayName,
+    storage_name: storageName,
     ordinal,
     role: choice(source.role, ROLES, "auto"),
     retention: choice(source.retention, RETENTION, "attribute_transfer"),
@@ -227,4 +230,3 @@ export function planResolution(aspectRatio, megapixels, customWidth = 1024, cust
     aspectRatio,
   };
 }
-

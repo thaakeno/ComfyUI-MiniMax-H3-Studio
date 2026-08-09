@@ -2,6 +2,27 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [0.1.0-alpha.2] - 2026-08-09
+
+### Fixed
+
+- Removed all nonexistent `image_1.png`–`image_3.png` workflow placeholders and their blocking required-input errors.
+- The bundled workflow now opens with zero references and is immediately runnable for text-to-image.
+- Removed the unconsumed Context Inspector and separated the Director from model nodes so node height cannot cover them.
+
+### Added
+
+- Integrated multi-image upload directly inside the Director reference panel through ComfyUI's `/upload/image` endpoint.
+- Uploaded files become real ordered `@Image N` cards with thumbnails, roles, retention, descriptions, reordering, and removal.
+- Python loads integrated uploads through ComfyUI's canonical `LoadImage` implementation; external image links remain compatible.
+- State schema 3 records safe ComfyUI storage names separately from display filenames.
+- Upload, storage, empty-workflow, unsafe-path, and no-placeholder regression coverage.
+
+### Changed
+
+- The prompt editor and reference panel now use bounded internal scrolling instead of expanding across neighboring workflow nodes.
+- The workflow is arranged as four aligned stages: Director, models/conditioning, sampling/extraction, and output.
+
 ## [0.1.0-alpha.1] - 2026-08-09
 
 ### Added

@@ -104,11 +104,8 @@ class Links:
 
 def director_widgets(state_json: str):
     values = [
-        "reference",
-        (
-            "Create the image as a precise production brief. Use @Image 1 for identity, "
-            "@Image 2 for visual style, and @Image 3 for composition when those references are connected."
-        ),
+        "image",
+        "Describe the final still image. Upload references here only when they have a specific visual job.",
         "Custom",
         "1:1",
         1024,
@@ -130,8 +127,8 @@ def director_widgets(state_json: str):
         state_json,
         "",
     ]
-    for index in range(1, 10):
-        values.extend(["image", f"image_{index}.png" if index <= 3 else "", "auto", "attribute_transfer", ""])
+    for _index in range(1, 10):
+        values.extend(["image", "", "auto", "attribute_transfer", ""])
     return values
 
 
@@ -349,43 +346,9 @@ def build_subgraph():
 def build_workflow():
     links = Links()
     state = {
-        "schema_version": 2,
-        "prompt": "Create a polished still image. Use @Image 1 for identity, @Image 2 for style, and @Image 3 for composition.",
-        "references": [
-            {
-                "id": "ref_1",
-                "filename": "image_1.png",
-                "ordinal": 1,
-                "role": "identity",
-                "retention": "fully_preserved",
-                "description": "Defines the exact subject identity.",
-                "enabled": True,
-                "source_node_id": "1",
-                "source_slot": 0,
-            },
-            {
-                "id": "ref_2",
-                "filename": "image_2.png",
-                "ordinal": 2,
-                "role": "style",
-                "retention": "attribute_transfer",
-                "description": "Defines rendering style and color treatment.",
-                "enabled": True,
-                "source_node_id": "2",
-                "source_slot": 0,
-            },
-            {
-                "id": "ref_3",
-                "filename": "image_3.png",
-                "ordinal": 3,
-                "role": "composition",
-                "retention": "attribute_transfer",
-                "description": "Defines framing and layout.",
-                "enabled": True,
-                "source_node_id": "3",
-                "source_slot": 0,
-            },
-        ],
+        "schema_version": 3,
+        "prompt": "Describe the final still image.",
+        "references": [],
         "prompt_options": {
             "enhance_mode": "compile_only",
             "adherence": 0.85,
@@ -417,9 +380,7 @@ def build_workflow():
         "ui": {"advanced_open": False, "reference_details": {}},
     }
     state_json = json.dumps(state, separators=(",", ":"), ensure_ascii=False)
-    virtual_links = [
-        {"source_id": index, "source_slot": 0, "media_type": "image", "order": index} for index in range(1, 4)
-    ]
+    virtual_links = []
 
     l_context_condition = links.add(10, 0, 12, 1, "H3_STUDIO_CONTEXT")
     l_bundle_condition = links.add(11, 0, 12, 0, "H3_STUDIO_BUNDLE")
@@ -430,26 +391,6 @@ def build_workflow():
     l_seed_sub = links.add(10, 5, 13, 4, "INT")
     l_image_preview = links.add(13, 0, 14, 0, "IMAGE")
     l_image_save = links.add(13, 0, 15, 0, "IMAGE")
-    l_context_inspector = links.add(10, 0, 16, 0, "H3_STUDIO_CONTEXT")
-
-    load_nodes = []
-    for index, y in enumerate([220, 550, 880], 1):
-        load_nodes.append(
-            node(
-                index,
-                "LoadImage",
-                f"@Image {index} · replace me",
-                [-1580, y],
-                [300, 300],
-                order=index - 1,
-                inputs=[socket("image", "COMBO", widget="image"), socket("upload", "IMAGEUPLOAD", widget="upload")],
-                outputs=[output("IMAGE", "IMAGE", None), output("MASK", "MASK", None)],
-                widgets=[f"image_{index}.png", "image"],
-                properties={"Node name for S&R": "LoadImage", "h3studio_reference_ordinal": index},
-                color="#2b3735",
-                bgcolor="#1b2221",
-            )
-        )
 
     director_inputs = [
         socket("mode", "COMBO", widget="mode"),
@@ -475,17 +416,17 @@ def build_workflow():
         socket("studio_state", "STRING", widget="studio_state"),
         socket("media", "*", None, shape=7),
     ]
-    nodes = load_nodes + [
+    nodes = [
         node(
             10,
             "H3StudioDirector",
             "MiniMax H3 Studio · Image Director",
-            [-1090, 210],
-            [760, 920],
-            order=3,
+            [-1450, 220],
+            [760, 820],
+            order=0,
             inputs=director_inputs,
             outputs=[
-                output("studio_context", "H3_STUDIO_CONTEXT", [l_context_condition, l_context_inspector]),
+                output("studio_context", "H3_STUDIO_CONTEXT", [l_context_condition]),
                 output("compiled_prompt", "STRING", None),
                 output("state_json", "STRING", None),
                 output("width", "INT", None),
@@ -497,7 +438,7 @@ def build_workflow():
             properties={
                 "Node name for S&R": "H3StudioDirector",
                 "h3studio_virtual_media_links": virtual_links,
-                "h3studio_prompt_reference_doc": {"version": 1, "parts": [{"kind": "text", "text": state["prompt"]}]},
+                "h3studio_prompt_reference_doc": {"version": 1, "parts": [{"type": "text", "text": state["prompt"]}]},
             },
             color="#255049",
             bgcolor="#172d29",
@@ -506,9 +447,9 @@ def build_workflow():
             11,
             "H3StudioLoader",
             "H3 models · lazy route loader",
-            [-1090, 1210],
-            [760, 170],
-            order=4,
+            [-520, 260],
+            [560, 180],
+            order=1,
             inputs=[
                 socket("fl2va_model", "COMBO", widget="fl2va_model"),
                 socket("ref2va_model", "COMBO", widget="ref2va_model"),
@@ -534,9 +475,9 @@ def build_workflow():
             12,
             "H3StudioCondition",
             "Compile, condition, and route once",
-            [-40, 420],
-            [430, 130],
-            order=5,
+            [-520, 560],
+            [560, 150],
+            order=2,
             inputs=[
                 socket("h3_bundle", "H3_STUDIO_BUNDLE", l_bundle_condition),
                 socket("studio_context", "H3_STUDIO_CONTEXT", l_context_condition),
@@ -558,9 +499,9 @@ def build_workflow():
             13,
             SUBGRAPH_ID,
             "H3 Studio · Sampling + exact still",
-            [500, 340],
+            [220, 360],
             [620, 420],
-            order=6,
+            order=3,
             inputs=[
                 socket("model", "MODEL", l_model_sub),
                 socket("positive", "CONDITIONING", l_positive_sub),
@@ -582,9 +523,9 @@ def build_workflow():
             14,
             "PreviewImage",
             "Final still · preview",
-            [1250, 260],
+            [1030, 260],
             [440, 420],
-            order=7,
+            order=4,
             inputs=[socket("images", "IMAGE", l_image_preview)],
             outputs=[],
             widgets=[],
@@ -595,9 +536,9 @@ def build_workflow():
             15,
             "SaveImage",
             "Final still · save",
-            [1250, 730],
+            [1030, 750],
             [440, 190],
-            order=8,
+            order=5,
             inputs=[
                 socket("images", "IMAGE", l_image_save),
                 socket("filename_prefix", "STRING", widget="filename_prefix"),
@@ -607,29 +548,12 @@ def build_workflow():
             color="#3c514c",
             bgcolor="#24312f",
         ),
-        node(
-            16,
-            "H3StudioContextInspector",
-            "Compiled brief and route inspector",
-            [-20, 930],
-            [430, 160],
-            order=9,
-            inputs=[socket("studio_context", "H3_STUDIO_CONTEXT", l_context_inspector)],
-            outputs=[
-                output("compiled_prompt", "STRING", None),
-                output("context_info", "STRING", None),
-                output("width", "INT", None),
-                output("height", "INT", None),
-                output("seed", "INT", None),
-            ],
-            widgets=[],
-        ),
         note(
             20,
             "START HERE · three-minute setup",
             "quick start",
-            "1. Replace any connected placeholder Load Image nodes.\n2. Write naturally in the Director and type @ to insert exact image references.\n3. Set each image's role and retention policy in its card.\n4. Choose aspect ratio, megapixels, and seed.\n5. Queue. Auto uses FL2VA for pure text and REF2VA for multi-reference work.\n\nThe three sample image nodes are optional. Disconnect or remove all of them for clean text-to-image.",
-            [-1580, -160],
+            "1. Write naturally in the Director.\n2. For references, click Add images inside the Director; each upload becomes an ordered @Image card.\n3. Set each image's role and retention policy, then type @ in the prompt to insert it.\n4. Choose aspect ratio, megapixels, and seed.\n5. Queue. Auto uses FL2VA for pure text and REF2VA for multi-reference work.\n\nThe workflow opens at 0/9 with no required files and runs text-to-image immediately.",
+            [-1450, -180],
             [500, 320],
             10,
         ),
@@ -638,7 +562,7 @@ def build_workflow():
             "Prompt enhancement · what actually happens",
             "settings",
             "Production brief compiles deterministic sections: subject_definitions, summary, retention_analysis, and detailed_description. VLM analysis is optional and requires an explicitly selected local instruction-capable vision-language model. The Qwen3-VL ConvRot encoder loaded for H3 conditioning is not silently repurposed as a text generator. No model is downloaded automatically.",
-            [-1030, -160],
+            [-910, -180],
             [520, 320],
             11,
         ),
@@ -647,7 +571,7 @@ def build_workflow():
             "Routing · deliberate defaults",
             "settings",
             "Auto route keeps both proven paths available. Zero references selects FL2VA text-to-image. One reference may use FL2VA as an image anchor depending on requested mode. Multi-reference work selects REF2VA. Forced routes are advanced controls and diagnostics state when images are ignored or a route is experimental. REF2VA-only text-to-image remains unproven and is not the default.",
-            [-470, -160],
+            [-370, -180],
             [520, 320],
             12,
         ),
@@ -656,7 +580,7 @@ def build_workflow():
             "Lightning.ai validation boundary",
             "troubleshooting",
             "This repository is checked locally for Python/JavaScript syntax, state migration, prompt compilation, resolution math, route decisions, node registration, and workflow graph integrity. Actual CUDA generation, model filenames, VRAM behavior, visual quality, and your installed ComfyUI frontend build must be smoke-tested in the Lightning workspace. Follow docs/LIGHTNING_TEST_PLAN.md before calling a GPU path verified.",
-            [90, -160],
+            [170, -180],
             [520, 320],
             13,
         ),
@@ -665,7 +589,7 @@ def build_workflow():
             "Why the Director is not hidden in the subgraph",
             "optional / experimental",
             "ComfyUI can promote native scalar widgets through subgraphs, but custom DOM controls and mention editors are not reliably promoted. The visible Director is therefore the stable product UI. Sampling and exact-frame decode live in the reusable subgraph because those are ordinary typed sockets. This preserves the polished @ tagging interface without repeating the old invisible-widget failure.",
-            [650, -160],
+            [710, -180],
             [520, 320],
             14,
         ),
@@ -674,7 +598,7 @@ def build_workflow():
             "Image reference semantics",
             "settings",
             "identity or character + fully_preserved: keep the exact person or design.\nstyle + attribute_transfer: borrow rendering language without copying content.\ncomposition or layout + attribute_transfer: borrow placement and hierarchy.\noutfit, pose, typography, lighting, texture, object, and environment provide narrower controls.\n\nThe compiler can infer roles from nearby prompt text, but explicit card metadata wins.",
-            [1730, 260],
+            [1560, 260],
             [430, 390],
             15,
         ),
@@ -683,7 +607,7 @@ def build_workflow():
             "Sampling and frame extraction",
             "models",
             "H3 emits a short temporal latent even when the desired output is one image. The bundled subgraph samples that packet, decodes the exact requested profile, and selects the decoder-recommended stable frame. Base Quality uses the conservative RES Multistep profile. Turbo profiles are labeled experimental and expect their matching upstream acceleration assets.",
-            [1730, 700],
+            [1560, 700],
             [430, 310],
             16,
         ),
@@ -691,56 +615,48 @@ def build_workflow():
     groups = [
         {
             "id": 1,
-            "title": "01 · OPTIONAL REFERENCE IMAGES",
-            "bounding": [-1630, 170, 380, 1050],
+            "title": "01 · DIRECT THE IMAGE",
+            "bounding": [-1500, 160, 860, 940],
             "color": "#355b54",
-            "font_size": 26,
-            "flags": {},
-        },
-        {
-            "id": 2,
-            "title": "02 · DIRECT THE IMAGE",
-            "bounding": [-1140, 170, 860, 1250],
-            "color": "#2f665b",
             "font_size": 28,
             "flags": {},
         },
         {
+            "id": 2,
+            "title": "02 · MODELS AND CONDITIONING",
+            "bounding": [-580, 190, 680, 600],
+            "color": "#2f665b",
+            "font_size": 26,
+            "flags": {},
+        },
+        {
             "id": 3,
-            "title": "03 · CONDITION ONCE",
-            "bounding": [-90, 350, 540, 790],
+            "title": "03 · SAMPLE AND EXTRACT STILL",
+            "bounding": [160, 280, 740, 570],
             "color": "#6b5937",
             "font_size": 26,
             "flags": {},
         },
         {
             "id": 4,
-            "title": "04 · SAMPLE AND EXTRACT STILL",
-            "bounding": [450, 260, 720, 550],
-            "color": "#456059",
-            "font_size": 26,
-            "flags": {},
-        },
-        {
-            "id": 5,
-            "title": "05 · OUTPUT",
-            "bounding": [1200, 190, 540, 780],
+            "title": "04 · OUTPUT",
+            "bounding": [970, 190, 560, 820],
             "color": "#496073",
             "font_size": 26,
             "flags": {},
         },
         {
-            "id": 6,
+            "id": 5,
             "title": "REFERENCE GUIDE",
-            "bounding": [1680, 190, 530, 880],
+            "bounding": [1500, 190, 530, 880],
             "color": "#5c5243",
             "font_size": 24,
             "flags": {},
         },
         {
-            "id": 7,
+            "id": 6,
             "title": "READ BEFORE FIRST RUN",
-            "bounding": [-1630, -220, 2830, 400],
+            "bounding": [-1500, -240, 2750, 400],
             "color": "#324e49",
             "font_size": 30,
             "flags": {},
@@ -757,11 +673,11 @@ def build_workflow():
         "definitions": {"subgraphs": [build_subgraph()]},
         "config": {},
         "extra": {
-            "ds": {"scale": 0.72, "offset": [1220, 330]},
+            "ds": {"scale": 0.72, "offset": [1120, 330]},
             "frontendVersion": "1.30.0",
             "h3studio": {
-                "schema_version": 2,
-                "template_version": "1.0.0",
+                "schema_version": 3,
+                "template_version": "1.1.0",
                 "design_source": "Alier v1.3.7 geometry",
                 "audio_prompt_sections": False,
                 "hub_included": False,

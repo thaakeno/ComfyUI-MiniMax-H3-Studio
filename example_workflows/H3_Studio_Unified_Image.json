@@ -2,189 +2,21 @@
   "id": "51ffc0bb-1b7a-4a1c-a183-1ce99edb4e5e",
   "revision": 0,
   "last_node_id": 26,
-  "last_link_id": 10,
+  "last_link_id": 9,
   "nodes": [
-    {
-      "id": 1,
-      "type": "LoadImage",
-      "pos": [
-        -1580,
-        220
-      ],
-      "size": [
-        300,
-        300
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image",
-          "type": "COMBO",
-          "link": null,
-          "widget": {
-            "name": "image"
-          }
-        },
-        {
-          "name": "upload",
-          "type": "IMAGEUPLOAD",
-          "link": null,
-          "widget": {
-            "name": "upload"
-          }
-        }
-      ],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": null
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": null
-        }
-      ],
-      "title": "@Image 1 · replace me",
-      "properties": {
-        "Node name for S&R": "LoadImage",
-        "h3studio_reference_ordinal": 1
-      },
-      "widgets_values": [
-        "image_1.png",
-        "image"
-      ],
-      "color": "#2b3735",
-      "bgcolor": "#1b2221"
-    },
-    {
-      "id": 2,
-      "type": "LoadImage",
-      "pos": [
-        -1580,
-        550
-      ],
-      "size": [
-        300,
-        300
-      ],
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image",
-          "type": "COMBO",
-          "link": null,
-          "widget": {
-            "name": "image"
-          }
-        },
-        {
-          "name": "upload",
-          "type": "IMAGEUPLOAD",
-          "link": null,
-          "widget": {
-            "name": "upload"
-          }
-        }
-      ],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": null
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": null
-        }
-      ],
-      "title": "@Image 2 · replace me",
-      "properties": {
-        "Node name for S&R": "LoadImage",
-        "h3studio_reference_ordinal": 2
-      },
-      "widgets_values": [
-        "image_2.png",
-        "image"
-      ],
-      "color": "#2b3735",
-      "bgcolor": "#1b2221"
-    },
-    {
-      "id": 3,
-      "type": "LoadImage",
-      "pos": [
-        -1580,
-        880
-      ],
-      "size": [
-        300,
-        300
-      ],
-      "flags": {},
-      "order": 2,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image",
-          "type": "COMBO",
-          "link": null,
-          "widget": {
-            "name": "image"
-          }
-        },
-        {
-          "name": "upload",
-          "type": "IMAGEUPLOAD",
-          "link": null,
-          "widget": {
-            "name": "upload"
-          }
-        }
-      ],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": null
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": null
-        }
-      ],
-      "title": "@Image 3 · replace me",
-      "properties": {
-        "Node name for S&R": "LoadImage",
-        "h3studio_reference_ordinal": 3
-      },
-      "widgets_values": [
-        "image_3.png",
-        "image"
-      ],
-      "color": "#2b3735",
-      "bgcolor": "#1b2221"
-    },
     {
       "id": 10,
       "type": "H3StudioDirector",
       "pos": [
-        -1090,
-        210
+        -1450,
+        220
       ],
       "size": [
         760,
-        920
+        820
       ],
       "flags": {},
-      "order": 3,
+      "order": 0,
       "mode": 0,
       "inputs": [
         {
@@ -367,8 +199,7 @@
           "name": "studio_context",
           "type": "H3_STUDIO_CONTEXT",
           "links": [
-            1,
-            10
+            1
           ]
         },
         {
@@ -407,39 +238,20 @@
       "title": "MiniMax H3 Studio · Image Director",
       "properties": {
         "Node name for S&R": "H3StudioDirector",
-        "h3studio_virtual_media_links": [
-          {
-            "source_id": 1,
-            "source_slot": 0,
-            "media_type": "image",
-            "order": 1
-          },
-          {
-            "source_id": 2,
-            "source_slot": 0,
-            "media_type": "image",
-            "order": 2
-          },
-          {
-            "source_id": 3,
-            "source_slot": 0,
-            "media_type": "image",
-            "order": 3
-          }
-        ],
+        "h3studio_virtual_media_links": [],
         "h3studio_prompt_reference_doc": {
           "version": 1,
           "parts": [
             {
-              "kind": "text",
-              "text": "Create a polished still image. Use @Image 1 for identity, @Image 2 for style, and @Image 3 for composition."
+              "type": "text",
+              "text": "Describe the final still image."
             }
           ]
         }
       },
       "widgets_values": [
-        "reference",
-        "Create the image as a precise production brief. Use @Image 1 for identity, @Image 2 for visual style, and @Image 3 for composition when those references are connected.",
+        "image",
+        "Describe the final still image. Upload references here only when they have a specific visual job.",
         "Custom",
         "1:1",
         1024,
@@ -458,20 +270,20 @@
         "base_quality_20",
         "recommended_5",
         "",
-        "{\"schema_version\":2,\"prompt\":\"Create a polished still image. Use @Image 1 for identity, @Image 2 for style, and @Image 3 for composition.\",\"references\":[{\"id\":\"ref_1\",\"filename\":\"image_1.png\",\"ordinal\":1,\"role\":\"identity\",\"retention\":\"fully_preserved\",\"description\":\"Defines the exact subject identity.\",\"enabled\":true,\"source_node_id\":\"1\",\"source_slot\":0},{\"id\":\"ref_2\",\"filename\":\"image_2.png\",\"ordinal\":2,\"role\":\"style\",\"retention\":\"attribute_transfer\",\"description\":\"Defines rendering style and color treatment.\",\"enabled\":true,\"source_node_id\":\"2\",\"source_slot\":0},{\"id\":\"ref_3\",\"filename\":\"image_3.png\",\"ordinal\":3,\"role\":\"composition\",\"retention\":\"attribute_transfer\",\"description\":\"Defines framing and layout.\",\"enabled\":true,\"source_node_id\":\"3\",\"source_slot\":0}],\"prompt_options\":{\"enhance_mode\":\"compile_only\",\"adherence\":0.85,\"detail_level\":\"detailed\",\"preserve_user_text\":true,\"infer_roles\":true,\"system_instruction\":\"\",\"analyzer_model\":\"\",\"analyzer_device\":\"auto\",\"analyzer_quantization\":\"auto\",\"analyzer_max_tokens\":1800,\"analyzer_keep_loaded\":false},\"generation\":{\"mode\":\"auto\",\"route\":\"auto\",\"seed\":42,\"aspect_ratio\":\"1:1\",\"megapixels\":1.0,\"custom_width\":1024,\"custom_height\":1024,\"cap_native_resolution\":true,\"sampling_profile\":\"base_quality_20\",\"frame_profile\":\"recommended_5\",\"frame_selection\":\"decode_recommended\",\"reference_short_edge\":2048,\"source_image_ordinal\":1},\"ui\":{\"advanced_open\":false,\"reference_details\":{}}}",
+        "{\"schema_version\":3,\"prompt\":\"Describe the final still image.\",\"references\":[],\"prompt_options\":{\"enhance_mode\":\"compile_only\",\"adherence\":0.85,\"detail_level\":\"detailed\",\"preserve_user_text\":true,\"infer_roles\":true,\"system_instruction\":\"\",\"analyzer_model\":\"\",\"analyzer_device\":\"auto\",\"analyzer_quantization\":\"auto\",\"analyzer_max_tokens\":1800,\"analyzer_keep_loaded\":false},\"generation\":{\"mode\":\"auto\",\"route\":\"auto\",\"seed\":42,\"aspect_ratio\":\"1:1\",\"megapixels\":1.0,\"custom_width\":1024,\"custom_height\":1024,\"cap_native_resolution\":true,\"sampling_profile\":\"base_quality_20\",\"frame_profile\":\"recommended_5\",\"frame_selection\":\"decode_recommended\",\"reference_short_edge\":2048,\"source_image_ordinal\":1},\"ui\":{\"advanced_open\":false,\"reference_details\":{}}}",
         "",
         "image",
-        "image_1.png",
+        "",
         "auto",
         "attribute_transfer",
         "",
         "image",
-        "image_2.png",
+        "",
         "auto",
         "attribute_transfer",
         "",
         "image",
-        "image_3.png",
+        "",
         "auto",
         "attribute_transfer",
         "",
@@ -513,15 +325,15 @@
       "id": 11,
       "type": "H3StudioLoader",
       "pos": [
-        -1090,
-        1210
+        -520,
+        260
       ],
       "size": [
-        760,
-        170
+        560,
+        180
       ],
       "flags": {},
-      "order": 4,
+      "order": 1,
       "mode": 0,
       "inputs": [
         {
@@ -598,15 +410,15 @@
       "id": 12,
       "type": "H3StudioCondition",
       "pos": [
-        -40,
-        420
+        -520,
+        560
       ],
       "size": [
-        430,
-        130
+        560,
+        150
       ],
       "flags": {},
-      "order": 5,
+      "order": 2,
       "mode": 0,
       "inputs": [
         {
@@ -677,15 +489,15 @@
       "id": 13,
       "type": "5930b00d-9f8e-4b87-9cb5-ff5f7cf3b30a",
       "pos": [
-        500,
-        340
+        220,
+        360
       ],
       "size": [
         620,
         420
       ],
       "flags": {},
-      "order": 6,
+      "order": 3,
       "mode": 0,
       "inputs": [
         {
@@ -748,7 +560,7 @@
       "id": 14,
       "type": "PreviewImage",
       "pos": [
-        1250,
+        1030,
         260
       ],
       "size": [
@@ -756,7 +568,7 @@
         420
       ],
       "flags": {},
-      "order": 7,
+      "order": 4,
       "mode": 0,
       "inputs": [
         {
@@ -778,15 +590,15 @@
       "id": 15,
       "type": "SaveImage",
       "pos": [
-        1250,
-        730
+        1030,
+        750
       ],
       "size": [
         440,
         190
       ],
       "flags": {},
-      "order": 8,
+      "order": 5,
       "mode": 0,
       "inputs": [
         {
@@ -815,65 +627,11 @@
       "bgcolor": "#24312f"
     },
     {
-      "id": 16,
-      "type": "H3StudioContextInspector",
-      "pos": [
-        -20,
-        930
-      ],
-      "size": [
-        430,
-        160
-      ],
-      "flags": {},
-      "order": 9,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "studio_context",
-          "type": "H3_STUDIO_CONTEXT",
-          "link": 10
-        }
-      ],
-      "outputs": [
-        {
-          "name": "compiled_prompt",
-          "type": "STRING",
-          "links": null
-        },
-        {
-          "name": "context_info",
-          "type": "STRING",
-          "links": null
-        },
-        {
-          "name": "width",
-          "type": "INT",
-          "links": null
-        },
-        {
-          "name": "height",
-          "type": "INT",
-          "links": null
-        },
-        {
-          "name": "seed",
-          "type": "INT",
-          "links": null
-        }
-      ],
-      "title": "Compiled brief and route inspector",
-      "properties": {
-        "Node name for S&R": "H3StudioContextInspector"
-      },
-      "widgets_values": []
-    },
-    {
       "id": 20,
       "type": "H3StudioWorkflowNote",
       "pos": [
-        -1580,
-        -160
+        -1450,
+        -180
       ],
       "size": [
         500,
@@ -908,7 +666,7 @@
       },
       "widgets_values": [
         "quick start",
-        "1. Replace any connected placeholder Load Image nodes.\n2. Write naturally in the Director and type @ to insert exact image references.\n3. Set each image's role and retention policy in its card.\n4. Choose aspect ratio, megapixels, and seed.\n5. Queue. Auto uses FL2VA for pure text and REF2VA for multi-reference work.\n\nThe three sample image nodes are optional. Disconnect or remove all of them for clean text-to-image."
+        "1. Write naturally in the Director.\n2. For references, click Add images inside the Director; each upload becomes an ordered @Image card.\n3. Set each image's role and retention policy, then type @ in the prompt to insert it.\n4. Choose aspect ratio, megapixels, and seed.\n5. Queue. Auto uses FL2VA for pure text and REF2VA for multi-reference work.\n\nThe workflow opens at 0/9 with no required files and runs text-to-image immediately."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -917,8 +675,8 @@
       "id": 21,
       "type": "H3StudioWorkflowNote",
       "pos": [
-        -1030,
-        -160
+        -910,
+        -180
       ],
       "size": [
         520,
@@ -962,8 +720,8 @@
       "id": 22,
       "type": "H3StudioWorkflowNote",
       "pos": [
-        -470,
-        -160
+        -370,
+        -180
       ],
       "size": [
         520,
@@ -1007,8 +765,8 @@
       "id": 23,
       "type": "H3StudioWorkflowNote",
       "pos": [
-        90,
-        -160
+        170,
+        -180
       ],
       "size": [
         520,
@@ -1052,8 +810,8 @@
       "id": 24,
       "type": "H3StudioWorkflowNote",
       "pos": [
-        650,
-        -160
+        710,
+        -180
       ],
       "size": [
         520,
@@ -1097,7 +855,7 @@
       "id": 25,
       "type": "H3StudioWorkflowNote",
       "pos": [
-        1730,
+        1560,
         260
       ],
       "size": [
@@ -1142,7 +900,7 @@
       "id": 26,
       "type": "H3StudioWorkflowNote",
       "pos": [
-        1730,
+        1560,
         700
       ],
       "size": [
@@ -1256,51 +1014,43 @@
       15,
       0,
       "IMAGE"
-    ],
-    [
-      10,
-      10,
-      0,
-      16,
-      0,
-      "H3_STUDIO_CONTEXT"
     ]
   ],
   "groups": [
     {
       "id": 1,
-      "title": "01 · OPTIONAL REFERENCE IMAGES",
+      "title": "01 · DIRECT THE IMAGE",
       "bounding": [
-        -1630,
-        170,
-        380,
-        1050
+        -1500,
+        160,
+        860,
+        940
       ],
       "color": "#355b54",
-      "font_size": 26,
-      "flags": {}
-    },
-    {
-      "id": 2,
-      "title": "02 · DIRECT THE IMAGE",
-      "bounding": [
-        -1140,
-        170,
-        860,
-        1250
-      ],
-      "color": "#2f665b",
       "font_size": 28,
       "flags": {}
     },
     {
-      "id": 3,
-      "title": "03 · CONDITION ONCE",
+      "id": 2,
+      "title": "02 · MODELS AND CONDITIONING",
       "bounding": [
-        -90,
-        350,
-        540,
-        790
+        -580,
+        190,
+        680,
+        600
+      ],
+      "color": "#2f665b",
+      "font_size": 26,
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "03 · SAMPLE AND EXTRACT STILL",
+      "bounding": [
+        160,
+        280,
+        740,
+        570
       ],
       "color": "#6b5937",
       "font_size": 26,
@@ -1308,35 +1058,22 @@
     },
     {
       "id": 4,
-      "title": "04 · SAMPLE AND EXTRACT STILL",
+      "title": "04 · OUTPUT",
       "bounding": [
-        450,
-        260,
-        720,
-        550
-      ],
-      "color": "#456059",
-      "font_size": 26,
-      "flags": {}
-    },
-    {
-      "id": 5,
-      "title": "05 · OUTPUT",
-      "bounding": [
-        1200,
+        970,
         190,
-        540,
-        780
+        560,
+        820
       ],
       "color": "#496073",
       "font_size": 26,
       "flags": {}
     },
     {
-      "id": 6,
+      "id": 5,
       "title": "REFERENCE GUIDE",
       "bounding": [
-        1680,
+        1500,
         190,
         530,
         880
@@ -1346,12 +1083,12 @@
       "flags": {}
     },
     {
-      "id": 7,
+      "id": 6,
       "title": "READ BEFORE FIRST RUN",
       "bounding": [
-        -1630,
-        -220,
-        2830,
+        -1500,
+        -240,
+        2750,
         400
       ],
       "color": "#324e49",
@@ -2086,14 +1823,14 @@
     "ds": {
       "scale": 0.72,
       "offset": [
-        1220,
+        1120,
         330
       ]
     },
     "frontendVersion": "1.30.0",
     "h3studio": {
-      "schema_version": 2,
-      "template_version": "1.0.0",
+      "schema_version": 3,
+      "template_version": "1.1.0",
       "design_source": "Alier v1.3.7 geometry",
       "audio_prompt_sections": false,
       "hub_included": false

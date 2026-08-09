@@ -4,7 +4,7 @@
 
 ### H3 Studio · Image Director
 
-Owns the prompt, ordered images, reference roles, retention policies, aspect ratio, megapixels, seed, enhancement mode, and route intent. Returns a typed context, compiled prompt, serialized state, dimensions, seed, and diagnostics.
+Owns the prompt, integrated image uploads, ordered references, roles, retention policies, aspect ratio, megapixels, seed, enhancement mode, and route intent. Its **Add images** action uploads directly to ComfyUI input storage, renders a thumbnail, and assigns the next `@Image N`; external image links remain optional. It returns a typed context, compiled prompt, serialized state, dimensions, seed, and diagnostics.
 
 Friendly prompt references use `@Image 1`; runtime H3 conditioning receives `<Picture 1>`. Missing or disabled references produce actionable validation rather than an opaque encoder failure.
 

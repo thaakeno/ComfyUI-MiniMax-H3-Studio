@@ -1,4 +1,5 @@
 import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 
 import {
   ASPECT_RATIOS,
@@ -14,10 +15,11 @@ import {
 } from "./core/state.js";
 import { element, field, iconButton, numberControl, rangeControl, selectControl } from "./core/dom.js";
 import { installTheme } from "./core/theme.js";
+import { chooseImageFiles, previewUrlForStorage, uploadImage } from "./features/image_upload.js";
 
 const TARGET = "H3StudioDirector";
 const LINKS_PROPERTY = "h3studio_virtual_media_links";
-const PANEL_HEIGHT = 590;
+const PANEL_HEIGHT = 500;
 const HIDDEN_WIDGETS = new Set([
   "mode", "resolution", "aspect_ratio", "width", "height", "seconds", "advanced", "fps",
   "keyframe_role", "ref_image_size", "reference_mention_mode", "megapixels", "seed", "enhance_mode",
@@ -52,6 +54,7 @@ function hideWidget(target) {
 }
 
 function sourceNode(link) {
+  if (!link) return null;
   return app.graph?.getNodeById?.(Number(link.source_id)) || null;
 }
 
@@ -127,6 +130,7 @@ function referenceForLink(previous, link, ordinal) {
   return {
     id: inherited.id || `node_${link.source_id}_${link.source_slot}`,
     filename: sourceFilename(sourceNode(link), ordinal),
+    storage_name: "",
     ordinal,
     role: inherited.role || "auto",
     retention: inherited.retention || "attribute_transfer",
@@ -137,11 +141,45 @@ function referenceForLink(previous, link, ordinal) {
   };
 }
 
+function linkKey(link) {
+  return `${Number(link.source_id)}:${Number(link.source_slot) || 0}`;
+}
+
+function writeLinksFromReferences(node, references) {
+  const byKey = new Map(normalizedLinks(node).map((link) => [linkKey(link), link]));
+  writeLinks(node, references
+    .filter((reference) => reference.source_node_id != null)
+    .map((reference) => byKey.get(`${Number(reference.source_node_id)}:${Number(reference.source_slot) || 0}`))
+    .filter(Boolean));
+}
+
+function notifyReferenceChange(node) {
+  globalThis.dispatchEvent?.(new CustomEvent("h3studio:references-changed", { detail: { nodeId: Number(node.id) } }));
+}
+
 function stateFromNode(node) {
   const persisted = parseState(widget(node, "studio_state")?.value);
   const links = normalizedLinks(node);
+  const available = new Map(links.map((link) => [linkKey(link), link]));
+  const used = new Set();
+  const references = [];
+  for (const reference of persisted.references) {
+    if (reference.source_node_id == null) {
+      if (reference.storage_name) references.push(reference);
+      continue;
+    }
+    const key = `${Number(reference.source_node_id)}:${Number(reference.source_slot) || 0}`;
+    const link = available.get(key);
+    if (!link) continue;
+    used.add(key);
+    references.push(referenceForLink(persisted, link, references.length + 1));
+  }
+  for (const link of links) {
+    if (used.has(linkKey(link))) continue;
+    references.push(referenceForLink(persisted, link, references.length + 1));
+  }
   persisted.prompt = String(widget(node, "prompt")?.value || persisted.prompt || "");
-  persisted.references = links.map((link, index) => referenceForLink(persisted, link, index + 1));
+  persisted.references = references.map((reference, index) => ({ ...reference, ordinal: index + 1 }));
   return normalizeState(persisted);
 }
 
@@ -172,7 +210,7 @@ function applyState(node, state, dirty = true) {
   setWidget(node, "studio_state", serializeState(normalized));
   for (let index = 1; index <= MAX_REFERENCES; index += 1) {
     const reference = normalized.references[index - 1];
-    setWidget(node, `media_filename_${index}`, reference?.filename || "");
+    setWidget(node, `media_filename_${index}`, reference?.storage_name || reference?.filename || "");
     setWidget(node, `media_type_${index}`, "image");
     setWidget(node, `role_${index}`, reference?.role || "auto");
     setWidget(node, `retention_${index}`, reference?.retention || "attribute_transfer");
@@ -248,9 +286,12 @@ function promptSection(node, state, refresh) {
 }
 
 function referenceCard(node, state, reference, index, refresh) {
-  const link = normalizedLinks(node)[index];
+  const link = reference.source_node_id == null ? null : normalizedLinks(node).find(
+    (candidate) => Number(candidate.source_id) === Number(reference.source_node_id)
+      && Number(candidate.source_slot) === Number(reference.source_slot || 0),
+  );
   const source = sourceNode(link);
-  const preview = sourcePreview(source);
+  const preview = reference.storage_name ? previewUrlForStorage(reference.storage_name) : sourcePreview(source);
   const thumb = element("div", { className: "h3s-reference-thumb" }, [
     preview ? element("img", { src: preview, alt: "" }) : element("span", { className: "h3s-thumb-placeholder", text: "IMG" }),
     element("span", { className: "h3s-reference-index", text: `@${index + 1}` }),
@@ -262,21 +303,22 @@ function referenceCard(node, state, reference, index, refresh) {
   const move = (delta) => {
     const next = index + delta;
     if (next < 0 || next >= state.references.length) return;
-    const links = normalizedLinks(node);
-    [links[index], links[next]] = [links[next], links[index]];
-    writeLinks(node, links);
     const reordered = [...state.references];
     [reordered[index], reordered[next]] = [reordered[next], reordered[index]];
     state.references = reordered.map((referenceItem, ordinal) => ({ ...referenceItem, ordinal: ordinal + 1 }));
+    writeLinksFromReferences(node, state.references);
     applyState(node, state);
+    notifyReferenceChange(node);
     refresh();
   };
   const remove = () => {
-    const links = normalizedLinks(node).filter((_, candidate) => candidate !== index);
-    writeLinks(node, links);
+    if (reference.source_node_id != null) {
+      writeLinks(node, normalizedLinks(node).filter((candidate) => linkKey(candidate) !== linkKey(link)));
+    }
     state.references.splice(index, 1);
     state.references = state.references.map((referenceItem, ordinal) => ({ ...referenceItem, ordinal: ordinal + 1 }));
     applyState(node, state);
+    notifyReferenceChange(node);
     refresh();
   };
   const actions = element("div", { className: "h3s-reference-actions" }, [
@@ -300,17 +342,69 @@ function referenceCard(node, state, reference, index, refresh) {
   return element("article", { className: "h3s-reference-card" }, [thumb, element("div", { className: "h3s-reference-body" }, [title, controls, description])]);
 }
 
+async function addImages(node, state, refresh) {
+  const capacity = MAX_REFERENCES - state.references.length;
+  if (capacity <= 0 || node.__h3studioUploading) return;
+  const files = (await chooseImageFiles({ multiple: true })).slice(0, capacity);
+  if (!files.length) return;
+  node.__h3studioUploading = true;
+  node.__h3studioUploadError = "";
+  node.__h3studioUploadLabel = `Uploading 0/${files.length}`;
+  refresh();
+  try {
+    for (let index = 0; index < files.length; index += 1) {
+      node.__h3studioUploadLabel = `Uploading ${index + 1}/${files.length}`;
+      refresh();
+      const uploaded = await uploadImage(api, files[index]);
+      state.references.push({
+        id: `upload_${globalThis.crypto?.randomUUID?.() || `${Date.now()}_${index}`}`,
+        filename: uploaded.filename,
+        storage_name: uploaded.storage_name,
+        ordinal: state.references.length + 1,
+        role: "auto",
+        retention: "attribute_transfer",
+        description: "",
+        enabled: true,
+        source_node_id: null,
+        source_slot: 0,
+      });
+      applyState(node, state);
+    }
+    notifyReferenceChange(node);
+  } catch (error) {
+    node.__h3studioUploadError = error instanceof Error ? error.message : String(error);
+  } finally {
+    node.__h3studioUploading = false;
+    node.__h3studioUploadLabel = "";
+    refresh();
+  }
+}
+
 function referencesSection(node, state, refresh) {
   const list = element("div", { className: "h3s-reference-list" });
   if (!state.references.length) {
     list.append(element("div", { className: "h3s-empty" }, [
       element("strong", { text: "Text-to-image ready" }),
-      element("span", { text: "Connect an image to the Media dot to create @Image 1. Up to nine references stay ordered here." }),
+      element("span", { text: "Upload images here to create @Image 1 through @Image 9. External image links remain supported." }),
     ]));
   } else {
     state.references.forEach((reference, index) => list.append(referenceCard(node, state, reference, index, refresh)));
   }
-  return section("References", list, element("span", { className: "h3s-status-pill", text: `${state.references.length}/${MAX_REFERENCES}` }));
+  if (node.__h3studioUploadError) {
+    list.prepend(element("div", { className: "h3s-upload-error", text: node.__h3studioUploadError, attrs: { role: "alert" } }));
+  }
+  const addButton = element("button", {
+    className: "h3s-add-image", type: "button",
+    disabled: state.references.length >= MAX_REFERENCES || Boolean(node.__h3studioUploading),
+    text: node.__h3studioUploading ? node.__h3studioUploadLabel || "Uploading…" : "+ Add images",
+    attrs: { "aria-label": "Upload reference images" },
+    on: { click: () => addImages(node, state, refresh) },
+  });
+  const accessory = element("div", { className: "h3s-reference-heading-actions" }, [
+    element("span", { className: "h3s-status-pill", text: `${state.references.length}/${MAX_REFERENCES}` }),
+    addButton,
+  ]);
+  return section("References", list, accessory);
 }
 
 function advancedSection(node, state, refresh) {
