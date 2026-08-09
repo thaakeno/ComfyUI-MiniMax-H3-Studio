@@ -133,16 +133,25 @@ Restart ComfyUI after installing the package. Selecting PDD without the external
 
 For fast approximate previews during sampling, download [Kijai's TAEH3 decoder](https://huggingface.co/Kijai/MiniMax-H3-TAE/blob/main/vae_approx/taeh3.safetensors) into `ComfyUI/models/vae_approx/`, then enable the bundled **Live Preview · TAEH3** node. Leave it disabled if the file is absent. Final saving always uses the full H3 VAE.
 
+## Same-seed A/B Matrix
+
+The bundled workflow includes an opt-in **Same-seed A/B Matrix** for diagnosing whether quality loss comes from resolution or acceleration. It requests `0.40`, `1.00`, and `2.00 MP` using the same prompt, references, aspect ratio, frame profile, and seed. Every row compares a native no-LoRA Base profile against the selected LightX or PDD accelerator.
+
+The node returns one labeled two-column grid. Each cell reports requested megapixels, actual aligned dimensions and megapixels, profile/LoRA status, and CUDA-synchronized time spent inside `SamplerCustomAdvanced`. Conditioning, adapter setup, VAE decode, grid composition, and queue overhead are deliberately excluded from the sampling figure. The first sampled cell can still include lazy model initialization, while later cells may benefit from warm caches, so treat the labels as honest sampler-call timings rather than a laboratory benchmark. The detailed string report exposes the same measurements for copying into an issue or experiment log.
+
+The matrix is disabled by default because enabling it performs six complete generations. H3's native area cap can make the `1.00 MP` and `2.00 MP` rows resolve to the same actual dimensions; this is intentional and makes a misleading target-size assumption immediately visible. If the Director currently uses a Base profile, choose LightX or PDD explicitly in the matrix's accelerator control.
+
 ## Bundled workflow
 
 `example_workflows/H3_Studio_Unified_Image.json` is generated, not hand-drifted. It preserves the visual hierarchy and spacious geometry of Alier's v1.3.7 “mine” workflow while keeping the product UI at the top level.
 
-The workflow has four aligned visible stages:
+The workflow has four aligned normal-generation stages plus one optional benchmark stage:
 
 1. The H3 Studio Director with integrated uploads.
 2. The lazy model loader and one conditioning/route pass.
 3. The reusable sampling/exact-still subgraph.
 4. Preview and save output.
+5. A disabled-by-default six-run same-seed A/B quality matrix.
 
 `subgraphs/H3_Studio_Sampling_and_Decode.json` is also supplied independently. It contains only typed sampling, decode, and still-selection plumbing. This is deliberate: ComfyUI does not reliably promote a custom DOM mention editor through subgraph widgets, while native typed sockets remain stable.
 
@@ -164,6 +173,7 @@ The normal path uses:
 - **H3 Studio · Sampling Preset** — conservative base recipes and clearly marked experimental turbo recipes.
 - **H3 Studio · Exact Frame Decode** — decodes the complete selected temporal profile.
 - **H3 Studio · Single Image Output** — fixed or metric-based still selection with an inspectable report.
+- **H3 Studio · Same-Seed A/B Matrix** — six opt-in generations comparing `0.40/1.00/2.00 MP` with and without the selected accelerator, composed into one timed labeled grid.
 
 Advanced and compatibility nodes are documented in [docs/NODES.md](docs/NODES.md).
 

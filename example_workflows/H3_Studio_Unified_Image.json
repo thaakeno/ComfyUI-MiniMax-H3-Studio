@@ -1,8 +1,8 @@
 {
   "id": "51ffc0bb-1b7a-4a1c-a183-1ce99edb4e5e",
   "revision": 0,
-  "last_node_id": 26,
-  "last_link_id": 12,
+  "last_node_id": 27,
+  "last_link_id": 15,
   "nodes": [
     {
       "id": 10,
@@ -213,7 +213,8 @@
           "type": "H3_STUDIO_CONTEXT",
           "links": [
             1,
-            10
+            10,
+            14
           ]
         },
         {
@@ -397,7 +398,8 @@
           "type": "H3_STUDIO_BUNDLE",
           "links": [
             2,
-            3
+            3,
+            13
           ]
         },
         {
@@ -740,6 +742,121 @@
       "bgcolor": "#24312f"
     },
     {
+      "id": 17,
+      "type": "H3StudioABComparison",
+      "pos": [
+        -520,
+        1260
+      ],
+      "size": [
+        780,
+        250
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "h3_bundle",
+          "type": "H3_STUDIO_BUNDLE",
+          "link": 13
+        },
+        {
+          "name": "studio_context",
+          "type": "H3_STUDIO_CONTEXT",
+          "link": 14
+        },
+        {
+          "name": "enabled",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "enabled"
+          }
+        },
+        {
+          "name": "baseline_profile",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "baseline_profile"
+          }
+        },
+        {
+          "name": "accelerator_profile",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "accelerator_profile"
+          }
+        },
+        {
+          "name": "grid_cell_size",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "grid_cell_size"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "comparison_grid",
+          "type": "IMAGE",
+          "links": [
+            15
+          ]
+        },
+        {
+          "name": "comparison_report",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Same-seed A/B Matrix - 0.4 / 1 / 2 MP",
+      "properties": {
+        "Node name for S&R": "H3StudioABComparison"
+      },
+      "widgets_values": [
+        false,
+        "Base Quality - RES 20",
+        "Director selected accelerator",
+        640
+      ],
+      "color": "#60467a",
+      "bgcolor": "#332640"
+    },
+    {
+      "id": 18,
+      "type": "PreviewImage",
+      "pos": [
+        340,
+        1260
+      ],
+      "size": [
+        640,
+        560
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 15
+        }
+      ],
+      "outputs": [],
+      "title": "A/B Matrix - labeled comparison",
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": [],
+      "color": "#60467a",
+      "bgcolor": "#332640"
+    },
+    {
       "id": 20,
       "type": "H3StudioWorkflowNote",
       "pos": [
@@ -1053,6 +1170,51 @@
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
+    },
+    {
+      "id": 27,
+      "type": "H3StudioWorkflowNote",
+      "pos": [
+        1040,
+        1260
+      ],
+      "size": [
+        480,
+        360
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "section",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "section"
+          }
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "text"
+          }
+        }
+      ],
+      "outputs": [],
+      "title": "A/B Matrix - quality and speed diagnosis",
+      "properties": {
+        "Node name for S&R": "H3StudioWorkflowNote",
+        "purpose": "Documentation only; never enters the generation graph."
+      },
+      "widgets_values": [
+        "optional / experimental",
+        "Enable the A/B node only when you want six complete generations. It holds the prompt, references, aspect ratio, frame profile, and seed constant. Each row requests 0.40, 1.00, or 2.00 MP; the left column is native Base without a LoRA and the right column is the selected LightX/PDD accelerator. Every cell labels requested and actual resolution, profile, seed, and CUDA-synchronized sampling-only time. H3's native cap means 1 MP and 2 MP may resolve to the same actual dimensions; the grid makes that visible instead of hiding it."
+      ],
+      "color": "#22322f",
+      "bgcolor": "#17211f"
     }
   ],
   "links": [
@@ -1151,6 +1313,30 @@
       15,
       0,
       "IMAGE"
+    ],
+    [
+      13,
+      11,
+      0,
+      17,
+      0,
+      "H3_STUDIO_BUNDLE"
+    ],
+    [
+      14,
+      10,
+      0,
+      17,
+      1,
+      "H3_STUDIO_CONTEXT"
+    ],
+    [
+      15,
+      17,
+      0,
+      18,
+      0,
+      "IMAGE"
     ]
   ],
   "groups": [
@@ -1230,6 +1416,19 @@
       ],
       "color": "#324e49",
       "font_size": 30,
+      "flags": {}
+    },
+    {
+      "id": 7,
+      "title": "OPTIONAL - SAME-SEED A/B QUALITY MATRIX",
+      "bounding": [
+        -580,
+        1180,
+        2140,
+        720
+      ],
+      "color": "#60467a",
+      "font_size": 28,
       "flags": {}
     }
   ],

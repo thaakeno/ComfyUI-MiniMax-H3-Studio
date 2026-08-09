@@ -398,6 +398,9 @@ def build_workflow():
     l_context_sub = links.add(10, 0, 13, 5, "H3_STUDIO_CONTEXT")
     l_image_preview = links.add(13, 0, 14, 0, "IMAGE")
     l_image_save = links.add(13, 0, 15, 0, "IMAGE")
+    l_bundle_ab = links.add(11, 0, 17, 0, "H3_STUDIO_BUNDLE")
+    l_context_ab = links.add(10, 0, 17, 1, "H3_STUDIO_CONTEXT")
+    l_ab_preview = links.add(17, 0, 18, 0, "IMAGE")
 
     director_inputs = [
         socket("mode", "COMBO", widget="mode"),
@@ -435,7 +438,7 @@ def build_workflow():
             order=0,
             inputs=director_inputs,
             outputs=[
-                output("studio_context", "H3_STUDIO_CONTEXT", [l_context_condition, l_context_sub]),
+                output("studio_context", "H3_STUDIO_CONTEXT", [l_context_condition, l_context_sub, l_context_ab]),
                 output("compiled_prompt", "STRING", None),
                 output("state_json", "STRING", None),
                 output("width", "INT", None),
@@ -467,7 +470,7 @@ def build_workflow():
                 socket("image_analyzer", "COMBO", widget="image_analyzer"),
             ],
             outputs=[
-                output("h3_bundle", "H3_STUDIO_BUNDLE", [l_bundle_condition, l_bundle_director]),
+                output("h3_bundle", "H3_STUDIO_BUNDLE", [l_bundle_condition, l_bundle_director, l_bundle_ab]),
                 output("clip", "CLIP", None),
                 output("video_vae", "VAE", None),
                 output("model_info", "STRING", None),
@@ -580,6 +583,42 @@ def build_workflow():
             color="#3c514c",
             bgcolor="#24312f",
         ),
+        node(
+            17,
+            "H3StudioABComparison",
+            "Same-seed A/B Matrix - 0.4 / 1 / 2 MP",
+            [-520, 1260],
+            [780, 250],
+            order=6,
+            inputs=[
+                socket("h3_bundle", "H3_STUDIO_BUNDLE", l_bundle_ab),
+                socket("studio_context", "H3_STUDIO_CONTEXT", l_context_ab),
+                socket("enabled", "BOOLEAN", widget="enabled"),
+                socket("baseline_profile", "COMBO", widget="baseline_profile"),
+                socket("accelerator_profile", "COMBO", widget="accelerator_profile"),
+                socket("grid_cell_size", "INT", widget="grid_cell_size"),
+            ],
+            outputs=[
+                output("comparison_grid", "IMAGE", [l_ab_preview]),
+                output("comparison_report", "STRING", None),
+            ],
+            widgets=[False, "Base Quality - RES 20", "Director selected accelerator", 640],
+            color="#60467a",
+            bgcolor="#332640",
+        ),
+        node(
+            18,
+            "PreviewImage",
+            "A/B Matrix - labeled comparison",
+            [340, 1260],
+            [640, 560],
+            order=7,
+            inputs=[socket("images", "IMAGE", l_ab_preview)],
+            outputs=[],
+            widgets=[],
+            color="#60467a",
+            bgcolor="#332640",
+        ),
         note(
             20,
             "START HERE · three-minute setup",
@@ -643,6 +682,15 @@ def build_workflow():
             [430, 310],
             16,
         ),
+        note(
+            27,
+            "A/B Matrix - quality and speed diagnosis",
+            "optional / experimental",
+            "Enable the A/B node only when you want six complete generations. It holds the prompt, references, aspect ratio, frame profile, and seed constant. Each row requests 0.40, 1.00, or 2.00 MP; the left column is native Base without a LoRA and the right column is the selected LightX/PDD accelerator. Every cell labels requested and actual resolution, profile, seed, and CUDA-synchronized sampling-only time. H3's native cap means 1 MP and 2 MP may resolve to the same actual dimensions; the grid makes that visible instead of hiding it.",
+            [1040, 1260],
+            [480, 360],
+            17,
+        ),
     ]
     groups = [
         {
@@ -691,6 +739,14 @@ def build_workflow():
             "bounding": [-1500, -240, 2750, 400],
             "color": "#324e49",
             "font_size": 30,
+            "flags": {},
+        },
+        {
+            "id": 7,
+            "title": "OPTIONAL - SAME-SEED A/B QUALITY MATRIX",
+            "bounding": [-580, 1180, 2140, 720],
+            "color": "#60467a",
+            "font_size": 28,
             "flags": {},
         },
     ]

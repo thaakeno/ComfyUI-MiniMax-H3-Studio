@@ -23,6 +23,8 @@ Run only these representative paths:
 
 For each run, record resolved dimensions, route diagnostic, sampling profile, decoded frame count, selected index, peak VRAM if convenient, and whether Preview/Save received exactly one final image.
 
+For the optional A/B Matrix smoke test, keep its default same-seed settings, select a real LightX/PDD accelerator, enable it, and queue once. Confirm the output contains six labeled cells in three resolution rows, every row has one no-LoRA Base result and one accelerated result, `1.00 MP` and `2.00 MP` disclose any identical native-capped dimensions, and every successful cell reports sampling-only seconds. The first cell may include lazy model initialization, so compare warm-cache timings with that caveat. Disable the matrix again after the test.
+
 If Mamad8 PDD is installed, run one additional three-reference comparison with `PDD REF2VA · 4-step · ckpt 900`. Confirm the console reports the matched step-900 LoRA and heads filenames, Euler, `trained_blocks`, four steps, strengths `2.0/1.0`, shifts `12/3`, and `contract=enforce`. Then temporarily rename neither file: instead select checkpoint 600 without its files and confirm H3 Studio fails with an actionable missing-artifact message rather than falling back.
 
 ## Prompt checks
