@@ -6,6 +6,7 @@ FL2VA and REF2VA releases the previous model before loading the other path.
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 from collections.abc import Iterable
@@ -24,6 +25,7 @@ except Exception:  # pragma: no cover - ComfyUI always provides this at runtime
 NONE_MODEL = "None"
 _WEIGHT_SUFFIXES = (".safetensors", ".gguf", ".ckpt", ".pt", ".pth", ".bin")
 _H3_TOKENS = ("minimax", "h3", "fl2va", "ref2va")
+LOGGER = logging.getLogger(__name__)
 
 
 def _normalize(name: str) -> str:
@@ -158,6 +160,7 @@ class H3StudioBundle:
             if self._model is not None and self._model_name == name:
                 return self._model
             self.release_model()
+            LOGGER.info("[H3 Studio] Loading transformer route=%s model=%s", kind, name)
             self._model = _load_unet(name)
             self._model_name = name
             self._model_kind = kind
@@ -207,4 +210,5 @@ class H3StudioLoader:
         clip = _load_clip(text_encoder)
         vae = _load_vae(video_vae)
         bundle = H3StudioBundle(fl2va_model, ref2va_model, text_encoder, video_vae, clip, vae)
+        LOGGER.info("\n[H3 Studio] Model bundle\n  %s", bundle.summary())
         return bundle, clip, vae, bundle.summary()

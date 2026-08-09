@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from typing import Any
 
+from ..console_report import format_execution_report
 from ..constants import (
     ASPECT_RATIOS,
     ENHANCE_COMPILE,
@@ -25,6 +27,8 @@ from ..references import ReferenceImage, stable_reference_id
 from ..routing import choose_route
 from ..state import StudioState
 from .loader import H3StudioBundle
+
+LOGGER = logging.getLogger(__name__)
 
 LEGACY_MODE_IMAGE = "image"
 LEGACY_MODE_REFERENCE = "reference"
@@ -267,6 +271,7 @@ class H3StudioDirector:
                 reason="selected REF2VA because the active Mamad8 PDD profile is trained for reference generation",
             )
         context = H3StudioContext.create(state, compile_result, plan, route_decision, images, filenames)
+        LOGGER.info("\n%s", format_execution_report(context, vlm_note))
         diagnostics = context.summary() + vlm_note
         reference_labels = [
             f"@Image {reference.ordinal} · {reference.effective_role} · {reference.retention} · {reference.filename}"
@@ -423,14 +428,17 @@ class H3StudioContextSamplingPreset:
             raise ValueError("Connect H3 Studio Director's studio_context output.")
         profile = _sampling_profile(studio_context.state.generation.sampling_profile)
         if is_pdd_profile(profile):
-            return build_pdd_backend(
+            result = build_pdd_backend(
                 model,
                 profile,
                 selected_route=studio_context.route.selected,
                 reference_count=len(studio_context.images),
             )
-        runtime_profile = SAMPLING_PROFILE_TO_RUNTIME[profile]
-        return H3StudioSamplingPreset().build(model, runtime_profile)
+        else:
+            runtime_profile = SAMPLING_PROFILE_TO_RUNTIME[profile]
+            result = H3StudioSamplingPreset().build(model, runtime_profile)
+        LOGGER.info("\n[H3 Studio] Sampling resolved\n  %s", result[3])
+        return result
 
 
 class H3StudioContextInspector:

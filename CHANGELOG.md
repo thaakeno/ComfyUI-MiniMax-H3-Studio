@@ -2,6 +2,13 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [0.1.0-alpha.6] - 2026-08-09
+
+### Added
+
+- Added a readable, tensor-free console execution report with mode, route and reason, target and actual resolution, seed, speed, frames, prompt shaping, reference roles and retention, original prompt, compiled H3 prompt, and diagnostics.
+- Added concise model-bundle, selected-transformer, and fully resolved sampling reports, including matched PDD artifact names when that backend is active.
+
 ## [0.1.0-alpha.5] - 2026-08-09
 
 ### Fixed
