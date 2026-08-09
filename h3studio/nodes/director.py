@@ -20,7 +20,7 @@ from ..constants import (
 from ..context import H3StudioContext, H3StudioGeneration
 from ..image_inputs import collect_images
 from ..prompting.compiler import PromptCompiler
-from ..prompting.vlm import enhance_state
+from ..prompting.vlm import compile_with_optional_vlm
 from ..references import ReferenceImage, stable_reference_id
 from ..routing import choose_route
 from ..state import StudioState
@@ -251,12 +251,7 @@ class H3StudioDirector:
             kwargs,
         )
         compiler = PromptCompiler()
-        if state.prompt_options.enhance_mode == "vlm":
-            compile_result, vlm_result = enhance_state(state, images, compiler=compiler)
-            vlm_note = f"\n{vlm_result.summary()}"
-        else:
-            compile_result = compiler.compile(state)
-            vlm_note = ""
+        compile_result, vlm_note = compile_with_optional_vlm(state, images, compiler=compiler)
         plan = state.generation.resolution()
         from ..acceleration import route_for_profile
 

@@ -317,6 +317,28 @@ def enhance_state(
     return enhanced, vlm_result
 
 
+def compile_with_optional_vlm(
+    state: StudioState,
+    images: Sequence[Any],
+    *,
+    compiler: PromptCompiler | None = None,
+) -> tuple[CompileResult, str]:
+    """Compile safely when the optional standalone analyzer is unconfigured."""
+
+    compiler = compiler or PromptCompiler()
+    if state.prompt_options.enhance_mode == "vlm" and state.prompt_options.analyzer_model:
+        compile_result, vlm_result = enhance_state(state, images, compiler=compiler)
+        return compile_result, f"\n{vlm_result.summary()}"
+    compile_result = compiler.compile(state)
+    if state.prompt_options.enhance_mode == "vlm":
+        return (
+            compile_result,
+            "\nPrompt enhancement: used the built-in production-brief compiler because no standalone "
+            "VLM analyzer model was selected.",
+        )
+    return compile_result, ""
+
+
 def adapter_status() -> str:
     handle = QwenVLAdapter._handle
     if not handle:

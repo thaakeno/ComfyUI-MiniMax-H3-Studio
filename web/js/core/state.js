@@ -1,5 +1,8 @@
 export const STATE_SCHEMA_VERSION = 4;
 export const MAX_REFERENCES = 9;
+export const MIN_MEGAPIXELS = 0.2;
+export const MAX_MEGAPIXELS = 2;
+export const MEGAPIXEL_STEP = 0.05;
 
 export const ASPECT_RATIOS = Object.freeze({
   "1:1": [1, 1],
@@ -68,6 +71,10 @@ export function clamp(value, minimum, maximum, fallback = minimum) {
 
 export function roundToMultiple(value, multiple = 32) {
   return Math.max(multiple, Math.round(Number(value) / multiple) * multiple);
+}
+
+export function formatMegapixels(value) {
+  return `${clamp(value, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1).toFixed(2)} MP`;
 }
 
 export function defaultState() {
@@ -171,7 +178,7 @@ export function normalizeState(value) {
   generation.route = choice(generation.route, ["auto", "fl2va", "ref2va"], "auto");
   generation.seed = Math.max(0, Math.trunc(Number(generation.seed) || 0));
   generation.aspect_ratio = choice(generation.aspect_ratio, Object.keys(ASPECT_RATIOS), "1:1");
-  generation.megapixels = clamp(generation.megapixels, 0.2, 2, 1);
+  generation.megapixels = clamp(generation.megapixels, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1);
   generation.custom_width = Math.round(clamp(generation.custom_width, 32, 16384, 1024));
   generation.custom_height = Math.round(clamp(generation.custom_height, 32, 16384, 1024));
   generation.sampling_profile = ({
@@ -221,7 +228,7 @@ export function planResolution(aspectRatio, megapixels, customWidth = 1024, cust
   const ratio = aspectRatio === "custom"
     ? clamp(customWidth, 32, 16384, 1024) / clamp(customHeight, 32, 16384, 1024)
     : ratioPair[0] / ratioPair[1];
-  const requested = clamp(megapixels, 0.2, 2, 1);
+  const requested = clamp(megapixels, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1);
   const nativeCap = 768 * 1344;
   const target = capNative ? Math.min(requested * 1_000_000, nativeCap) : requested * 1_000_000;
   let width = roundToMultiple(Math.sqrt(target * ratio));

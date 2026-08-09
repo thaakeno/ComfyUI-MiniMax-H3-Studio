@@ -6,6 +6,7 @@ from h3studio.constants import MODE_TEXT_TO_IMAGE
 from h3studio.errors import PromptFormatError
 from h3studio.prompting.compiler import PromptCompiler, normalize_user_prompt, resolve_mode
 from h3studio.prompting.sections import ImagePromptSections
+from h3studio.prompting.vlm import compile_with_optional_vlm
 from h3studio.references import ReferenceImage
 from h3studio.state import GenerationOptions, PromptOptions, StudioState
 
@@ -41,6 +42,16 @@ def test_compile_t2i_has_exactly_four_sections() -> None:
     ]
     assert "overall_soundscape" not in result.rendered
     assert "non_diegetic_music" not in result.rendered
+
+
+def test_missing_optional_vlm_falls_back_to_compiler() -> None:
+    state = StudioState(
+        prompt="A clean studio portrait.",
+        prompt_options=PromptOptions(enhance_mode="vlm", analyzer_model=""),
+    )
+    result, note = compile_with_optional_vlm(state, [], compiler=PromptCompiler())
+    assert result.native_prompt
+    assert "production-brief compiler" in note
 
 
 def test_compile_reference_prompt_uses_native_tags() -> None:

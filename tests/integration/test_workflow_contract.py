@@ -74,7 +74,12 @@ def test_functional_nodes_do_not_overlap():
 
 def test_prompt_editor_and_empty_result_regression_contract():
     source = STUDIO_FRONTEND.read_text(encoding="utf-8")
+    layout = (ROOT / "web" / "js" / "core" / "layout.js").read_text(encoding="utf-8")
     assert '"h3_prompt_mentions"' in source
     assert "restoreWidgetHiddenByStudio(target)" in source
     assert "].filter(Boolean);" in source
-    assert "NODE_DEFAULT_HEIGHT = 780" in source
+    assert "STUDIO_NODE_HEIGHT = 780" in layout
+    assert "STUDIO_PANEL_HEIGHT = 530" in layout
+    assert "node.onResize = function h3studioResize" not in source
+    assert "Path to an instruction-capable local VLM" not in source
+    assert "Image-analysis model" not in source

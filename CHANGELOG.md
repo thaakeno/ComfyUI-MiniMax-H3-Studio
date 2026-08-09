@@ -2,6 +2,18 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [0.1.0-alpha.5] - 2026-08-09
+
+### Fixed
+
+- Removed the circular ComfyUI node/panel height calculation that made the Director grow downward on every layout pass, and reset already-serialized runaway heights on load.
+- Made an unconfigured standalone VLM analyzer fall back to the built-in H3 production-brief compiler instead of aborting generation.
+
+### Changed
+
+- Replaced the bare megapixel number field with a bounded 0.20–2.00 MP slider, live formatted value, live aligned dimensions, visible limits, and a plain-language native-cap explanation.
+- Removed the confusing analyzer filesystem-path control from the Director. H3's selected ConvRot Qwen3-VL remains the final multimodal conditioning encoder; future generative analyzers will use a proper node connection instead of a typed path.
+
 ## [0.1.0-alpha.4] - 2026-08-09
 
 ### Fixed

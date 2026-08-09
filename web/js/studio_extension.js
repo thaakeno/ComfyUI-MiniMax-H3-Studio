@@ -4,16 +4,21 @@ import { api } from "../../../scripts/api.js";
 import {
   ASPECT_RATIOS,
   FRAME_PROFILES,
+  MAX_MEGAPIXELS,
   MAX_REFERENCES,
+  MEGAPIXEL_STEP,
+  MIN_MEGAPIXELS,
   RETENTION,
   ROLES,
   SAMPLING_PROFILES,
+  formatMegapixels,
   normalizeState,
   parseState,
   planResolution,
   serializeState,
 } from "./core/state.js";
 import { element, field, iconButton, numberControl, rangeControl, selectControl } from "./core/dom.js";
+import { STUDIO_PANEL_HEIGHT, initialStudioNodeSize, studioPanelSize } from "./core/layout.js";
 import { installTheme } from "./core/theme.js";
 import {
   chooseImageFiles,
@@ -24,10 +29,6 @@ import {
 
 const TARGET = "H3StudioDirector";
 const LINKS_PROPERTY = "h3studio_virtual_media_links";
-const PANEL_DEFAULT_HEIGHT = 530;
-const PANEL_MIN_HEIGHT = 350;
-const NODE_DEFAULT_HEIGHT = 780;
-const NON_PANEL_HEIGHT = 205;
 const VISIBLE_STUDIO_WIDGETS = new Set(["prompt", "h3_prompt_mentions", "h3studio_controls"]);
 
 function widget(node, name) {
@@ -319,7 +320,6 @@ function generationSection(node, state, refresh) {
     ["reference_edit", "Reference edit"],
   ], "Generation mode", (value) => update({ mode: value }));
   const ratio = selectControl(generation.aspect_ratio, Object.keys(ASPECT_RATIOS), "Aspect ratio", (value) => update({ aspect_ratio: value }));
-  const megapixels = numberControl(generation.megapixels, { min: 0.2, max: 2, step: 0.05 }, "Megapixels", (value) => update({ megapixels: value }));
   const sampling = selectControl(generation.sampling_profile, SAMPLING_PROFILES, "Sampling speed", (value) => update({ sampling_profile: value }));
   const frames = selectControl(generation.frame_profile, FRAME_PROFILES, "Temporal packet length", (value) => update({ frame_profile: value }));
   const seed = numberControl(generation.seed, { min: 0, max: Number.MAX_SAFE_INTEGER, step: 1 }, "Seed", (value) => update({ seed: Math.max(0, Math.trunc(value)) }));
@@ -330,12 +330,48 @@ function generationSection(node, state, refresh) {
     element("span", { text: `${plan.width} × ${plan.height}` }),
     element("span", { text: `${plan.actualMegapixels.toFixed(2)} MP${plan.capped ? " · native cap" : ""}` }),
   ]);
+  const megapixelValue = element("output", {
+    className: "h3s-megapixel-value",
+    text: formatMegapixels(generation.megapixels),
+    attrs: { "aria-live": "polite" },
+  });
+  const megapixelSlider = rangeControl(
+    generation.megapixels,
+    { min: MIN_MEGAPIXELS, max: MAX_MEGAPIXELS, step: MEGAPIXEL_STEP },
+    `Target megapixels, minimum ${formatMegapixels(MIN_MEGAPIXELS)}, maximum ${formatMegapixels(MAX_MEGAPIXELS)}`,
+    (value) => {
+      state.generation.megapixels = value;
+      const next = planResolution(
+        state.generation.aspect_ratio,
+        value,
+        state.generation.custom_width,
+        state.generation.custom_height,
+        true,
+      );
+      megapixelValue.textContent = formatMegapixels(value);
+      preview.children[0].textContent = `${next.width} × ${next.height}`;
+      preview.children[1].textContent = `${next.actualMegapixels.toFixed(2)} MP${next.capped ? " · native cap" : ""}`;
+      applyState(node, state);
+    },
+  );
+  const megapixelControl = element("div", { className: "h3s-megapixel-control" }, [
+    element("div", { className: "h3s-megapixel-top" }, [
+      element("span", { text: formatMegapixels(MIN_MEGAPIXELS) }),
+      megapixelValue,
+      element("span", { text: formatMegapixels(MAX_MEGAPIXELS) }),
+    ]),
+    megapixelSlider,
+  ]);
   const grid = element("div", { className: "h3s-grid" }, [
-    controlRow("Mode", mode), controlRow("Aspect", ratio), controlRow("Megapixels", megapixels), controlRow("Seed", seedWrap),
+    controlRow("Mode", mode), controlRow("Aspect", ratio), controlRow("Target size", megapixelControl), controlRow("Seed", seedWrap),
     controlRow("Speed", sampling), controlRow("Frames", frames),
   ]);
+  const sizeHelp = element("p", {
+    className: "h3s-context-help",
+    text: "Target size controls the requested image area from 0.20 MP (faster) to 2.00 MP (larger). H3's native safety cap can reduce the final area; the exact aligned dimensions and actual MP are shown directly below.",
+  });
   const help = element("p", { className: "h3s-context-help", text: samplingHelp(generation.sampling_profile) });
-  return section("Generation", element("div", { className: "h3s-section-stack" }, [grid, preview, help]));
+  return section("Generation", element("div", { className: "h3s-section-stack" }, [grid, sizeHelp, preview, help]));
 }
 
 function promptSection(node, state, refresh) {
@@ -345,8 +381,9 @@ function promptSection(node, state, refresh) {
     refresh();
   };
   const options = state.prompt_options;
-  const enhance = selectControl(options.enhance_mode, [
-    ["off", "Keep my prompt"], ["compile_only", "Build H3 production brief"], ["vlm", "Analyze images + build brief"],
+  const visibleEnhanceMode = options.enhance_mode === "vlm" ? "compile_only" : options.enhance_mode;
+  const enhance = selectControl(visibleEnhanceMode, [
+    ["off", "Keep my prompt"], ["compile_only", "Build H3 production brief"],
   ], "Prompt enhancement", (value) => update({ enhance_mode: value }));
   const adherenceValue = element("span", { className: "h3s-inline-value", text: `${Math.round(options.adherence * 100)}%` });
   const adherence = rangeControl(options.adherence, { min: 0, max: 1, step: 0.05 }, "Reference adherence", (value) => {
@@ -358,7 +395,9 @@ function promptSection(node, state, refresh) {
   const explanations = {
     off: "Keeps your wording and only converts @Image tags into H3's native reference syntax.",
     compile_only: "Organizes your request into H3's subject, summary, retention, and detailed-description sections. It does not invent an image analysis.",
-    vlm: "A separate local vision-language model studies the references first, then H3 Studio builds the same structured production brief.",
+    vlm: options.analyzer_model
+      ? "The selected standalone vision-language model studies the references first, then H3 Studio builds the structured production brief."
+      : "No standalone analyzer is selected, so generation safely falls back to Build H3 production brief. H3's loaded ConvRot encoder still conditions the final generation but cannot act as this separate analyzer.",
   };
   const body = element("div", { className: "h3s-section-stack" }, [
     element("div", { className: "h3s-grid" }, [
@@ -526,15 +565,6 @@ function advancedSection(node, state, refresh) {
     ], "Conditioning route", (value) => update({ route: value }))),
   ]));
   content.append(element("p", { className: "h3s-context-help", text: "Auto uses FL2VA for pure text and selects REF2VA when the request needs references. Force a route only for controlled comparisons." }));
-  if (state.prompt_options.enhance_mode === "vlm") {
-    const model = element("input", {
-      className: "h3s-control", type: "text", value: state.prompt_options.analyzer_model,
-      placeholder: "Path to an instruction-capable local VLM", attrs: { "aria-label": "VLM analyzer model path" },
-      on: { change: (event) => update({}, { analyzer_model: event.target.value }) },
-    });
-    content.append(controlRow("Image-analysis model", model));
-    content.append(element("p", { className: "h3s-context-help", text: "Only used by ‘Analyze images + build brief’. This is separate from H3's ConvRot Qwen3-VL encoder and nothing is downloaded automatically." }));
-  }
   const toggle = element("button", {
     className: "h3s-advanced-toggle", type: "button", attrs: { "aria-expanded": String(state.ui.advanced_open) },
     on: { click: () => { state.ui.advanced_open = !state.ui.advanced_open; applyState(node, state); refresh(); } },
@@ -576,24 +606,11 @@ function installPanel(node) {
     hideOnZoom: false,
     getValue: () => undefined,
   });
-  node.__h3studioPanelHeight = Math.max(
-    PANEL_MIN_HEIGHT,
-    Number(node.size?.[1] || NODE_DEFAULT_HEIGHT) - NON_PANEL_HEIGHT,
-  );
-  panelWidget.computeSize = (width) => [width, node.__h3studioPanelHeight || PANEL_DEFAULT_HEIGHT];
-  panelWidget.computedHeight = node.__h3studioPanelHeight;
-
-  const originalResize = node.onResize;
-  node.onResize = function h3studioResize(size) {
-    const result = originalResize?.apply(this, arguments);
-    const height = Number(size?.[1] ?? this.size?.[1]);
-    if (Number.isFinite(height)) {
-      this.__h3studioPanelHeight = Math.max(PANEL_MIN_HEIGHT, height - NON_PANEL_HEIGHT);
-      panelWidget.computedHeight = this.__h3studioPanelHeight;
-    }
-    this.setDirtyCanvas?.(true, true);
-    return result;
-  };
+  // The widget height must not be derived from the total node height. ComfyUI
+  // calculates that total from computeSize(), so coupling the two produces a
+  // positive resize-feedback loop and makes the node grow forever.
+  panelWidget.computeSize = studioPanelSize;
+  panelWidget.computedHeight = STUDIO_PANEL_HEIGHT;
 
   const originalSerialize = node.onSerialize;
   node.onSerialize = function h3studioSerialize(data) {
@@ -636,9 +653,9 @@ function installPanel(node) {
       });
     }
   };
-  node.size = [Math.max(520, node.size?.[0] || 0), Math.max(NODE_DEFAULT_HEIGHT, node.size?.[1] || 0)];
-  node.__h3studioPanelHeight = Math.max(PANEL_DEFAULT_HEIGHT, node.size[1] - NON_PANEL_HEIGHT);
-  panelWidget.computedHeight = node.__h3studioPanelHeight;
+  // Reset any runaway height already serialized into an existing workflow,
+  // while preserving a deliberately wider node.
+  node.size = initialStudioNodeSize(node.size);
   renderPanel(node);
 }
 

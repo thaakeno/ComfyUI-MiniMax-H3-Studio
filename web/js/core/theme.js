@@ -48,6 +48,11 @@ export function installTheme() {
     .h3s-seed-row { display: grid; grid-template-columns: minmax(0,1fr) 27px; gap: 4px; }
     .h3s-range { width: 100%; accent-color: var(--h3s-accent); }
     .h3s-inline-value { color: var(--h3s-text); font-variant-numeric: tabular-nums; }
+    .h3s-megapixel-control { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 1px 0; }
+    .h3s-megapixel-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 5px; color: var(--h3s-muted); font-size: 8px; font-variant-numeric: tabular-nums; }
+    .h3s-megapixel-top span:last-child { text-align: right; }
+    .h3s-megapixel-value { min-width: 50px; color: var(--h3s-text); font-size: 10px; font-weight: 700; text-align: center; }
+    .h3s-megapixel-control .h3s-range { height: 14px; margin: 0; cursor: pointer; }
     .h3s-resolution-preview { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; padding: 5px 7px; border-radius: 6px; color: var(--h3s-muted); background: var(--h3s-bg); font-size: 10px; }
     .h3s-reference-list { display: flex; flex-direction: column; gap: 6px; padding: 2px; border: 1px dashed transparent; border-radius: 7px; transition: border-color 120ms ease, background 120ms ease; }
     .h3s-reference-list.is-dragging { border-color: var(--h3s-accent); background: color-mix(in srgb, var(--h3s-accent) 8%, transparent); }

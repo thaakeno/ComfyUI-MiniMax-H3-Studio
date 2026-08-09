@@ -2,15 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  MAX_MEGAPIXELS,
   MAX_REFERENCES,
+  MIN_MEGAPIXELS,
   backendResolutionValue,
   defaultState,
+  formatMegapixels,
   normalizeState,
   parseState,
   planResolution,
   rewriteMentions,
   serializeState,
 } from "../../web/js/core/state.js";
+import {
+  STUDIO_NODE_HEIGHT,
+  STUDIO_PANEL_HEIGHT,
+  initialStudioNodeSize,
+  studioPanelSize,
+} from "../../web/js/core/layout.js";
 import { parseStorageName, previewUrlForStorage, storageNameFromUpload } from "../../web/js/features/image_upload.js";
 
 test("default state is an immediately usable text-to-image request", () => {
@@ -83,6 +92,18 @@ test("resolution planner aligns dimensions and respects the native cap", () => {
     assert.ok(plan.width * plan.height <= 768 * 1344);
     assert.equal(plan.capped, true);
   }
+});
+
+test("megapixel display exposes stable minimum and maximum limits", () => {
+  assert.equal(formatMegapixels(MIN_MEGAPIXELS), "0.20 MP");
+  assert.equal(formatMegapixels(1), "1.00 MP");
+  assert.equal(formatMegapixels(MAX_MEGAPIXELS), "2.00 MP");
+});
+
+test("studio layout cannot feed total node height back into panel height", () => {
+  assert.deepEqual(studioPanelSize(640), [640, STUDIO_PANEL_HEIGHT]);
+  assert.deepEqual(studioPanelSize(640), studioPanelSize(640));
+  assert.deepEqual(initialStudioNodeSize([700, 50000]), [700, STUDIO_NODE_HEIGHT]);
 });
 
 test("custom dimensions determine custom aspect while area follows megapixels", () => {
