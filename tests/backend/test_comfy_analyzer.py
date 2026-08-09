@@ -52,10 +52,12 @@ class FakeClip:
     def __init__(self):
         self.seen_images = []
         self.generate_calls = 0
+        self.instruction = ""
 
     def tokenize(self, instruction, *, images, thinking):
         assert "USER REQUEST:" in instruction
         assert thinking is False
+        self.instruction = instruction
         self.seen_images = images
         return {"tokens": [1]}
 
@@ -186,6 +188,22 @@ def test_native_analyzer_detail_keeps_original_image_objects(monkeypatch) -> Non
     analyze_references(clip, "Use @Image1", (reference,), (image,), max_image_edge=0)
 
     assert clip.seen_images == [image]
+
+
+def test_analyzer_requires_named_styles_to_be_expanded_into_rendering_traits(monkeypatch) -> None:
+    import h3studio.prompting.comfy_analyzer as analyzer_module
+
+    monkeypatch.setattr(analyzer_module, "_CACHE_KEY", None)
+    monkeypatch.setattr(analyzer_module, "_CACHE_VALUE", None)
+    clip = FakeClip()
+    reference = ReferenceImage("one", "person.png", 1)
+
+    analyze_references(clip, "Turn @Image1 into JoJo anime style", (reference,), (FakeImage(111),))
+
+    assert "Translate every user-requested named style" in clip.instruction
+    assert "JoJo's Bizarre Adventure-inspired anime" in clip.instruction
+    assert "angular facial anatomy" in clip.instruction
+    assert "replace the source photograph's rendering medium" in clip.instruction
 
 
 def test_prompt_or_uploaded_image_change_invalidates_analysis(monkeypatch) -> None:

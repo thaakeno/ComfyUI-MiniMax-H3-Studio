@@ -41,17 +41,67 @@ export function numberControl(value, options, label, onChange) {
   });
 }
 
+export function rangeValueFromPointer(clientX, rect, options) {
+  const minimum = Number(options.min);
+  const maximum = Number(options.max);
+  const step = Math.max(Number.EPSILON, Number(options.step) || 1);
+  const width = Math.max(1, Number(rect.width) || 0);
+  const ratio = Math.max(0, Math.min(1, (Number(clientX) - Number(rect.left || 0)) / width));
+  const raw = minimum + ratio * (maximum - minimum);
+  const snapped = minimum + Math.round((raw - minimum) / step) * step;
+  const decimals = String(step).split(".")[1]?.length || 0;
+  return Number(Math.max(minimum, Math.min(maximum, snapped)).toFixed(decimals));
+}
+
 export function rangeControl(value, options, label, onInput) {
-  return element("input", {
-    className: "h3s-range",
+  const minimum = Number(options.min);
+  const maximum = Number(options.max);
+  const input = element("input", {
+    className: "h3s-range-native",
     type: "range",
     value,
-    min: options.min,
-    max: options.max,
+    min: minimum,
+    max: maximum,
     step: options.step,
     attrs: { "aria-label": label },
-    on: { input: (event) => onInput(Number(event.target.value)) },
   });
+  const control = element("div", { className: "h3s-range" }, [
+    element("span", { className: "h3s-range-track" }),
+    element("span", { className: "h3s-range-thumb" }),
+    input,
+  ]);
+
+  const synchronize = (nextValue, emit = false) => {
+    const bounded = Math.max(minimum, Math.min(maximum, Number(nextValue)));
+    const progress = maximum === minimum ? 0 : ((bounded - minimum) / (maximum - minimum)) * 100;
+    input.value = String(bounded);
+    input.setAttribute("aria-valuenow", String(bounded));
+    control.style.setProperty("--h3s-range-progress", `${progress}%`);
+    if (emit) onInput(bounded);
+  };
+  const updateFromPointer = (event) => {
+    synchronize(rangeValueFromPointer(event.clientX, control.getBoundingClientRect(), options), true);
+  };
+
+  input.addEventListener("input", (event) => synchronize(Number(event.target.value), true));
+  input.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    input.focus();
+    input.setPointerCapture?.(event.pointerId);
+    updateFromPointer(event);
+  });
+  input.addEventListener("pointermove", (event) => {
+    if (!input.hasPointerCapture?.(event.pointerId)) return;
+    event.preventDefault();
+    updateFromPointer(event);
+  });
+  const releasePointer = (event) => {
+    if (input.hasPointerCapture?.(event.pointerId)) input.releasePointerCapture?.(event.pointerId);
+  };
+  input.addEventListener("pointerup", releasePointer);
+  input.addEventListener("pointercancel", releasePointer);
+  synchronize(value);
+  return control;
 }
 
 export function iconButton(label, glyph, handler, className = "") {
@@ -70,4 +120,3 @@ export function field(label, control, hint = "") {
   if (hint) children.push(element("span", { className: "h3s-field-hint", text: hint }));
   return element("label", { className: "h3s-field" }, children);
 }
-
