@@ -408,8 +408,18 @@ function promptSection(node, state, refresh) {
   const enhance = selectControl(options.enhance_mode, [
     ["off", "Keep my prompt"], ["single_prompt", "Clear one-line instruction"],
     ["compile_only", "Structured production brief"],
-    ["vlm", "Analyze images + production brief"],
-  ], "Prompt enhancement", (value) => update({ enhance_mode: value }));
+  ], "Prompt format", (value) => update({ enhance_mode: value }));
+  const analyzerToggle = element("label", { className: "h3s-switch" }, [
+    element("input", {
+      type: "checkbox",
+      checked: options.analyze_images === true,
+      disabled: options.enhance_mode === "off",
+      attrs: { "aria-label": "Analyze reference pixels with Qwen3-VL" },
+      on: { change: (event) => update({ analyze_images: event.target.checked }) },
+    }),
+    element("span", { className: "h3s-switch-track" }),
+    element("span", { className: "h3s-switch-label", text: "Analyze image pixels" }),
+  ]);
   const adherenceValue = element("span", { className: "h3s-inline-value", text: `${Math.round(options.adherence * 100)}%` });
   const adherence = rangeControl(options.adherence, { min: 0, max: 1, step: 0.05 }, "Reference adherence", (value) => {
     adherenceValue.textContent = `${Math.round(value * 100)}%`;
@@ -420,14 +430,17 @@ function promptSection(node, state, refresh) {
   const explanations = {
     off: "Keeps your wording exactly and only converts @Image tags into H3's native reference syntax.",
     single_prompt: "Turns your request into one direct, easy-to-read H3 instruction with explicit image roles and preservation rules. It has no headings or line breaks and works especially well for simple edits and reference combinations.",
-    compile_only: "Builds the four-section subject, summary, retention, and detailed-description format for complex art direction. It assigns roles from your wording but does not pretend to visually analyze an image.",
-    vlm: "A full Qwen3-VL analyzer from H3 Studio Loader inspects the actual pixels, assigns roles and descriptions, then builds the production brief. Its analysis is cached when only the seed changes. The separate H3 ConvRot encoder still creates final model conditioning.",
+    compile_only: "Builds the four-section subject, summary, retention, and detailed-description format for complex art direction.",
   };
+  const analyzerHelp = options.analyze_images
+    ? "Qwen3-VL inspects the actual reference pixels and supplies source-only roles and descriptions. It reruns only when the prompt or reference images change."
+    : "Pixel analysis is off; roles come from your wording and manual reference controls.";
   const body = element("div", { className: "h3s-section-stack" }, [
     element("div", { className: "h3s-grid" }, [
-      controlRow("Prompt shaping", enhance), controlRow("Reference priority", adherenceWrap),
+      controlRow("Prompt format", enhance), controlRow("Image understanding", analyzerToggle),
+      controlRow("Reference priority", adherenceWrap),
     ]),
-    element("p", { className: "h3s-context-help", text: `${explanations[options.enhance_mode]} Reference priority controls how strongly the written brief tells H3 to preserve reference details; it is not a LoRA strength.` }),
+    element("p", { className: "h3s-context-help", text: `${explanations[options.enhance_mode]} ${analyzerHelp} Reference priority controls how strongly the written prompt tells H3 to preserve reference details; it is not a LoRA strength.` }),
   ]);
   return section("Direction", body, null, "Choose how H3 Studio prepares your words before Qwen3-VL encodes them for H3.");
 }

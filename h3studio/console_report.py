@@ -31,7 +31,8 @@ def format_execution_report(context: H3StudioContext, enhancement_note: str = ""
         f"Seed          : {generation.seed}",
         f"Sampling      : {generation.sampling_profile}",
         f"Frames        : {generation.frame_profile}",
-        f"Prompt shaping: {prompt_options.enhance_mode} | reference priority {prompt_options.adherence:.0%}",
+        f"Prompt shaping: {prompt_options.enhance_mode} | image analysis "
+        f"{'on' if prompt_options.analyze_images else 'off'} | reference priority {prompt_options.adherence:.0%}",
         f"References    : {len(references)}",
     ]
     if references:

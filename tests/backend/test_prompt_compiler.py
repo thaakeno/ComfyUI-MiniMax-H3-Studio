@@ -147,6 +147,22 @@ def test_single_prompt_assigns_multi_reference_roles_without_subject_tags() -> N
     assert "<Subject" not in result.native_prompt
 
 
+def test_single_prompt_includes_visual_analyzer_descriptions() -> None:
+    references = (
+        ReferenceImage("person", "person.png", 1, role="character", description="a pale clown with red hair"),
+        ReferenceImage("glasses", "glasses.png", 2, role="object", description="black rectangular glasses"),
+    )
+    state = StudioState(
+        prompt="Show @Image1 wearing @Image2",
+        references=references,
+        prompt_options=PromptOptions(enhance_mode=ENHANCE_SINGLE, analyze_images=True),
+    )
+    result = PromptCompiler().compile(state)
+    assert "a pale clown with red hair" in result.native_prompt
+    assert "black rectangular glasses" in result.native_prompt
+    assert "\n" not in result.native_prompt
+
+
 def test_compile_warns_when_connected_references_are_not_mentioned() -> None:
     result = PromptCompiler().compile(StudioState(prompt="Make a portrait", references=(ref(1, "identity"),)))
     assert any(item.code == "references_not_mentioned" for item in result.diagnostics)

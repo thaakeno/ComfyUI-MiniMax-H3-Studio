@@ -147,6 +147,7 @@ class _PreviewWrapper:
     jpeg_quality: int
     every: int
     decoder: Any = None
+    run_serial: int = 0
 
     def _load(self, torch, device, dtype):
         if self.decoder is None:
@@ -164,7 +165,7 @@ class _PreviewWrapper:
         self.decoder.to(device=device, dtype=dtype)
         return self.decoder
 
-    def _send(self, torch, step, x0, total_steps, latent_shapes):
+    def _send(self, torch, step, x0, total_steps, latent_shapes, run_id):
         if step % self.every != 0 and step + 1 < total_steps:
             return
         latent = _limit_latent(torch, _first_h3_latent(torch, x0, latent_shapes), self.max_resolution)
@@ -184,6 +185,7 @@ class _PreviewWrapper:
                 "total": int(total_steps),
                 "width": width,
                 "height": height,
+                "run_id": run_id,
             },
             server.client_id,
         )
@@ -191,6 +193,8 @@ class _PreviewWrapper:
     def __call__(self, executor, *args, **kwargs):
         import torch
 
+        self.run_serial += 1
+        run_id = f"{self.node_id}:{self.run_serial}"
         positional = list(args)
         callback = kwargs.get("callback")
         callback_index = None
@@ -201,7 +205,7 @@ class _PreviewWrapper:
 
         def preview_callback(step, x0, x, total_steps):
             try:
-                self._send(torch, step, x0, total_steps, latent_shapes)
+                self._send(torch, step, x0, total_steps, latent_shapes, run_id)
             except Exception as error:
                 LOGGER.warning("H3 Studio TAEH3 preview skipped: %s", error)
             if callback is not None:

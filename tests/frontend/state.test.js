@@ -25,7 +25,7 @@ import { parseStorageName, previewUrlForStorage, storageNameFromUpload } from ".
 
 test("default state is an immediately usable text-to-image request", () => {
   const state = defaultState();
-  assert.equal(state.schema_version, 6);
+  assert.equal(state.schema_version, 7);
   assert.equal(state.generation.mode, "auto");
   assert.deepEqual(state.references, []);
 });
@@ -59,10 +59,11 @@ test("schema one settings migrate into their typed sections", () => {
     schema_version: 1,
     settings: { mode: "reference_edit", megapixels: 1.4, enhance_mode: "vlm", adherence: 0.7 },
   });
-  assert.equal(state.schema_version, 6);
+  assert.equal(state.schema_version, 7);
   assert.equal(state.generation.mode, "reference_edit");
   assert.equal(state.generation.megapixels, 1.4);
-  assert.equal(state.prompt_options.enhance_mode, "vlm");
+  assert.equal(state.prompt_options.enhance_mode, "compile_only");
+  assert.equal(state.prompt_options.analyze_images, true);
   assert.equal(state.prompt_options.adherence, 0.7);
   assert.equal("settings" in state, false);
 });

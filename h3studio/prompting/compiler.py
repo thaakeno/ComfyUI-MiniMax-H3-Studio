@@ -226,6 +226,7 @@ def _single_prompt(prompt: str, references: Sequence[ReferenceImage], mode: str)
 
     assignments = "; ".join(
         f"{reference.mention} supplies {_role_phrase(reference)} only"
+        + (f", visibly described as {reference.description.strip()}" if reference.description.strip() else "")
         for reference in references
     )
     return (

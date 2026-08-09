@@ -127,9 +127,12 @@ def _state_from_widgets(
         resolved_mode = persisted.generation.mode
     else:
         resolved_mode = MODE_REFERENCE_EDIT if str(mode) == LEGACY_MODE_REFERENCE else MODE_AUTO
+    legacy_vlm = enhance_mode == "vlm"
+    resolved_enhance_mode = ENHANCE_COMPILE if legacy_vlm else enhance_mode
     prompt_options = replace(
         persisted.prompt_options,
-        enhance_mode=enhance_mode if enhance_mode in ENHANCE_MODES else ENHANCE_COMPILE,
+        enhance_mode=resolved_enhance_mode if resolved_enhance_mode in ENHANCE_MODES else ENHANCE_COMPILE,
+        analyze_images=persisted.prompt_options.analyze_images or legacy_vlm,
         adherence=max(0.0, min(1.0, float(adherence))),
         analyzer_model=str(analyzer_model or persisted.prompt_options.analyzer_model),
     )
@@ -273,15 +276,18 @@ class H3StudioDirector:
             kwargs,
         )
         compiler = PromptCompiler()
-        if state.prompt_options.enhance_mode == "vlm" and images:
+        if state.prompt_options.analyze_images and images:
             from ..prompting.comfy_analyzer import analyze_references
 
-            analyzer = h3_bundle.analyzer_for_analysis() if isinstance(h3_bundle, H3StudioBundle) else None
+            analyzer_bundle = h3_bundle if isinstance(h3_bundle, H3StudioBundle) else None
+            analyzer = analyzer_bundle.analyzer_clip if analyzer_bundle else None
             analyzed_references, vlm_note = analyze_references(
                 analyzer,
                 state.prompt,
                 state.enabled_references,
                 images,
+                analyzer_name=analyzer_bundle.analyzer_name or "" if analyzer_bundle else "",
+                clip_loader=analyzer_bundle.analyzer_for_analysis if analyzer_bundle else None,
             )
             state = state.with_references(analyzed_references)
             compile_result = compiler.compile(state)

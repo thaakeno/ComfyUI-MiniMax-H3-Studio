@@ -8,6 +8,7 @@ feeds concise observations back into the deterministic H3 prompt compiler.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -22,7 +23,7 @@ from ..references import ReferenceImage
 LOGGER = logging.getLogger(__name__)
 _CACHE_LOCK = threading.RLock()
 _CACHE_KEY: tuple[Any, ...] | None = None
-_CACHE_VALUE: tuple[tuple[ReferenceImage, ...], str] | None = None
+_CACHE_VALUE: tuple[dict[str, Any], str] | None = None
 _RETENTIONS = {"attribute_transfer", "fully_preserved", "partially_preserved", "reference_only"}
 
 SYSTEM_INSTRUCTION = """You are the visual reference analyst for MiniMax H3 image generation.
@@ -33,21 +34,47 @@ Return JSON only, with this exact shape:
 Allowed roles: auto, identity, face, character, style, composition, pose, outfit, object, environment, layout, typography, color_palette, lighting, texture, reference.
 Allowed retention: attribute_transfer, fully_preserved, partially_preserved, reference_only.
 Describe what is actually visible: identity/appearance, object shape and color, clothing, pose, framing, style, lighting, or text as relevant. Never write generic phrases such as 'visible information requested by the user'.
+Descriptions are observations of source pixels only. Never copy a requested new action, prop, pose, gaze, clothing change, environment, or edit into a source-image description unless that detail is independently visible in that source image. For example, if the user asks a person to hold a donut but the source person is not holding one, omit the donut from the source description; the prompt compiler will preserve the requested edit separately.
 Use character/identity plus fully_preserved for the person whose identity must remain. Use object plus attribute_transfer for glasses, props, or isolated accessories. Preserve only role-relevant source details.
 The user's requested changes are authoritative. Do not preserve a source pose, head direction, gaze, expression, clothing, or background when the user asks to change it. Interpret 'look to the right' as turn the head and direct the eyes toward frame-right unless the user explicitly defines another viewpoint.
 Do not rewrite, summarize, improve, or omit any user instruction. Do not emit Markdown or prose outside JSON."""
 
 
-def _image_key(image: Any) -> tuple[Any, ...]:
-    pointer = getattr(image, "data_ptr", None)
-    identity = pointer() if callable(pointer) else id(image)
-    # torch.inference_mode() tensors deliberately have no readable version
-    # counter and raise RuntimeError when `_version` is accessed.
+def _tensor_fingerprint(image: Any) -> str:
+    """Hash pixels so recreated Comfy tensors remain the same image."""
+
     try:
-        version = image._version
-    except (AttributeError, RuntimeError):
-        version = None
-    return identity, version, tuple(getattr(image, "shape", ()))
+        value = image.detach().to(device="cpu").contiguous()
+        try:
+            payload = value.numpy().tobytes()
+        except (TypeError, RuntimeError):
+            payload = value.float().numpy().tobytes()
+        return hashlib.blake2b(payload, digest_size=16).hexdigest()
+    except (AttributeError, RuntimeError, TypeError, ValueError):
+        pointer = getattr(image, "data_ptr", None)
+        identity = pointer() if callable(pointer) else id(image)
+        return f"opaque:{type(image).__name__}:{identity}"
+
+
+def _image_key(reference: ReferenceImage, image: Any) -> tuple[Any, ...]:
+    shape = tuple(getattr(image, "shape", ()))
+    if reference.fingerprint:
+        return "declared", reference.fingerprint, shape
+    if reference.storage_name:
+        return "storage", reference.storage_name, _tensor_fingerprint(image), shape
+    return "pixels", reference.filename, _tensor_fingerprint(image), shape
+
+
+def _cache_miss_reason(previous: tuple[Any, ...] | None, current: tuple[Any, ...]) -> str:
+    if previous is None:
+        return "cold cache"
+    if previous[0] != current[0]:
+        return "analyzer changed"
+    if previous[1] != current[1]:
+        return "prompt changed"
+    if previous[2] != current[2]:
+        return "reference images changed"
+    return "cache state changed"
 
 
 def _extract_json(text: str) -> dict[str, Any]:
@@ -68,32 +95,36 @@ def analyze_references(
     prompt: str,
     references: Sequence[ReferenceImage],
     images: Sequence[Any],
+    *,
+    analyzer_name: str = "",
+    clip_loader: Any = None,
 ) -> tuple[tuple[ReferenceImage, ...], str]:
     """Inspect all reference tensors in one cached Qwen3-VL generation."""
 
     global _CACHE_KEY, _CACHE_VALUE
     if not images or not references:
         return tuple(references), "Image analysis: no references to inspect."
+    key = (
+        str(analyzer_name or (type(clip).__name__ if clip is not None else "default")),
+        str(prompt),
+        tuple(_image_key(reference, image) for reference, image in zip(references, images, strict=False)),
+    )
+    with _CACHE_LOCK:
+        if key == _CACHE_KEY and _CACHE_VALUE is not None:
+            analyzed = _apply_payload(references, _CACHE_VALUE[0])
+            note = f"{_CACHE_VALUE[1]} Cache: HIT (prompt and images unchanged)."
+            LOGGER.info("[H3 Studio] %s", note)
+            return analyzed, note
+        miss_reason = _cache_miss_reason(_CACHE_KEY, key)
+    LOGGER.info("[H3 Studio] Image analysis cache MISS: %s", miss_reason)
+    if clip is None and callable(clip_loader):
+        clip = clip_loader()
     if clip is None:
         raise ValueError(
             "Visual reference analysis requires a full Qwen3-VL analyzer. Download "
             "qwen3vl_4b_fp8_scaled.safetensors into ComfyUI/models/text_encoders, select it in H3 Studio Loader, "
             "and connect the Loader bundle to the Director. The H3 ConvRot encoder cannot generate descriptions."
         )
-
-    reference_key = tuple(
-        (
-            reference.ordinal,
-            "<auto>" if reference.role_auto or reference.role == "auto" else reference.role,
-            "<auto>" if reference.retention_auto or reference.role == "auto" else reference.retention,
-            "<auto>" if reference.description_auto or not reference.description.strip() else reference.description,
-        )
-        for reference in references
-    )
-    key = (id(clip), str(prompt), reference_key, tuple(_image_key(image) for image in images))
-    with _CACHE_LOCK:
-        if key == _CACHE_KEY and _CACHE_VALUE is not None:
-            return _CACHE_VALUE[0], f"{_CACHE_VALUE[1]} Cache: HIT."
 
     numbered = "\n".join(
         f"Image {reference.ordinal}: filename={reference.filename}; current role={reference.role}; current retention={reference.retention}"
@@ -120,6 +151,21 @@ def analyze_references(
     if isinstance(decoded, (tuple, list)):
         decoded = decoded[0] if decoded else ""
     payload = _extract_json(str(decoded))
+    analyzed = _apply_payload(references, payload)
+    note = f"Image analysis: Qwen3-VL inspected {len(analyzed)} actual reference image(s)."
+    with _CACHE_LOCK:
+        _CACHE_KEY = key
+        _CACHE_VALUE = payload, note
+    LOGGER.info("[H3 Studio] %s", note)
+    return analyzed, note
+
+
+def _apply_payload(
+    references: Sequence[ReferenceImage],
+    payload: dict[str, Any],
+) -> tuple[ReferenceImage, ...]:
+    """Apply cached observations without overwriting current manual card edits."""
+
     by_ordinal = {
         int(item.get("ordinal", 0)): item
         for item in payload["references"]
@@ -161,10 +207,4 @@ def analyze_references(
             )
         )
 
-    note = f"Image analysis: Qwen3-VL inspected {len(analyzed)} actual reference image(s)."
-    result = tuple(analyzed), note
-    with _CACHE_LOCK:
-        _CACHE_KEY = key
-        _CACHE_VALUE = result
-    LOGGER.info("[H3 Studio] %s", note)
-    return result
+    return tuple(analyzed)

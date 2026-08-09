@@ -48,6 +48,15 @@ export function installTheme() {
     .h3s-seed-row { display: grid; grid-template-columns: minmax(0,1fr) 27px; gap: 4px; }
     .h3s-range { width: 100%; accent-color: var(--h3s-accent); }
     .h3s-inline-value { color: var(--h3s-text); font-variant-numeric: tabular-nums; }
+    .h3s-switch { display: flex; align-items: center; gap: 7px; min-height: 25px; color: var(--h3s-text); cursor: pointer; font-size: 10px; }
+    .h3s-switch input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .h3s-switch-track { position: relative; flex: none; width: 30px; height: 17px; border: 1px solid var(--h3s-border); border-radius: 999px; background: var(--h3s-bg); transition: background 120ms ease, border-color 120ms ease; }
+    .h3s-switch-track::after { content: ""; position: absolute; left: 2px; top: 2px; width: 11px; height: 11px; border-radius: 999px; background: var(--h3s-muted); transition: transform 120ms ease, background 120ms ease; }
+    .h3s-switch input:checked + .h3s-switch-track { border-color: color-mix(in srgb, var(--h3s-accent) 60%, var(--h3s-border)); background: color-mix(in srgb, var(--h3s-accent) 28%, var(--h3s-bg)); }
+    .h3s-switch input:checked + .h3s-switch-track::after { transform: translateX(13px); background: var(--h3s-accent); }
+    .h3s-switch input:focus-visible + .h3s-switch-track { outline: 2px solid color-mix(in srgb, var(--h3s-accent) 70%, transparent); outline-offset: 1px; }
+    .h3s-switch input:disabled + .h3s-switch-track, .h3s-switch input:disabled ~ .h3s-switch-label { opacity: .4; cursor: default; }
+    .h3s-switch-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .h3s-megapixel-control { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 1px 0; }
     .h3s-megapixel-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 5px; color: var(--h3s-muted); font-size: 8px; font-variant-numeric: tabular-nums; }
     .h3s-megapixel-top span:last-child { text-align: right; }
@@ -90,10 +99,19 @@ export function installTheme() {
     .h3s-advanced-content[hidden] { display: none; }
     .h3s-warning { color: var(--h3s-warning); }
     .h3s-live-preview { position: relative; display: grid; place-items: center; width: 100%; height: 220px; overflow: hidden; border: 1px solid rgba(255,255,255,.13); border-radius: 8px; background: #17191d; color: #9ca3af; font: 11px/1.4 ui-sans-serif, system-ui; }
-    .h3s-live-preview img { width: 100%; height: 100%; object-fit: contain; }
+    .h3s-live-preview img { width: 100%; height: 100%; object-fit: contain; cursor: zoom-in; }
     .h3s-live-preview img:not([src]) { display: none; }
     .h3s-live-preview-empty { max-width: 220px; padding: 18px; text-align: center; }
     .h3s-live-preview-status { position: absolute; right: 7px; bottom: 7px; padding: 3px 7px; border-radius: 999px; background: rgba(0,0,0,.68); color: #e5e7eb; font-size: 9px; }
+    .h3s-live-preview-navigation { position: absolute; left: 7px; bottom: 7px; display: flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; background: rgba(0,0,0,.72); backdrop-filter: blur(6px); }
+    .h3s-live-preview-button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 999px; color: #f3f4f6; background: rgba(255,255,255,.1); cursor: pointer; font: 18px/1 ui-sans-serif, system-ui; }
+    .h3s-live-preview-button:hover:not(:disabled) { background: rgba(52,211,181,.28); }
+    .h3s-live-preview-button:disabled { cursor: default; opacity: .3; }
+    .h3s-live-preview-position { min-width: 32px; color: #e5e7eb; font-size: 9px; text-align: center; font-variant-numeric: tabular-nums; }
+    .h3s-preview-lightbox { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; padding: 28px; background: rgba(4,6,8,.91); backdrop-filter: blur(12px); cursor: zoom-out; }
+    .h3s-preview-lightbox img { max-width: 96vw; max-height: 92vh; object-fit: contain; border-radius: 10px; box-shadow: 0 24px 80px rgba(0,0,0,.65); cursor: default; }
+    .h3s-preview-lightbox-close { position: fixed; right: 22px; top: 18px; display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border: 1px solid rgba(255,255,255,.18); border-radius: 999px; color: #f3f4f6; background: rgba(20,22,26,.8); cursor: pointer; font: 26px/1 ui-sans-serif, system-ui; }
+    .h3s-preview-lightbox-close:hover { background: rgba(52,211,181,.22); }
     @media (max-width: 420px) { .h3s-grid, .h3s-reference-controls { grid-template-columns: 1fr; } }
   `;
   document.head.append(style);

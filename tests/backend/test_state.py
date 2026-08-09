@@ -62,7 +62,7 @@ def test_v1_settings_are_migrated() -> None:
         "settings": {"mode": "text_to_image", "seed": 9, "enhance_mode": "off", "adherence": 0.4},
     }
     migrated = migrate_state_dict(old)
-    assert migrated["schema_version"] == 5
+    assert migrated["schema_version"] == STATE_SCHEMA_VERSION
     assert migrated["generation"]["seed"] == 9
     assert migrated["prompt_options"]["enhance_mode"] == "off"
 
@@ -79,6 +79,12 @@ def test_prompt_options_clamp_and_validate() -> None:
     assert options.adherence == 1.0
     assert options.detail_level == "detailed"
     assert options.analyzer_max_tokens == 128
+
+
+def test_legacy_vlm_migrates_to_analysis_toggle_and_structured_format() -> None:
+    options = PromptOptions.from_dict({"enhance_mode": "vlm"})
+    assert options.enhance_mode == "compile_only"
+    assert options.analyze_images is True
 
 
 def test_json_payload_is_compact_by_default() -> None:

@@ -50,6 +50,7 @@ def _int(value: Any, fallback: int, minimum: int, maximum: int) -> int:
 @dataclass(frozen=True, slots=True)
 class PromptOptions:
     enhance_mode: str = ENHANCE_COMPILE
+    analyze_images: bool = False
     adherence: float = 0.85
     detail_level: str = "detailed"
     preserve_user_text: bool = True
@@ -64,6 +65,7 @@ class PromptOptions:
     def as_dict(self) -> dict[str, Any]:
         return {
             "enhance_mode": self.enhance_mode,
+            "analyze_images": self.analyze_images,
             "adherence": self.adherence,
             "detail_level": self.detail_level,
             "preserve_user_text": self.preserve_user_text,
@@ -82,8 +84,11 @@ class PromptOptions:
         detail = str(value.get("detail_level") or "detailed").strip().lower()
         if detail not in {"concise", "detailed", "maximum"}:
             detail = "detailed"
+        enhance_mode = _choice(value.get("enhance_mode"), ENHANCE_MODES, ENHANCE_COMPILE)
+        legacy_vlm = enhance_mode == "vlm"
         return cls(
-            enhance_mode=_choice(value.get("enhance_mode"), ENHANCE_MODES, ENHANCE_COMPILE),
+            enhance_mode=ENHANCE_COMPILE if legacy_vlm else enhance_mode,
+            analyze_images=bool(value.get("analyze_images", legacy_vlm)),
             adherence=_float(value.get("adherence"), 0.85, 0.0, 1.0),
             detail_level=detail,
             preserve_user_text=bool(value.get("preserve_user_text", True)),
@@ -308,4 +313,19 @@ def migrate_state_dict(value: Mapping[str, Any]) -> dict[str, Any]:
         # Schema 5 lets prompt inference update visible role/retention controls
         # while preserving explicit manual selections.
         migrated["schema_version"] = 5
+        version = 5
+    if version == 5:
+        # Schema 6 adds compact single-line prompt shaping.
+        migrated["schema_version"] = 6
+        version = 6
+    if version == 6:
+        # Schema 7 separates image analysis from prompt output format.
+        prompt_options = dict(_mapping(migrated.get("prompt_options")))
+        if prompt_options.get("enhance_mode") == "vlm":
+            prompt_options["enhance_mode"] = ENHANCE_COMPILE
+            prompt_options["analyze_images"] = True
+        else:
+            prompt_options.setdefault("analyze_images", False)
+        migrated["prompt_options"] = prompt_options
+        migrated["schema_version"] = 7
     return migrated

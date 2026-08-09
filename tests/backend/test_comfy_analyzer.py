@@ -23,9 +23,35 @@ class FakeInferenceImage(FakeImage):
         raise RuntimeError("Inference tensors do not track version counter.")
 
 
+class FakeStableImage(FakeInferenceImage):
+    def __init__(self, pointer: int, pixels: bytes):
+        super().__init__(pointer)
+        self.pixels = pixels
+
+    def detach(self):
+        return self
+
+    def to(self, **_kwargs):
+        return self
+
+    def contiguous(self):
+        return self
+
+    def numpy(self):
+        class Bytes:
+            def __init__(self, value):
+                self.value = value
+
+            def tobytes(self):
+                return self.value
+
+        return Bytes(self.pixels)
+
+
 class FakeClip:
     def __init__(self):
         self.seen_images = []
+        self.generate_calls = 0
 
     def tokenize(self, instruction, *, images, thinking):
         assert "look to the right" in instruction
@@ -35,6 +61,7 @@ class FakeClip:
 
     def generate(self, tokens, **kwargs):
         assert kwargs["do_sample"] is False
+        self.generate_calls += 1
         return [2]
 
     def decode(self, generated, *, skip_special_tokens):
@@ -88,3 +115,60 @@ def test_inference_tensor_without_version_counter_is_cacheable() -> None:
         (FakeInferenceImage(303), FakeInferenceImage(404)),
     )
     assert analyzed[0].role == "character"
+
+
+def test_seed_only_queue_reuses_analysis_across_recreated_runtime_objects(monkeypatch) -> None:
+    import h3studio.prompting.comfy_analyzer as analyzer_module
+
+    monkeypatch.setattr(analyzer_module, "_CACHE_KEY", None)
+    monkeypatch.setattr(analyzer_module, "_CACHE_VALUE", None)
+    references = (
+        ReferenceImage("one", "person.jpg", 1, storage_name="h3studio/person.jpg"),
+        ReferenceImage("two", "glasses.png", 2, storage_name="h3studio/glasses.png"),
+    )
+    prompt = "Show the person in @Image1 with the glasses from @Image2 and make him look to the right"
+    first_clip = FakeClip()
+    second_clip = FakeClip()
+
+    analyze_references(
+        first_clip,
+        prompt,
+        references,
+        (FakeStableImage(501, b"person pixels"), FakeStableImage(502, b"glasses pixels")),
+        analyzer_name="qwen3vl_4b_fp8_scaled.safetensors",
+    )
+    analyzed, note = analyze_references(
+        second_clip,
+        prompt,
+        references,
+        (FakeStableImage(601, b"person pixels"), FakeStableImage(602, b"glasses pixels")),
+        analyzer_name="qwen3vl_4b_fp8_scaled.safetensors",
+    )
+
+    assert first_clip.generate_calls == 1
+    assert second_clip.generate_calls == 0
+    assert analyzed[1].role == "object"
+    assert "Cache: HIT" in note
+
+
+def test_prompt_or_uploaded_image_change_invalidates_analysis(monkeypatch) -> None:
+    import h3studio.prompting.comfy_analyzer as analyzer_module
+
+    monkeypatch.setattr(analyzer_module, "_CACHE_KEY", None)
+    monkeypatch.setattr(analyzer_module, "_CACHE_VALUE", None)
+    clip = FakeClip()
+    first = (
+        ReferenceImage("one", "person.jpg", 1, storage_name="h3studio/person.jpg"),
+        ReferenceImage("two", "glasses.png", 2, storage_name="h3studio/glasses.png"),
+    )
+    changed = (
+        first[0],
+        ReferenceImage("two-new", "glasses-2.png", 2, storage_name="h3studio/glasses-2.png"),
+    )
+    base = "Show @Image1 looking to the right with glasses from @Image2"
+
+    analyze_references(clip, base, first, (FakeImage(1), FakeImage(2)), analyzer_name="qwen")
+    analyze_references(clip, f"{base} outdoors", first, (FakeImage(3), FakeImage(4)), analyzer_name="qwen")
+    analyze_references(clip, f"{base} outdoors", changed, (FakeImage(5), FakeImage(6)), analyzer_name="qwen")
+
+    assert clip.generate_calls == 3

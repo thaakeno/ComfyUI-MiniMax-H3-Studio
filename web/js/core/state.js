@@ -1,4 +1,4 @@
-export const STATE_SCHEMA_VERSION = 6;
+export const STATE_SCHEMA_VERSION = 7;
 export const MAX_REFERENCES = 9;
 export const MIN_MEGAPIXELS = 0.2;
 export const MAX_MEGAPIXELS = 2;
@@ -84,6 +84,7 @@ export function defaultState() {
     references: [],
     prompt_options: {
       enhance_mode: "compile_only",
+      analyze_images: false,
       adherence: 0.85,
       detail_level: "detailed",
       preserve_user_text: true,
@@ -173,7 +174,13 @@ export function normalizeState(value) {
   const source = migrateState(object(value));
   const promptOptions = { ...defaults.prompt_options, ...object(source.prompt_options) };
   const generation = { ...defaults.generation, ...object(source.generation) };
-  promptOptions.enhance_mode = choice(promptOptions.enhance_mode, ["off", "single_prompt", "compile_only", "vlm"], "compile_only");
+  if (promptOptions.enhance_mode === "vlm") {
+    promptOptions.enhance_mode = "compile_only";
+    promptOptions.analyze_images = true;
+  } else {
+    promptOptions.enhance_mode = choice(promptOptions.enhance_mode, ["off", "single_prompt", "compile_only"], "compile_only");
+    promptOptions.analyze_images = promptOptions.analyze_images === true;
+  }
   promptOptions.adherence = clamp(promptOptions.adherence, 0, 1, 0.85);
   promptOptions.detail_level = choice(promptOptions.detail_level, ["concise", "detailed", "maximum"], "detailed");
   promptOptions.analyzer_max_tokens = Math.round(clamp(promptOptions.analyzer_max_tokens, 128, 8192, 1800));
