@@ -25,6 +25,7 @@ except Exception:  # pragma: no cover - ComfyUI always provides this at runtime
 NONE_MODEL = "None"
 AUTO_ANALYZER = "Auto · Qwen3-VL 4B"
 DISABLED_ANALYZER = "Disabled"
+SAME_AS_ANALYZER = "Same as image analyzer"
 _WEIGHT_SUFFIXES = (".safetensors", ".gguf", ".ckpt", ".pt", ".pth", ".bin")
 _H3_TOKENS = ("minimax", "h3", "fl2va", "ref2va")
 LOGGER = logging.getLogger(__name__)
@@ -101,6 +102,12 @@ def analyzer_choices() -> list[str]:
     return [AUTO_ANALYZER, DISABLED_ANALYZER, *selected]
 
 
+def prompt_writer_choices() -> list[str]:
+    """Full Qwen3-VL checkpoints that retain a language-model head."""
+
+    return [SAME_AS_ANALYZER, DISABLED_ANALYZER, *analyzer_choices()[2:]]
+
+
 def _resolve_analyzer(name: str) -> str | None:
     if name == DISABLED_ANALYZER or _is_none(name):
         return None
@@ -109,6 +116,14 @@ def _resolve_analyzer(name: str) -> str | None:
         return name
     preferred = next((value for value in values if "qwen3vl4bfp8scaled" in _compact(value)), None)
     return preferred or next((value for value in values if "qwen3vl4b" in _compact(value)), None)
+
+
+def _resolve_prompt_writer(name: str, analyzer_name: str | None) -> str | None:
+    if name == SAME_AS_ANALYZER:
+        return analyzer_name
+    if name == DISABLED_ANALYZER or _is_none(name):
+        return None
+    return name
 
 
 def vae_choices() -> list[str]:
@@ -168,9 +183,11 @@ class H3StudioBundle:
     clip_name: str
     video_vae_name: str
     analyzer_name: str | None
+    prompt_writer_name: str | None
     clip: Any
     video_vae: Any
     analyzer_clip: Any = None
+    prompt_writer_clip: Any = None
     _model: Any = field(default=None, init=False, repr=False)
     _model_name: str = field(default="", init=False, repr=False)
     _model_kind: str = field(default="", init=False, repr=False)
@@ -193,6 +210,17 @@ class H3StudioBundle:
                 LOGGER.info("[H3 Studio] Loading visual analyzer=%s", self.analyzer_name)
                 self.analyzer_clip = _load_analyzer_clip(self.analyzer_name)
             return self.analyzer_clip
+
+    def writer_for_enhancement(self):
+        if not self.prompt_writer_name:
+            return None
+        if self.prompt_writer_name == self.analyzer_name:
+            return self.analyzer_for_analysis()
+        with self._lock:
+            if self.prompt_writer_clip is None:
+                LOGGER.info("[H3 Studio] Loading text-only prompt writer=%s", self.prompt_writer_name)
+                self.prompt_writer_clip = _load_analyzer_clip(self.prompt_writer_name)
+            return self.prompt_writer_clip
 
     def model_for(self, kind: str):
         kind = "ref2va" if kind == "ref2va" else "fl2va"
@@ -219,7 +247,8 @@ class H3StudioBundle:
         return (
             f"FL2VA={self.fl2va_name} | REF2VA={self.ref2va_name} | "
             f"CLIP={self.clip_name} | Video VAE={self.video_vae_name} | "
-            f"Image analyzer={self.analyzer_name or 'disabled/missing'}"
+            f"Image analyzer={self.analyzer_name or 'disabled/missing'} | "
+            f"Prompt writer={self.prompt_writer_name or 'disabled/missing'}"
         )
 
 
@@ -228,7 +257,10 @@ class H3StudioLoader:
     FUNCTION = "load"
     RETURN_TYPES = ("H3_STUDIO_BUNDLE", "CLIP", "VAE", "STRING")
     RETURN_NAMES = ("h3_bundle", "clip", "video_vae", "model_info")
-    DESCRIPTION = "Load H3's Qwen3-VL encoder and video VAE, with lazy FL2VA/REF2VA transformer switching."
+    DESCRIPTION = (
+        "Load H3's conditioning encoder and VAE, plus optional full Qwen3-VL models for cached pixel analysis "
+        "and the text-only detailed prompt-director pass. The prompt writer defaults to reusing the analyzer."
+    )
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -239,6 +271,13 @@ class H3StudioLoader:
                 "text_encoder": (clip_choices(),),
                 "video_vae": (vae_choices(),),
                 "image_analyzer": (analyzer_choices(), {"default": AUTO_ANALYZER}),
+                "prompt_writer": (
+                    prompt_writer_choices(),
+                    {
+                        "default": SAME_AS_ANALYZER,
+                        "tooltip": "Reuses the 4B image analyzer by default. Select a full Qwen3-VL 8B checkpoint for stronger detailed rewrites, or disable the second pass.",
+                    },
+                ),
             }
         }
 
@@ -246,7 +285,7 @@ class H3StudioLoader:
     def IS_CHANGED(cls, **kwargs):
         return "|".join(
             str(kwargs.get(key, ""))
-            for key in ("fl2va_model", "ref2va_model", "text_encoder", "video_vae", "image_analyzer")
+            for key in ("fl2va_model", "ref2va_model", "text_encoder", "video_vae", "image_analyzer", "prompt_writer")
         )
 
     @staticmethod
@@ -256,21 +295,23 @@ class H3StudioLoader:
         text_encoder: str,
         video_vae: str,
         image_analyzer: str = AUTO_ANALYZER,
+        prompt_writer: str = SAME_AS_ANALYZER,
     ):
         if _is_none(fl2va_model) and _is_none(ref2va_model):
             raise ValueError("Select at least one MiniMax H3 transformer: FL2VA or REF2VA.")
         clip = _load_clip(text_encoder)
         vae = _load_vae(video_vae)
         analyzer_name = _resolve_analyzer(image_analyzer)
+        prompt_writer_name = _resolve_prompt_writer(prompt_writer, analyzer_name)
         bundle = H3StudioBundle(
-            fl2va_model,
-            ref2va_model,
-            text_encoder,
-            video_vae,
-            analyzer_name,
-            clip,
-            vae,
-            None,
+            fl2va_name=fl2va_model,
+            ref2va_name=ref2va_model,
+            clip_name=text_encoder,
+            video_vae_name=video_vae,
+            analyzer_name=analyzer_name,
+            prompt_writer_name=prompt_writer_name,
+            clip=clip,
+            video_vae=vae,
         )
         LOGGER.info("\n[H3 Studio] Model bundle\n  %s", bundle.summary())
         return bundle, clip, vae, bundle.summary()

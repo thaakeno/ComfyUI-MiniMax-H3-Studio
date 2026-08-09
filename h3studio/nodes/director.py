@@ -290,6 +290,10 @@ class H3StudioDirector:
                 analyzer_name=analyzer_bundle.analyzer_name or "" if analyzer_bundle else "",
                 clip_loader=analyzer_bundle.analyzer_for_analysis if analyzer_bundle else None,
                 max_image_edge=state.prompt_options.analyzer_resolution,
+                deep_enhancement=state.prompt_options.deep_enhancement,
+                writer_clip=analyzer_bundle.prompt_writer_clip if analyzer_bundle else None,
+                writer_name=analyzer_bundle.prompt_writer_name or "" if analyzer_bundle else "",
+                writer_loader=analyzer_bundle.writer_for_enhancement if analyzer_bundle else None,
             )
             state = state.with_references(analyzed_references)
             compile_result = compiler.compile(state.with_prompt(enhanced_prompt))

@@ -444,6 +444,17 @@ function promptSection(node, state, refresh) {
     ["0", "Native · original pixels"],
   ], "Analyzer image detail", (value) => update({ analyzer_resolution: Number(value) }));
   analyzerResolution.disabled = options.analyze_images !== true || options.enhance_mode === "off";
+  const directorToggle = element("label", { className: "h3s-switch" }, [
+    element("input", {
+      type: "checkbox",
+      checked: options.deep_enhancement === true,
+      disabled: options.analyze_images !== true || options.enhance_mode === "off",
+      attrs: { "aria-label": "Run a cached text-only detailed prompt-director pass" },
+      on: { change: (event) => update({ deep_enhancement: event.target.checked }) },
+    }),
+    element("span", { className: "h3s-switch-track" }),
+    element("span", { className: "h3s-switch-label", text: "Detailed second pass" }),
+  ]);
   const adherenceValue = element("span", { className: "h3s-inline-value", text: `${Math.round(options.adherence * 100)}%` });
   const adherence = rangeControl(options.adherence, { min: 0, max: 1, step: 0.05 }, "Reference adherence", (value) => {
     adherenceValue.textContent = `${Math.round(value * 100)}%`;
@@ -465,9 +476,10 @@ function promptSection(node, state, refresh) {
   const body = element("div", { className: "h3s-section-stack" }, [
     element("div", { className: "h3s-grid" }, [
       controlRow("Prompt format", enhance), controlRow("Image understanding", analyzerToggle),
-      controlRow("Analyzer detail", analyzerResolution), controlRow("Reference priority", adherenceWrap),
+      controlRow("Analyzer detail", analyzerResolution), controlRow("Prompt director", directorToggle),
+      controlRow("Reference priority", adherenceWrap),
     ]),
-    element("p", { className: "h3s-context-help", text: `${explanations[options.enhance_mode]} ${analyzerHelp} Reference priority controls how strongly the written prompt tells H3 to preserve reference details; it is not a LoRA strength.` }),
+    element("p", { className: "h3s-context-help", text: `${explanations[options.enhance_mode]} ${analyzerHelp} ${options.deep_enhancement ? "The cached second pass uses the Loader's Prompt writer without image tokens to create and validate a 250-500 word production direction; it retries once before a complete deterministic fallback." : "Detailed second pass is off, so the vision model supplies only its shorter rewrite."} Reference priority controls how strongly the written prompt tells H3 to preserve reference details; it is not a LoRA strength.` }),
   ]);
   return section("Direction", body, null, "Choose how H3 Studio prepares your words before Qwen3-VL encodes them for H3.");
 }

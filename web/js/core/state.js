@@ -1,4 +1,4 @@
-export const STATE_SCHEMA_VERSION = 7;
+export const STATE_SCHEMA_VERSION = 8;
 export const MAX_REFERENCES = 9;
 export const MIN_MEGAPIXELS = 0.2;
 export const MAX_MEGAPIXELS = 2;
@@ -85,6 +85,7 @@ export function defaultState() {
     prompt_options: {
       enhance_mode: "compile_only",
       analyze_images: false,
+      deep_enhancement: false,
       analyzer_resolution: 512,
       adherence: 0.85,
       detail_level: "detailed",
@@ -182,6 +183,7 @@ export function normalizeState(value) {
     promptOptions.enhance_mode = choice(promptOptions.enhance_mode, ["off", "single_prompt", "compile_only"], "compile_only");
     promptOptions.analyze_images = promptOptions.analyze_images === true;
   }
+  promptOptions.deep_enhancement = promptOptions.deep_enhancement === true;
   promptOptions.adherence = clamp(promptOptions.adherence, 0, 1, 0.85);
   promptOptions.analyzer_resolution = Math.round(clamp(promptOptions.analyzer_resolution, 0, 1024, 512));
   promptOptions.detail_level = choice(promptOptions.detail_level, ["concise", "detailed", "maximum"], "detailed");

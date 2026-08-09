@@ -51,6 +51,7 @@ def _int(value: Any, fallback: int, minimum: int, maximum: int) -> int:
 class PromptOptions:
     enhance_mode: str = ENHANCE_COMPILE
     analyze_images: bool = False
+    deep_enhancement: bool = False
     analyzer_resolution: int = 512
     adherence: float = 0.85
     detail_level: str = "detailed"
@@ -67,6 +68,7 @@ class PromptOptions:
         return {
             "enhance_mode": self.enhance_mode,
             "analyze_images": self.analyze_images,
+            "deep_enhancement": self.deep_enhancement,
             "analyzer_resolution": self.analyzer_resolution,
             "adherence": self.adherence,
             "detail_level": self.detail_level,
@@ -91,6 +93,7 @@ class PromptOptions:
         return cls(
             enhance_mode=ENHANCE_COMPILE if legacy_vlm else enhance_mode,
             analyze_images=bool(value.get("analyze_images", legacy_vlm)),
+            deep_enhancement=bool(value.get("deep_enhancement", False)),
             analyzer_resolution=_int(value.get("analyzer_resolution"), 512, 0, 1024),
             adherence=_float(value.get("adherence"), 0.85, 0.0, 1.0),
             detail_level=detail,
@@ -331,4 +334,11 @@ def migrate_state_dict(value: Mapping[str, Any]) -> dict[str, Any]:
             prompt_options.setdefault("analyze_images", False)
         migrated["prompt_options"] = prompt_options
         migrated["schema_version"] = 7
+        version = 7
+    if version == 7:
+        # Schema 8 adds an optional cached, text-only second prompt-director pass.
+        prompt_options = dict(_mapping(migrated.get("prompt_options")))
+        prompt_options.setdefault("deep_enhancement", False)
+        migrated["prompt_options"] = prompt_options
+        migrated["schema_version"] = 8
     return migrated

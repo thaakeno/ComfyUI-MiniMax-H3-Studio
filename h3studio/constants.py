@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Final
 
-VERSION: Final = "0.1.0-alpha.9"
-STATE_SCHEMA_VERSION: Final = 7
+VERSION: Final = "0.1.0-alpha.10"
+STATE_SCHEMA_VERSION: Final = 8
 CONTEXT_SCHEMA_VERSION: Final = 1
 
 CANVAS_MULTIPLE: Final = 32

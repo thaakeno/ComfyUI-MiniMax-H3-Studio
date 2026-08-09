@@ -38,6 +38,7 @@ def format_execution_report(context: H3StudioContext, enhancement_note: str = ""
         f"Sampling      : {generation.sampling_profile}",
         f"Frames        : {generation.frame_profile}",
         f"Prompt shaping: {prompt_options.enhance_mode} | image analysis {analysis_status} "
+        f"| detailed second pass {'on' if prompt_options.deep_enhancement else 'off'} "
         f"| reference priority {prompt_options.adherence:.0%}",
         f"References    : {len(references)}",
     ]

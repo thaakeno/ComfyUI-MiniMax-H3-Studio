@@ -1,10 +1,4 @@
-"""Native ComfyUI Qwen3-VL reference analysis.
-
-The MiniMax H3 ConvRot encoder is intentionally truncated and has no language
-model head, so it can condition H3 but cannot write captions.  This module uses
-an optional full ComfyUI Qwen3-VL checkpoint to inspect the actual pixels, then
-feeds concise observations back into the deterministic H3 prompt compiler.
-"""
+"""Cached native ComfyUI Qwen3-VL analysis and two-pass prompt direction."""
 
 from __future__ import annotations
 
@@ -25,28 +19,36 @@ LOGGER = logging.getLogger(__name__)
 _CACHE_LOCK = threading.RLock()
 _CACHE_KEY: tuple[Any, ...] | None = None
 _CACHE_VALUE: tuple[dict[str, Any], str] | None = None
+_WRITER_CACHE_KEY: tuple[Any, ...] | None = None
+_WRITER_CACHE_VALUE: tuple[str, str] | None = None
 _RETENTIONS = {"attribute_transfer", "fully_preserved", "partially_preserved", "reference_only"}
 
 SYSTEM_INSTRUCTION = """You are the visual reference analyst for MiniMax H3 image generation.
-Study every attached image pixel-by-pixel and use the user's exact request to decide what each image contributes.
-Return JSON only, with this exact shape:
-{"instruction":"one improved image-generation instruction using @Image1 tags","references":[{"ordinal":1,"role":"character","retention":"fully_preserved","description":"concise visible details relevant to the request"}]}
+Study every attached image pixel-by-pixel and use the user's exact request only to decide what each source contributes.
+Return JSON only with this exact shape:
+{"instruction":"one improved image-generation instruction using @Image1 tags","references":[{"ordinal":1,"role":"character","retention":"fully_preserved","description":"concise factual source-pixel observation"}]}
 
 Allowed roles: auto, identity, face, character, style, composition, pose, outfit, object, environment, layout, typography, color_palette, lighting, texture, reference.
 Allowed retention: attribute_transfer, fully_preserved, partially_preserved, reference_only.
-Describe what is actually visible in 8-18 words: identity/appearance, object shape and color, clothing, pose, framing, style, lighting, or text as relevant. Never write generic phrases such as 'visible information requested by the user'. Keep the JSON compact and single-line.
-Descriptions are observations of source pixels only. Never copy a requested new action, prop, pose, gaze, clothing change, environment, or edit into a source-image description unless that detail is independently visible in that source image. For example, if the user asks a person to hold a donut but the source person is not holding one, omit the donut from the source description; the prompt compiler will preserve the requested edit separately.
-Rewrite the user's request into one precise, production-ready instruction, normally 40-90 words. Preserve every requested action, direction, expression, object, setting, image assignment, exact text, and negative constraint. Use @Image1, @Image2, etc. exactly; never use <Picture>, <Subject>, filenames, Markdown, headings, or newlines. Add visually grounded specificity from the attached sources without copying their unrelated backgrounds or media.
-Translate every user-requested named style or medium into concrete visual characteristics instead of merely repeating its name. Retain the recognizable canonical style name and follow it with the relevant linework, shape language, anatomy, shading, palette, lighting, texture, and composition. For example, a JoJo request should say "JoJo's Bizarre Adventure-inspired anime" and specify angular facial anatomy, bold black contours, cel shading, dense cross-hatched shadows, dramatic contrast, dynamic posing, and saturated colors. Make the transformation unambiguous: when anime, illustration, painting, or another medium is requested, explicitly replace the source photograph's rendering medium while preserving only its assigned identity or objects. Never invent a style the user did not request.
-Turn directional or behavioral edits into visible constraints: name head direction, eye direction, pose, expression, and object interaction when requested. Resolve pronouns to the correct @Image subject. Describe one coherent final image rather than a list of operations.
-Use character/identity plus fully_preserved for the person whose identity must remain. Use object plus attribute_transfer for glasses, props, or isolated accessories. Preserve only role-relevant source details.
-The user's requested changes are authoritative. Do not preserve a source pose, head direction, gaze, expression, clothing, or background when the user asks to change it. Interpret 'look to the right' as turn the head and direct the eyes toward frame-right unless the user explicitly defines another viewpoint.
-Before answering, silently verify that the rewritten instruction contains every @Image assignment and every requested change. Do not omit or weaken any user instruction. Do not emit Markdown or prose outside JSON."""
+Each description must contain only independently visible source facts in 8-24 words. Never copy a requested new action, prop, pose, gaze, clothing change, style, environment, or edit into a source description unless it is already visible in that image. Never write generic phrases such as 'visible information requested by the user'.
+Rewrite the request into one precise 40-90 word instruction. Preserve every action, direction, expression, object, setting, assignment, exact text, and negative constraint. Use @Image1, @Image2 exactly; never use Picture, Subject, filenames, Markdown, headings, or newlines.
+Translate every user-requested named style into concrete traits while retaining its canonical name. A JoJo request must say "JoJo's Bizarre Adventure-inspired anime" and include angular facial anatomy, bold black contours, cel shading, dense cross-hatched shadows, dramatic contrast, dynamic posing, and saturated colors. Explicitly replace the source photograph's rendering medium when another medium is requested.
+Turn behavioral edits into visible constraints. Resolve pronouns. Use character or identity plus fully_preserved for identity; use object plus attribute_transfer for glasses and props. The requested changes override source pose, gaze, expression, clothing, or background.
+Before answering, silently verify every @Image assignment and requested change. Do not emit prose outside JSON."""
+
+WRITER_SYSTEM_INSTRUCTION = """You are the senior image prompt director for MiniMax H3.
+You receive the user's exact request and factual source-image observations from a separate vision pass. You are not viewing pixels now. Expand them into one precise 250-500 word production instruction inside JSON: {"instruction":"..."}.
+
+Preserve every requested action, direction, expression, object, environment, exact wording, negative constraint, and @Image assignment. Never replace @Image tags with Picture, Subject, filenames, Markdown, or internal identifiers. Resolve pronouns and make physical relationships explicit. References are source material, never extra panels, floating objects, duplicate bodies, mannequins, or a collage.
+
+Describe the final composition, framing, viewpoint, body and gaze direction, expression, object interaction, lighting, palette, materials, depth, and rendering treatment where they help the request. Do not add unrelated story elements. Source observations are facts, not requested edits; never claim an absent edit was already visible.
+
+For a named style, retain its canonical name and translate it into concrete traits. A JoJo request must explicitly say JoJo's Bizarre Adventure-inspired anime and include angular facial anatomy, bold black contours, cel shading, dense cross-hatched shadows, dramatic contrast, dynamic graphic posing, and saturated color design. State that this rendering replaces the source photographic medium while preserving assigned identity and objects.
+
+Write connected production prose, not tag salad. Do not add audio, soundscape, music, motion, or video instructions. Output compact valid JSON only and silently check every @Image tag and requested constraint before answering."""
 
 
 def _tensor_fingerprint(image: Any) -> str:
-    """Hash pixels so recreated Comfy tensors remain the same image."""
-
     try:
         value = image.detach().to(device="cpu").contiguous()
         try:
@@ -72,28 +74,158 @@ def _image_key(reference: ReferenceImage, image: Any) -> tuple[Any, ...]:
 def _cache_miss_reason(previous: tuple[Any, ...] | None, current: tuple[Any, ...]) -> str:
     if previous is None:
         return "cold cache"
-    if previous[0] != current[0]:
-        return "analyzer changed"
-    if previous[1] != current[1]:
-        return "prompt changed"
-    if previous[2] != current[2]:
-        return "analyzer detail changed"
-    if previous[3] != current[3]:
-        return "reference images changed"
+    labels = ("analyzer changed", "prompt changed", "analyzer detail changed", "reference images changed")
+    for index, label in enumerate(labels):
+        if previous[index] != current[index]:
+            return label
     return "cache state changed"
 
 
-def _extract_json(text: str) -> dict[str, Any]:
-    value = str(text or "").strip()
-    value = re.sub(r"^```(?:json)?\s*|\s*```$", "", value, flags=re.IGNORECASE)
-    start = value.find("{")
-    end = value.rfind("}")
+def _json_object(text: str) -> dict[str, Any]:
+    value = re.sub(r"^```(?:json)?\s*|\s*```$", "", str(text or "").strip(), flags=re.IGNORECASE)
+    start, end = value.find("{"), value.rfind("}")
     if start < 0 or end <= start:
         raise ValueError("Qwen3-VL returned no JSON object.")
     parsed = json.loads(value[start : end + 1])
-    if not isinstance(parsed, dict) or not isinstance(parsed.get("references"), list):
+    if not isinstance(parsed, dict):
+        raise ValueError("Qwen3-VL JSON was not an object.")
+    return parsed
+
+
+def _extract_analysis(text: str) -> dict[str, Any]:
+    parsed = _json_object(text)
+    if not isinstance(parsed.get("references"), list):
         raise ValueError("Qwen3-VL JSON did not contain a references list.")
     return parsed
+
+
+def _extract_writer_instruction(text: str) -> str:
+    instruction = " ".join(str(_json_object(text).get("instruction") or "").split())
+    if not instruction:
+        raise ValueError("Prompt writer JSON contained no instruction.")
+    return instruction
+
+
+def _writer_failures(candidate: str, original_prompt: str) -> list[str]:
+    failures: list[str] = []
+    count = len(candidate.split())
+    if count < 250:
+        failures.append(f"instruction has {count} words; minimum is 250")
+    if count > 500:
+        failures.append(f"instruction has {count} words; maximum is 500")
+    if not set(mention_ordinals(original_prompt)).issubset(set(mention_ordinals(candidate))):
+        failures.append("one or more @Image assignments were dropped")
+    source, result = original_prompt.lower(), candidate.lower()
+    constraints = {
+        "right": ("right", "frame-right"),
+        "left": ("left", "frame-left"),
+        "smile": ("smile", "smiling"),
+        "hold": ("hold", "holding", "grasp"),
+        "eat": ("eat", "eating", "bite", "biting"),
+    }
+    for trigger, alternatives in constraints.items():
+        if trigger in source and not any(term in result for term in alternatives):
+            failures.append(f"requested {trigger!r} constraint was omitted")
+    if "jojo" in source:
+        traits = ("jojo's bizarre adventure", "angular", "black contour", "cel shad", "cross-hatch", "contrast", "saturated")
+        missing = [trait for trait in traits if trait not in result]
+        if missing:
+            failures.append("JoJo style lacks concrete traits: " + ", ".join(missing))
+    return failures
+
+
+def _deterministic_writer_fallback(prompt: str, references: Sequence[ReferenceImage]) -> str:
+    assignments = "; ".join(
+        f"@Image{item.ordinal} supplies {item.effective_role} with {item.retention} retention"
+        + (f", visibly described as {item.description.rstrip('.')}" if item.description else "")
+        for item in references
+    )
+    style = ""
+    if "jojo" in prompt.lower():
+        style = (
+            "Render the result as JoJo's Bizarre Adventure-inspired anime, replacing the source photographic medium "
+            "with angular facial anatomy, bold black contours, crisp cel shading, dense cross-hatched shadows, "
+            "dramatic contrast, dynamic graphic posing, and saturated color design."
+        )
+    sections = (
+        f"Create one coherent finished still image that visibly fulfills this exact direction: {prompt}.",
+        f"Reference contract: {assignments}.",
+        "Preserve every named subject, assignment, action, direction, expression, prop, environment, and negative constraint. Resolve pronouns to the referenced subject and make gaze, head direction, body orientation, facial expression, and object interactions unambiguous in the final frame.",
+        "Use each source only for its assigned identity, object, wardrobe, style, pose, layout, lighting, or environmental function. References are source material, not additional subjects. Do not create a reference sheet, collage, split screen, floating accessory, duplicate body, mannequin, source panel, or unrequested source background. Do not let one source overwrite unrelated traits assigned to another.",
+        "Compose a deliberate single frame with clear visual hierarchy, readable silhouette, coherent anatomy, credible perspective, intentional framing, and enough spatial separation for every requested detail to remain legible. Choose a camera distance and viewpoint that make the requested pose, gaze, expression, and transferred objects immediately visible. Establish a specific foreground, subject plane, and background relationship without distracting from the requested edit.",
+        "Use motivated lighting with controlled highlights and shadows, consistent material response, purposeful depth, and a unified color relationship. Preserve recognizable identity through facial structure, proportions, silhouette, signature color placement, and source-specific design cues while changing only what the instruction requests. Make transferred accessories sit naturally on the target with correct scale, occlusion, contact, and perspective.",
+        style,
+        "Keep exact quoted wording unchanged. Do not add text, signatures, watermarks, unexplained people, unrelated props, sound, music, motion directions, or video language. Favor explicit visual evidence over vague quality adjectives. The output must be one internally consistent finished image whose requested edits are unmistakable at first glance and whose composition reads as an intentional final artwork rather than a demonstration of reference inputs.",
+    )
+    return " ".join(" ".join(sections).split())
+
+
+def _run_prompt_writer(
+    clip: Any,
+    prompt: str,
+    references: Sequence[ReferenceImage],
+    *,
+    writer_name: str,
+    clip_loader: Any = None,
+) -> tuple[str, str]:
+    global _WRITER_CACHE_KEY, _WRITER_CACHE_VALUE
+    facts = tuple((item.ordinal, item.effective_role, item.retention, item.description) for item in references)
+    identity = writer_name or (type(clip).__name__ if clip is not None else "default")
+    key = (str(identity), str(prompt), facts)
+    with _CACHE_LOCK:
+        if key == _WRITER_CACHE_KEY and _WRITER_CACHE_VALUE is not None:
+            LOGGER.info("[H3 Studio - Prompt Director] Cache HIT | text generation skipped")
+            return _WRITER_CACHE_VALUE[0], _WRITER_CACHE_VALUE[1] + " Cache: HIT."
+    if clip is None and callable(clip_loader):
+        LOGGER.info("[H3 Studio - Prompt Director] Loading writer: %s", writer_name or "selected model")
+        clip = clip_loader()
+    if clip is None:
+        raise ValueError("Two-pass prompt direction is enabled, but no full Qwen3-VL prompt writer is selected in H3 Studio Loader.")
+    records = "\n".join(
+        f"@Image{item.ordinal}: role={item.effective_role}; retention={item.retention}; source observation={item.description or 'no visual description available'}"
+        for item in references
+    )
+    base = f"{WRITER_SYSTEM_INSTRUCTION}\n\nUSER REQUEST:\n{prompt}\n\nFACTUAL REFERENCE RECORDS:\n{records}"
+    failures: list[str] = []
+    started = time.perf_counter()
+    for attempt in range(2):
+        retry = "" if not failures else "\n\nVALIDATION FAILED. Rewrite completely and fix: " + "; ".join(failures)
+        LOGGER.info("[H3 Studio - Prompt Director] Writing detailed brief | attempt %d/2 | text-only", attempt + 1)
+        tokens = clip.tokenize(base + retry, images=[], thinking=False)
+        generated = clip.generate(
+            tokens,
+            do_sample=True,
+            max_length=900,
+            temperature=0.65,
+            top_k=20,
+            top_p=0.88,
+            min_p=0.02,
+            repetition_penalty=1.08,
+            seed=41 + attempt,
+            presence_penalty=0.0,
+        )
+        decoded = clip.decode(generated, skip_special_tokens=True)
+        if isinstance(decoded, (tuple, list)):
+            decoded = decoded[0] if decoded else ""
+        try:
+            candidate = _extract_writer_instruction(str(decoded))
+            failures = _writer_failures(candidate, prompt)
+        except (ValueError, json.JSONDecodeError) as exc:
+            candidate, failures = "", [str(exc)]
+        if not failures:
+            elapsed = time.perf_counter() - started
+            note = f"Prompt director: {identity} produced and validated a {len(candidate.split())}-word text-only brief in {elapsed:.2f}s."
+            with _CACHE_LOCK:
+                _WRITER_CACHE_KEY, _WRITER_CACHE_VALUE = key, (candidate, note)
+            LOGGER.info("[H3 Studio - Prompt Director] Complete | %d words | validated", len(candidate.split()))
+            return candidate, note
+        LOGGER.warning("[H3 Studio - Prompt Director] Validation failed | %s", "; ".join(failures))
+    candidate = _deterministic_writer_fallback(prompt, references)
+    note = "Prompt director: model output failed validation twice; used the complete deterministic fallback."
+    with _CACHE_LOCK:
+        _WRITER_CACHE_KEY, _WRITER_CACHE_VALUE = key, (candidate, note)
+    LOGGER.warning("[H3 Studio - Prompt Director] Used deterministic fallback | %d words", len(candidate.split()))
+    return candidate, note
 
 
 def analyze_references(
@@ -105,8 +237,12 @@ def analyze_references(
     analyzer_name: str = "",
     clip_loader: Any = None,
     max_image_edge: int = 512,
+    deep_enhancement: bool = False,
+    writer_clip: Any = None,
+    writer_name: str = "",
+    writer_loader: Any = None,
 ) -> tuple[tuple[ReferenceImage, ...], str, str]:
-    """Inspect all reference tensors in one cached Qwen3-VL generation."""
+    """Inspect pixels once, then optionally run a cached text-only writing pass."""
 
     global _CACHE_KEY, _CACHE_VALUE
     max_image_edge = int(max_image_edge)
@@ -114,153 +250,127 @@ def analyze_references(
         max_image_edge = max(256, min(1024, max_image_edge))
     if not images or not references:
         return tuple(references), str(prompt), "Image analysis: no references to inspect."
+    identity = analyzer_name or (type(clip).__name__ if clip is not None else "default")
     key = (
-        str(analyzer_name or (type(clip).__name__ if clip is not None else "default")),
+        str(identity),
         str(prompt),
         int(max_image_edge),
         tuple(_image_key(reference, image) for reference, image in zip(references, images, strict=False)),
     )
     with _CACHE_LOCK:
-        if key == _CACHE_KEY and _CACHE_VALUE is not None:
-            analyzed = _apply_payload(references, _CACHE_VALUE[0])
-            note = f"{_CACHE_VALUE[1]} Cache: HIT; Qwen generation skipped because prompt and images are unchanged."
-            LOGGER.info("[H3 Studio · Vision] Cache HIT | reused %d reference analyses | Qwen skipped", len(analyzed))
-            return analyzed, _enhanced_instruction(_CACHE_VALUE[0], prompt), note
+        cache_hit = key == _CACHE_KEY and _CACHE_VALUE is not None
+        cached = _CACHE_VALUE if cache_hit else None
         miss_reason = _cache_miss_reason(_CACHE_KEY, key)
-    detail_label = "Native · original pixels" if max_image_edge == 0 else f"max edge {max_image_edge}px"
-    started = time.perf_counter()
-    LOGGER.info(
-        "[H3 Studio · Vision] Cache MISS (%s) | %d reference(s) | %s",
-        miss_reason,
-        len(images),
-        detail_label,
-    )
-    if clip is None and callable(clip_loader):
-        LOGGER.info("[H3 Studio · Vision] Loading Qwen3-VL analyzer: %s", analyzer_name or "selected model")
-        clip = clip_loader()
-    if clip is None:
-        raise ValueError(
-            "Visual reference analysis requires a full Qwen3-VL analyzer. Download "
-            "qwen3vl_4b_fp8_scaled.safetensors into ComfyUI/models/text_encoders, select it in H3 Studio Loader, "
-            "and connect the Loader bundle to the Director. The H3 ConvRot encoder cannot generate descriptions."
+    if cached is not None:
+        analyzed = _apply_payload(references, cached[0])
+        enhanced = _enhanced_instruction(cached[0], prompt)
+        note = f"{cached[1]} Cache: HIT; vision generation skipped because prompt, images, and detail are unchanged."
+        LOGGER.info("[H3 Studio - Vision] Cache HIT | reused %d source descriptions", len(analyzed))
+    else:
+        detail_label = "native original pixels" if max_image_edge == 0 else f"max edge {max_image_edge}px"
+        started = time.perf_counter()
+        LOGGER.info("[H3 Studio - Vision] Cache MISS (%s) | %d reference(s) | %s", miss_reason, len(images), detail_label)
+        if clip is None and callable(clip_loader):
+            LOGGER.info("[H3 Studio - Vision] Loading analyzer: %s", identity)
+            clip = clip_loader()
+        if clip is None:
+            raise ValueError(
+                "Visual analysis requires a full Qwen3-VL checkpoint in ComfyUI/models/text_encoders. "
+                "Select it in H3 Studio Loader; the H3 ConvRot encoder cannot generate descriptions."
+            )
+        numbered = "\n".join(
+            f"Image {item.ordinal}: filename={item.filename}; current role={item.role}; current retention={item.retention}"
+            for item in references
         )
-
-    numbered = "\n".join(
-        f"Image {reference.ordinal}: filename={reference.filename}; current role={reference.role}; current retention={reference.retention}"
-        for reference in references
-    )
-    instruction = (
-        f"{SYSTEM_INSTRUCTION}\n\nUSER REQUEST:\n{prompt}\n\nREFERENCE ORDER:\n{numbered}\n\n"
-        f"Analyze exactly {len(images)} attached images and return exactly {len(images)} reference records."
-    )
-    analysis_images = [_prepare_image(image, max_image_edge) for image in images]
-    LOGGER.info(
-        "[H3 Studio · Vision] Prepared %d analysis image(s) | %s | H3 inputs remain untouched",
-        len(analysis_images),
-        detail_label,
-    )
-    tokens = clip.tokenize(instruction, images=analysis_images, thinking=False)
-    LOGGER.info("[H3 Studio · Vision] Reading pixels and writing the enhanced instruction…")
-    generated = clip.generate(
-        tokens,
-        do_sample=False,
-        max_length=min(768, 96 + len(images) * 72),
-        temperature=1.0,
-        top_k=0,
-        top_p=1.0,
-        min_p=0.0,
-        repetition_penalty=1.05,
-        seed=0,
-        presence_penalty=0.0,
-    )
-    decoded = clip.decode(generated, skip_special_tokens=True)
-    if isinstance(decoded, (tuple, list)):
-        decoded = decoded[0] if decoded else ""
-    payload = _extract_json(str(decoded))
-    analyzed = _apply_payload(references, payload)
-    enhanced = _enhanced_instruction(payload, prompt)
-    note = (
-        f"Image analysis: Qwen3-VL inspected and enhanced the instruction from {len(analyzed)} actual "
-        f"reference image(s) at {detail_label}; H3 originals were preserved."
-    )
-    with _CACHE_LOCK:
-        _CACHE_KEY = key
-        _CACHE_VALUE = payload, note
-    LOGGER.info(
-        "[H3 Studio · Vision] Complete in %.2fs | %d reference(s) described | instruction enhanced",
-        time.perf_counter() - started,
-        len(analyzed),
-    )
+        instruction = (
+            f"{SYSTEM_INSTRUCTION}\n\nUSER REQUEST:\n{prompt}\n\nREFERENCE ORDER:\n{numbered}\n\n"
+            f"Analyze exactly {len(images)} attached images and return exactly {len(images)} reference records."
+        )
+        analysis_images = [_prepare_image(image, max_image_edge) for image in images]
+        LOGGER.info("[H3 Studio - Vision] Prepared %d analysis copies | H3 originals untouched", len(analysis_images))
+        tokens = clip.tokenize(instruction, images=analysis_images, thinking=False)
+        LOGGER.info("[H3 Studio - Vision] Inspecting pixels and writing factual source records...")
+        generated = clip.generate(
+            tokens,
+            do_sample=False,
+            max_length=min(768, 96 + len(images) * 72),
+            temperature=1.0,
+            top_k=0,
+            top_p=1.0,
+            min_p=0.0,
+            repetition_penalty=1.05,
+            seed=0,
+            presence_penalty=0.0,
+        )
+        decoded = clip.decode(generated, skip_special_tokens=True)
+        if isinstance(decoded, (tuple, list)):
+            decoded = decoded[0] if decoded else ""
+        payload = _extract_analysis(str(decoded))
+        analyzed = _apply_payload(references, payload)
+        enhanced = _enhanced_instruction(payload, prompt)
+        note = (
+            f"Image analysis: Qwen3-VL inspected {len(analyzed)} actual reference image(s) at {detail_label}; "
+            "H3 originals were preserved."
+        )
+        with _CACHE_LOCK:
+            _CACHE_KEY, _CACHE_VALUE = key, (payload, note)
+        LOGGER.info("[H3 Studio - Vision] Complete in %.2fs | %d factual source record(s)", time.perf_counter() - started, len(analyzed))
+    if deep_enhancement:
+        enhanced, writer_note = _run_prompt_writer(
+            writer_clip,
+            prompt,
+            analyzed,
+            writer_name=writer_name,
+            clip_loader=writer_loader,
+        )
+        note = f"{note} {writer_note}"
     return analyzed, enhanced, note
 
 
 def _enhanced_instruction(payload: dict[str, Any], original_prompt: str) -> str:
-    """Accept Qwen's rewrite only when every referenced image remains assigned."""
-
     candidate = " ".join(str(payload.get("instruction") or "").split())
     if not candidate or len(candidate) > 1200:
         return str(original_prompt)
-    required = set(mention_ordinals(original_prompt))
-    present = set(mention_ordinals(candidate))
-    if not required.issubset(present):
-        LOGGER.warning("[H3 Studio · Vision] Rewrite dropped an @Image assignment; using the original prompt.")
+    if not set(mention_ordinals(original_prompt)).issubset(set(mention_ordinals(candidate))):
+        LOGGER.warning("[H3 Studio - Vision] Rewrite dropped an @Image assignment; using the original prompt.")
         return str(original_prompt)
     return candidate
 
 
-def _apply_payload(
-    references: Sequence[ReferenceImage],
-    payload: dict[str, Any],
-) -> tuple[ReferenceImage, ...]:
-    """Apply cached observations without overwriting current manual card edits."""
-
+def _apply_payload(references: Sequence[ReferenceImage], payload: dict[str, Any]) -> tuple[ReferenceImage, ...]:
     by_ordinal = {
         int(item.get("ordinal", 0)): item
         for item in payload["references"]
         if isinstance(item, dict) and str(item.get("ordinal", "")).isdigit()
     }
-
     analyzed: list[ReferenceImage] = []
     for reference in references:
         item = by_ordinal.get(reference.ordinal, {})
-        can_update_role = reference.role_auto or reference.role == "auto"
-        can_update_retention = reference.retention_auto or reference.role == "auto"
-        can_update_description = reference.description_auto or not reference.description.strip()
-        role = str(item.get("role") or reference.role).strip().lower() if can_update_role else reference.role
-        retention = (
-            str(item.get("retention") or reference.retention).strip().lower()
-            if can_update_retention
-            else reference.retention
-        )
-        analyzed_description = " ".join(str(item.get("description") or "").split())
-        description = (
-            analyzed_description
-            if analyzed_description and can_update_description
-            else reference.description
-        )
+        can_role = reference.role_auto or reference.role == "auto"
+        can_retention = reference.retention_auto or reference.role == "auto"
+        can_description = reference.description_auto or not reference.description.strip()
+        role = str(item.get("role") or reference.role).strip().lower() if can_role else reference.role
+        retention = str(item.get("retention") or reference.retention).strip().lower() if can_retention else reference.retention
+        observed = " ".join(str(item.get("description") or "").split())
+        description = observed if observed and can_description else reference.description
         if role not in REFERENCE_ROLES:
             role = reference.role
         if retention not in _RETENTIONS:
             retention = reference.retention
-        analyzed.append(
-            replace(
-                reference,
-                role=role,
-                retention=retention,
-                description=description,
-                role_auto=can_update_role,
-                retention_auto=can_update_retention,
-                description_auto=bool(analyzed_description and can_update_description),
-                tags=tuple(dict.fromkeys((*reference.tags, "visually_analyzed"))),
-            )
-        )
-
+        analyzed.append(replace(
+            reference,
+            role=role,
+            retention=retention,
+            description=description,
+            role_auto=can_role,
+            retention_auto=can_retention,
+            description_auto=bool(observed and can_description),
+            tags=tuple(dict.fromkeys((*reference.tags, "visually_analyzed"))),
+        ))
     return tuple(analyzed)
 
 
 def _prepare_image(image: Any, max_edge: int) -> Any:
-    """Downscale only the analyzer copy; H3 still receives the original tensor."""
-
     try:
         if max_edge == 0:
             return image
@@ -273,9 +383,8 @@ def _prepare_image(image: Any, max_edge: int) -> Any:
         target_width = max(32, round((int(width) * scale) / 32) * 32)
         import torch.nn.functional as functional
 
-        channels_first = image.permute(0, 3, 1, 2)
         resized = functional.interpolate(
-            channels_first,
+            image.permute(0, 3, 1, 2),
             size=(target_height, target_width),
             mode="bilinear",
             align_corners=False,

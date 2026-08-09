@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from h3studio.prompting.comfy_analyzer import analyze_references
 from h3studio.prompting.compiler import PromptCompiler
 from h3studio.references import ReferenceImage
@@ -72,6 +74,30 @@ class FakeClip:
           {"ordinal":1,"role":"character","retention":"fully_preserved","description":"A pale clown with red hair and a white ruffled costume."},
           {"ordinal":2,"role":"object","retention":"attribute_transfer","description":"Thick rectangular black eyeglass frames."}
         ]}"""
+
+
+class FakeWriter:
+    def __init__(self):
+        self.generate_calls = 0
+
+    def tokenize(self, instruction, *, images, thinking):
+        assert "senior image prompt director" in instruction
+        assert images == []
+        assert thinking is False
+        return {"tokens": [1]}
+
+    def generate(self, tokens, **kwargs):
+        assert kwargs["do_sample"] is True
+        self.generate_calls += 1
+        return [2]
+
+    def decode(self, generated, *, skip_special_tokens):
+        words = [
+            "Create", "one", "coherent", "portrait", "of", "@Image1", "outside", "with", "clear", "identity",
+            "deliberate", "framing", "natural", "lighting", "credible", "materials", "and", "a", "readable", "silhouette",
+        ]
+        instruction = " ".join(words + ["visually"] * 235)
+        return json.dumps({"instruction": instruction})
 
 
 def test_native_analyzer_uses_pixels_and_returns_card_descriptions() -> None:
@@ -243,3 +269,41 @@ def test_analyzer_detail_change_invalidates_analysis(monkeypatch) -> None:
     analyze_references(clip, prompt, references, images, analyzer_name="qwen", max_image_edge=512)
 
     assert clip.generate_calls == 2
+
+
+def test_two_pass_writer_is_text_only_validated_and_cached(monkeypatch) -> None:
+    import h3studio.prompting.comfy_analyzer as analyzer_module
+
+    monkeypatch.setattr(analyzer_module, "_CACHE_KEY", None)
+    monkeypatch.setattr(analyzer_module, "_CACHE_VALUE", None)
+    monkeypatch.setattr(analyzer_module, "_WRITER_CACHE_KEY", None)
+    monkeypatch.setattr(analyzer_module, "_WRITER_CACHE_VALUE", None)
+    analyzer = FakeClip()
+    writer = FakeWriter()
+    references = (ReferenceImage("one", "person.jpg", 1, storage_name="h3studio/person.jpg"),)
+    images = (FakeStableImage(800, b"same person pixels"),)
+
+    _references, enhanced, note = analyze_references(
+        analyzer,
+        "Place @Image1 outside",
+        references,
+        images,
+        deep_enhancement=True,
+        writer_clip=writer,
+        writer_name="qwen3vl_8b_fp8_scaled.safetensors",
+    )
+    _references, enhanced_again, note_again = analyze_references(
+        analyzer,
+        "Place @Image1 outside",
+        references,
+        images,
+        deep_enhancement=True,
+        writer_clip=writer,
+        writer_name="qwen3vl_8b_fp8_scaled.safetensors",
+    )
+
+    assert 250 <= len(enhanced.split()) <= 500
+    assert enhanced_again == enhanced
+    assert writer.generate_calls == 1
+    assert "validated" in note
+    assert "Cache: HIT" in note_again
