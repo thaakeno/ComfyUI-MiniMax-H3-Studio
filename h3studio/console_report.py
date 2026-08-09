@@ -19,6 +19,12 @@ def format_execution_report(context: H3StudioContext, enhancement_note: str = ""
     prompt_options = state.prompt_options
     resolution = context.resolution
     references = context.compile_result.references
+    if not prompt_options.analyze_images:
+        analysis_status = "off"
+    elif prompt_options.analyzer_resolution == 0:
+        analysis_status = "on at native reference resolution"
+    else:
+        analysis_status = f"on at {prompt_options.analyzer_resolution}px max edge"
     lines = [
         "=" * 72,
         f"H3 STUDIO EXECUTION - v{VERSION}",
@@ -31,8 +37,8 @@ def format_execution_report(context: H3StudioContext, enhancement_note: str = ""
         f"Seed          : {generation.seed}",
         f"Sampling      : {generation.sampling_profile}",
         f"Frames        : {generation.frame_profile}",
-        f"Prompt shaping: {prompt_options.enhance_mode} | image analysis "
-        f"{'on' if prompt_options.analyze_images else 'off'} | reference priority {prompt_options.adherence:.0%}",
+        f"Prompt shaping: {prompt_options.enhance_mode} | image analysis {analysis_status} "
+        f"| reference priority {prompt_options.adherence:.0%}",
         f"References    : {len(references)}",
     ]
     if references:

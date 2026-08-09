@@ -51,6 +51,7 @@ def _int(value: Any, fallback: int, minimum: int, maximum: int) -> int:
 class PromptOptions:
     enhance_mode: str = ENHANCE_COMPILE
     analyze_images: bool = False
+    analyzer_resolution: int = 512
     adherence: float = 0.85
     detail_level: str = "detailed"
     preserve_user_text: bool = True
@@ -66,6 +67,7 @@ class PromptOptions:
         return {
             "enhance_mode": self.enhance_mode,
             "analyze_images": self.analyze_images,
+            "analyzer_resolution": self.analyzer_resolution,
             "adherence": self.adherence,
             "detail_level": self.detail_level,
             "preserve_user_text": self.preserve_user_text,
@@ -89,6 +91,7 @@ class PromptOptions:
         return cls(
             enhance_mode=ENHANCE_COMPILE if legacy_vlm else enhance_mode,
             analyze_images=bool(value.get("analyze_images", legacy_vlm)),
+            analyzer_resolution=_int(value.get("analyzer_resolution"), 512, 0, 1024),
             adherence=_float(value.get("adherence"), 0.85, 0.0, 1.0),
             detail_level=detail,
             preserve_user_text=bool(value.get("preserve_user_text", True)),

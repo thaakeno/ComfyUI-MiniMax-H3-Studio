@@ -13,12 +13,13 @@ import json
 import logging
 import re
 import threading
+import time
 from collections.abc import Sequence
 from dataclasses import replace
 from typing import Any
 
 from ..constants import REFERENCE_ROLES
-from ..references import ReferenceImage
+from ..references import ReferenceImage, mention_ordinals
 
 LOGGER = logging.getLogger(__name__)
 _CACHE_LOCK = threading.RLock()
@@ -29,15 +30,16 @@ _RETENTIONS = {"attribute_transfer", "fully_preserved", "partially_preserved", "
 SYSTEM_INSTRUCTION = """You are the visual reference analyst for MiniMax H3 image generation.
 Study every attached image pixel-by-pixel and use the user's exact request to decide what each image contributes.
 Return JSON only, with this exact shape:
-{"references":[{"ordinal":1,"role":"character","retention":"fully_preserved","description":"concise visible details relevant to the request"}]}
+{"instruction":"one improved image-generation instruction using @Image1 tags","references":[{"ordinal":1,"role":"character","retention":"fully_preserved","description":"concise visible details relevant to the request"}]}
 
 Allowed roles: auto, identity, face, character, style, composition, pose, outfit, object, environment, layout, typography, color_palette, lighting, texture, reference.
 Allowed retention: attribute_transfer, fully_preserved, partially_preserved, reference_only.
-Describe what is actually visible: identity/appearance, object shape and color, clothing, pose, framing, style, lighting, or text as relevant. Never write generic phrases such as 'visible information requested by the user'.
+Describe what is actually visible in 8-18 words: identity/appearance, object shape and color, clothing, pose, framing, style, lighting, or text as relevant. Never write generic phrases such as 'visible information requested by the user'. Keep the JSON compact and single-line.
 Descriptions are observations of source pixels only. Never copy a requested new action, prop, pose, gaze, clothing change, environment, or edit into a source-image description unless that detail is independently visible in that source image. For example, if the user asks a person to hold a donut but the source person is not holding one, omit the donut from the source description; the prompt compiler will preserve the requested edit separately.
+Rewrite the user's request into one clear 25-45 word instruction. Preserve every requested action, direction, expression, object, setting, and image assignment. Use @Image1, @Image2, etc. exactly; never use <Picture>, <Subject>, filenames, Markdown, headings, or newlines. Add only visually grounded specificity from the attached sources. Do not invent a new scene, camera, style, or action.
 Use character/identity plus fully_preserved for the person whose identity must remain. Use object plus attribute_transfer for glasses, props, or isolated accessories. Preserve only role-relevant source details.
 The user's requested changes are authoritative. Do not preserve a source pose, head direction, gaze, expression, clothing, or background when the user asks to change it. Interpret 'look to the right' as turn the head and direct the eyes toward frame-right unless the user explicitly defines another viewpoint.
-Do not rewrite, summarize, improve, or omit any user instruction. Do not emit Markdown or prose outside JSON."""
+Do not omit or weaken any user instruction. Do not emit Markdown or prose outside JSON."""
 
 
 def _tensor_fingerprint(image: Any) -> str:
@@ -73,6 +75,8 @@ def _cache_miss_reason(previous: tuple[Any, ...] | None, current: tuple[Any, ...
     if previous[1] != current[1]:
         return "prompt changed"
     if previous[2] != current[2]:
+        return "analyzer detail changed"
+    if previous[3] != current[3]:
         return "reference images changed"
     return "cache state changed"
 
@@ -98,26 +102,39 @@ def analyze_references(
     *,
     analyzer_name: str = "",
     clip_loader: Any = None,
-) -> tuple[tuple[ReferenceImage, ...], str]:
+    max_image_edge: int = 512,
+) -> tuple[tuple[ReferenceImage, ...], str, str]:
     """Inspect all reference tensors in one cached Qwen3-VL generation."""
 
     global _CACHE_KEY, _CACHE_VALUE
+    max_image_edge = int(max_image_edge)
+    if max_image_edge != 0:
+        max_image_edge = max(256, min(1024, max_image_edge))
     if not images or not references:
-        return tuple(references), "Image analysis: no references to inspect."
+        return tuple(references), str(prompt), "Image analysis: no references to inspect."
     key = (
         str(analyzer_name or (type(clip).__name__ if clip is not None else "default")),
         str(prompt),
+        int(max_image_edge),
         tuple(_image_key(reference, image) for reference, image in zip(references, images, strict=False)),
     )
     with _CACHE_LOCK:
         if key == _CACHE_KEY and _CACHE_VALUE is not None:
             analyzed = _apply_payload(references, _CACHE_VALUE[0])
-            note = f"{_CACHE_VALUE[1]} Cache: HIT (prompt and images unchanged)."
-            LOGGER.info("[H3 Studio] %s", note)
-            return analyzed, note
+            note = f"{_CACHE_VALUE[1]} Cache: HIT; Qwen generation skipped because prompt and images are unchanged."
+            LOGGER.info("[H3 Studio · Vision] Cache HIT | reused %d reference analyses | Qwen skipped", len(analyzed))
+            return analyzed, _enhanced_instruction(_CACHE_VALUE[0], prompt), note
         miss_reason = _cache_miss_reason(_CACHE_KEY, key)
-    LOGGER.info("[H3 Studio] Image analysis cache MISS: %s", miss_reason)
+    detail_label = "Native · original pixels" if max_image_edge == 0 else f"max edge {max_image_edge}px"
+    started = time.perf_counter()
+    LOGGER.info(
+        "[H3 Studio · Vision] Cache MISS (%s) | %d reference(s) | %s",
+        miss_reason,
+        len(images),
+        detail_label,
+    )
     if clip is None and callable(clip_loader):
+        LOGGER.info("[H3 Studio · Vision] Loading Qwen3-VL analyzer: %s", analyzer_name or "selected model")
         clip = clip_loader()
     if clip is None:
         raise ValueError(
@@ -134,11 +151,18 @@ def analyze_references(
         f"{SYSTEM_INSTRUCTION}\n\nUSER REQUEST:\n{prompt}\n\nREFERENCE ORDER:\n{numbered}\n\n"
         f"Analyze exactly {len(images)} attached images and return exactly {len(images)} reference records."
     )
-    tokens = clip.tokenize(instruction, images=list(images), thinking=False)
+    analysis_images = [_prepare_image(image, max_image_edge) for image in images]
+    LOGGER.info(
+        "[H3 Studio · Vision] Prepared %d analysis image(s) | %s | H3 inputs remain untouched",
+        len(analysis_images),
+        detail_label,
+    )
+    tokens = clip.tokenize(instruction, images=analysis_images, thinking=False)
+    LOGGER.info("[H3 Studio · Vision] Reading pixels and writing the enhanced instruction…")
     generated = clip.generate(
         tokens,
         do_sample=False,
-        max_length=1100,
+        max_length=min(768, 96 + len(images) * 72),
         temperature=1.0,
         top_k=0,
         top_p=1.0,
@@ -152,12 +176,34 @@ def analyze_references(
         decoded = decoded[0] if decoded else ""
     payload = _extract_json(str(decoded))
     analyzed = _apply_payload(references, payload)
-    note = f"Image analysis: Qwen3-VL inspected {len(analyzed)} actual reference image(s)."
+    enhanced = _enhanced_instruction(payload, prompt)
+    note = (
+        f"Image analysis: Qwen3-VL inspected and enhanced the instruction from {len(analyzed)} actual "
+        f"reference image(s) at {detail_label}; H3 originals were preserved."
+    )
     with _CACHE_LOCK:
         _CACHE_KEY = key
         _CACHE_VALUE = payload, note
-    LOGGER.info("[H3 Studio] %s", note)
-    return analyzed, note
+    LOGGER.info(
+        "[H3 Studio · Vision] Complete in %.2fs | %d reference(s) described | instruction enhanced",
+        time.perf_counter() - started,
+        len(analyzed),
+    )
+    return analyzed, enhanced, note
+
+
+def _enhanced_instruction(payload: dict[str, Any], original_prompt: str) -> str:
+    """Accept Qwen's rewrite only when every referenced image remains assigned."""
+
+    candidate = " ".join(str(payload.get("instruction") or "").split())
+    if not candidate or len(candidate) > 1200:
+        return str(original_prompt)
+    required = set(mention_ordinals(original_prompt))
+    present = set(mention_ordinals(candidate))
+    if not required.issubset(present):
+        LOGGER.warning("[H3 Studio · Vision] Rewrite dropped an @Image assignment; using the original prompt.")
+        return str(original_prompt)
+    return candidate
 
 
 def _apply_payload(
@@ -208,3 +254,31 @@ def _apply_payload(
         )
 
     return tuple(analyzed)
+
+
+def _prepare_image(image: Any, max_edge: int) -> Any:
+    """Downscale only the analyzer copy; H3 still receives the original tensor."""
+
+    try:
+        if max_edge == 0:
+            return image
+        _, height, width, _ = image.shape
+        longest = max(int(height), int(width))
+        if longest <= max_edge:
+            return image
+        scale = max_edge / longest
+        target_height = max(32, round((int(height) * scale) / 32) * 32)
+        target_width = max(32, round((int(width) * scale) / 32) * 32)
+        import torch.nn.functional as functional
+
+        channels_first = image.permute(0, 3, 1, 2)
+        resized = functional.interpolate(
+            channels_first,
+            size=(target_height, target_width),
+            mode="bilinear",
+            align_corners=False,
+            antialias=True,
+        )
+        return resized.permute(0, 2, 3, 1)
+    except (AttributeError, ImportError, RuntimeError, TypeError, ValueError):
+        return image

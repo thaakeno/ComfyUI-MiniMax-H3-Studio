@@ -75,10 +75,14 @@ def test_generation_options_clamp_values() -> None:
 
 
 def test_prompt_options_clamp_and_validate() -> None:
-    options = PromptOptions.from_dict({"adherence": 8, "detail_level": "unknown", "analyzer_max_tokens": 4})
+    options = PromptOptions.from_dict(
+        {"adherence": 8, "detail_level": "unknown", "analyzer_max_tokens": 4, "analyzer_resolution": 9999}
+    )
     assert options.adherence == 1.0
     assert options.detail_level == "detailed"
     assert options.analyzer_max_tokens == 128
+    assert options.analyzer_resolution == 1024
+    assert PromptOptions.from_dict({"analyzer_resolution": 0}).analyzer_resolution == 0
 
 
 def test_legacy_vlm_migrates_to_analysis_toggle_and_structured_format() -> None:

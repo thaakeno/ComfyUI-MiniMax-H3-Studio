@@ -276,21 +276,23 @@ class H3StudioDirector:
             kwargs,
         )
         compiler = PromptCompiler()
+        enhanced_prompt = state.prompt
         if state.prompt_options.analyze_images and images:
             from ..prompting.comfy_analyzer import analyze_references
 
             analyzer_bundle = h3_bundle if isinstance(h3_bundle, H3StudioBundle) else None
             analyzer = analyzer_bundle.analyzer_clip if analyzer_bundle else None
-            analyzed_references, vlm_note = analyze_references(
+            analyzed_references, enhanced_prompt, vlm_note = analyze_references(
                 analyzer,
                 state.prompt,
                 state.enabled_references,
                 images,
                 analyzer_name=analyzer_bundle.analyzer_name or "" if analyzer_bundle else "",
                 clip_loader=analyzer_bundle.analyzer_for_analysis if analyzer_bundle else None,
+                max_image_edge=state.prompt_options.analyzer_resolution,
             )
             state = state.with_references(analyzed_references)
-            compile_result = compiler.compile(state)
+            compile_result = compiler.compile(state.with_prompt(enhanced_prompt))
         else:
             compile_result, vlm_note = compile_with_optional_vlm(state, images, compiler=compiler)
         # Persist both deterministic and visual role decisions into the cards.
@@ -328,6 +330,7 @@ class H3StudioDirector:
         return {
             "ui": {
                 "compiled_prompt": [compile_result.native_prompt],
+                "enhanced_instruction": [enhanced_prompt],
                 "reference_labels": reference_labels,
                 "reference_roles": [reference.effective_role for reference in compile_result.references],
                 "reference_retentions": [reference.retention for reference in compile_result.references],
