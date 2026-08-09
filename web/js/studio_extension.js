@@ -43,6 +43,13 @@ function setWidget(node, name, value, invoke = false) {
   if (invoke) target.callback?.(value, app.canvas, node, [0, 0], {});
 }
 
+function randomSeed() {
+  const values = new Uint32Array(2);
+  globalThis.crypto?.getRandomValues?.(values);
+  const combined = values[0] * 0x200000 + (values[1] & 0x1fffff);
+  return combined || Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+}
+
 function hideWidget(target) {
   if (!target) return;
   if (!target.__h3studioHidden) {
@@ -160,6 +167,7 @@ function referenceForLink(previous, link, ordinal) {
     role_auto: inherited.role_auto ?? (inherited.role || "auto") === "auto",
     retention_auto: inherited.retention_auto ?? (inherited.role || "auto") === "auto",
     description: inherited.description || "",
+    description_auto: inherited.description_auto ?? !String(inherited.description || "").trim(),
     enabled: true,
     source_node_id: String(link.source_id),
     source_slot: link.source_slot,
@@ -204,6 +212,8 @@ function stateFromNode(node) {
     references.push(referenceForLink(persisted, link, references.length + 1));
   }
   persisted.prompt = String(widget(node, "prompt")?.value || persisted.prompt || "");
+  const nativeSeed = Number(widget(node, "seed")?.value);
+  if (Number.isFinite(nativeSeed) && nativeSeed >= 0) persisted.generation.seed = Math.trunc(nativeSeed);
   persisted.references = references.map((reference, index) => ({ ...reference, ordinal: index + 1 }));
   return normalizeState(persisted);
 }
@@ -302,12 +312,12 @@ function section(title, body, accessory = null, description = "") {
 
 function samplingHelp(profile) {
   if (String(profile).startsWith("pdd_ref2va")) {
-    if (String(profile).endsWith("600")) return "PDD checkpoint 600: an alternate Mamad8 four-step REF2VA student checkpoint. Requires its matching ckpt-600 LoRA and heads. The first patched-model load is expensive; repeated seeds now reuse the prepared patch and conditioning when the prompt and references are unchanged.";
-    return "PDD checkpoint 900: the later Mamad8 four-step REF2VA student checkpoint and the recommended PDD starting point. Requires its matching ckpt-900 LoRA and heads. The first patched-model load is expensive; repeated seeds now reuse the prepared patch and conditioning when the prompt and references are unchanged.";
+    if (String(profile).endsWith("600")) return "PDD checkpoint 600: Mamad8's alternate four-step REF2VA student. H3 Studio loads its matching LoRA and heads automatically and uses ComfyUI's bypass adapter path to avoid slow quantized-weight merging.";
+    return "PDD checkpoint 900: Mamad8's later four-step REF2VA student and the recommended PDD starting point. H3 Studio loads its matching LoRA and heads automatically and uses ComfyUI's bypass adapter path to avoid slow quantized-weight merging.";
   }
   if (String(profile).startsWith("lightx")) {
-    if (String(profile).includes("sa_solver")) return "LightX SA-Solver 4: experimental four-step schedule for the matching LightX v0.1 LoRA. Fast after loading; use only when that exact LoRA is already applied to the selected model.";
-    return "LightX ER-SDE 4: experimental four-step schedule for the matching LightX v0.1 LoRA. Fast after loading; use only when that exact LoRA is already applied to the selected model.";
+    if (String(profile).includes("sa_solver")) return "LightX SA-Solver 4: H3 Studio loads the real LightX v0.1 LoRA automatically. SA-Solver is a stochastic Adams multistep method: it reuses earlier model evaluations and can produce smoother, more stable structure at very low step counts. It is not deterministic.";
+    return "LightX ER-SDE 4: H3 Studio loads the real LightX v0.1 LoRA automatically. ER-SDE follows an extended reverse-time stochastic equation with a short-step solver; it can give a different texture/detail balance from SA-Solver. Neither is universally better, so compare them with the same prompt and seed.";
   }
   if (profile === "base_balanced_12") return "Base Balanced: native H3 at 12 RES steps. No LoRA or external package; faster than Base Quality with a smaller quality margin.";
   return "Base Quality: native H3 at 20 RES steps. No LoRA or external package; slowest sampling but the safest quality baseline.";
@@ -330,7 +340,7 @@ function generationSection(node, state, refresh) {
   sampling.title = samplingHelp(generation.sampling_profile);
   const frames = selectControl(generation.frame_profile, FRAME_PROFILES, "Temporal packet length", (value) => update({ frame_profile: value }));
   const seed = numberControl(generation.seed, { min: 0, max: Number.MAX_SAFE_INTEGER, step: 1 }, "Seed", (value) => update({ seed: Math.max(0, Math.trunc(value)) }));
-  const random = iconButton("Randomize seed", "↻", () => update({ seed: Math.floor(Math.random() * 0x7fffffff) }));
+  const random = iconButton("Randomize seed", "↻", () => update({ seed: randomSeed() }));
   const seedWrap = element("div", { className: "h3s-seed-row" }, [seed, random]);
   const plan = planResolution(generation.aspect_ratio, generation.megapixels, generation.custom_width, generation.custom_height, true);
   const preview = element("div", { className: "h3s-resolution-preview" }, [
@@ -395,10 +405,10 @@ function promptSection(node, state, refresh) {
     refresh();
   };
   const options = state.prompt_options;
-  const visibleEnhanceMode = options.enhance_mode === "vlm" ? "compile_only" : options.enhance_mode;
-  const enhance = selectControl(visibleEnhanceMode, [
+  const enhance = selectControl(options.enhance_mode, [
     ["off", "Keep my prompt"], ["single_prompt", "Clear one-line instruction"],
     ["compile_only", "Structured production brief"],
+    ["vlm", "Analyze images + production brief"],
   ], "Prompt enhancement", (value) => update({ enhance_mode: value }));
   const adherenceValue = element("span", { className: "h3s-inline-value", text: `${Math.round(options.adherence * 100)}%` });
   const adherence = rangeControl(options.adherence, { min: 0, max: 1, step: 0.05 }, "Reference adherence", (value) => {
@@ -411,9 +421,7 @@ function promptSection(node, state, refresh) {
     off: "Keeps your wording exactly and only converts @Image tags into H3's native reference syntax.",
     single_prompt: "Turns your request into one direct, easy-to-read H3 instruction with explicit image roles and preservation rules. It has no headings or line breaks and works especially well for simple edits and reference combinations.",
     compile_only: "Builds the four-section subject, summary, retention, and detailed-description format for complex art direction. It assigns roles from your wording but does not pretend to visually analyze an image.",
-    vlm: options.analyzer_model
-      ? "The selected standalone vision-language model studies the references first, then H3 Studio builds the structured production brief."
-      : "No standalone analyzer is selected, so generation safely falls back to Build H3 production brief. H3's loaded ConvRot encoder still conditions the final generation but cannot act as this separate analyzer.",
+    vlm: "A full Qwen3-VL analyzer from H3 Studio Loader inspects the actual pixels, assigns roles and descriptions, then builds the production brief. Its analysis is cached when only the seed changes. The separate H3 ConvRot encoder still creates final model conditioning.",
   };
   const body = element("div", { className: "h3s-section-stack" }, [
     element("div", { className: "h3s-grid" }, [
@@ -482,7 +490,7 @@ function referenceCard(node, state, reference, index, refresh) {
   const description = element("textarea", {
     className: "h3s-reference-description", value: reference.description,
     placeholder: "What this image defines…", attrs: { "aria-label": `Description for Image ${index + 1}` },
-    on: { change: (event) => mutate({ description: event.target.value }) },
+    on: { change: (event) => mutate({ description: event.target.value, description_auto: false }) },
   });
   const controls = element("div", { className: "h3s-reference-controls" }, [role, retention]);
   const retentionHint = element("div", { className: "h3s-reference-help", text: retentionHelp[reference.retention] });
@@ -493,7 +501,7 @@ function referenceCard(node, state, reference, index, refresh) {
       : null
   );
   const roleHint = autoChange
-    ? element("div", { className: "h3s-auto-role", text: `${changedNow ? "Prompt updated" : "Prompt-managed"} · ${autoChange.role} · ${autoChange.retention}` })
+    ? element("div", { className: "h3s-auto-role", text: `${changedNow?.analyzed ? "Image analyzed" : changedNow ? "Prompt updated" : "Prompt-managed"} · ${autoChange.role} · ${autoChange.retention}` })
     : null;
   return element("article", { className: `h3s-reference-card${autoChange ? " h3s-reference-card-auto" : ""}` }, [
     thumb,
@@ -530,6 +538,7 @@ async function addImages(node, state, refresh, providedFiles = null) {
         role_auto: true,
         retention_auto: true,
         description: "",
+        description_auto: true,
         enabled: true,
         source_node_id: null,
         source_slot: 0,
@@ -588,7 +597,7 @@ function referencesSection(node, state, refresh) {
   const body = element("div", { className: "h3s-section-stack" }, [
     element("p", {
       className: "h3s-context-help",
-      text: "Auto assigns roles from the words around each @Image tag. It does not inspect image pixels; add a short description when exact visible traits, colors, clothing details, or identity features must appear in the compiled brief.",
+      text: "Visual analysis uses the full Qwen3-VL model selected in H3 Studio Loader to inspect the actual pixels, assign each @Image role, and fill these descriptions. Manual descriptions stay under your control.",
     }),
     list,
   ]);
@@ -671,9 +680,13 @@ function installPanel(node) {
   const originalExecuted = node.onExecuted;
   node.onExecuted = function h3studioExecuted(message) {
     const result = originalExecuted?.apply(this, arguments);
+    const completedSeed = stateFromNode(this).generation.seed;
     const roles = executionValue(message, "reference_roles");
     const retentions = executionValue(message, "reference_retentions");
-    const { state, changes: autoChanges } = applyReferenceInferences(stateFromNode(this), roles, retentions);
+    const descriptions = executionValue(message, "reference_descriptions");
+    const { state, changes: autoChanges } = applyReferenceInferences(
+      stateFromNode(this), roles, retentions, descriptions,
+    );
     applyState(this, state, false);
     this.__h3studioAutoChanges = autoChanges;
     this.__h3studioResult = {
@@ -684,6 +697,15 @@ function installPanel(node) {
       diagnostics: executionValue(message, "diagnostics")[0] || "",
     };
     queueMicrotask(() => renderPanel(this));
+    // ComfyUI updates control_after_generate on the hidden native seed widget.
+    // Synchronize that next seed back into the visible Studio state after the
+    // execution event instead of restoring the previous queue's value.
+    setTimeout(() => {
+      const synced = stateFromNode(this);
+      if (synced.generation.seed === completedSeed) synced.generation.seed = randomSeed();
+      applyState(this, synced, false);
+      renderPanel(this);
+    }, 50);
     return result;
   };
   const originalConnectionsChange = node.onConnectionsChange;

@@ -39,6 +39,9 @@ _CONDITIONING_CACHE_VALUE = None
 _PDD_PATCH_CACHE_LOCK = threading.RLock()
 _PDD_PATCH_CACHE_KEY = None
 _PDD_PATCH_CACHE_VALUE = None
+_LIGHTX_PATCH_CACHE_LOCK = threading.RLock()
+_LIGHTX_PATCH_CACHE_KEY = None
+_LIGHTX_PATCH_CACHE_VALUE = None
 
 LEGACY_MODE_IMAGE = "image"
 LEGACY_MODE_REFERENCE = "reference"
@@ -117,6 +120,7 @@ def _state_from_widgets(
                 enabled=True,
                 role_auto=existing.role_auto if existing else role == "auto",
                 retention_auto=existing.retention_auto if existing else role == "auto",
+                description_auto=existing.description_auto if existing else not description.strip(),
             )
         )
     if str(studio_state or "").strip() and persisted.generation.mode in MODES:
@@ -168,6 +172,7 @@ class H3StudioDirector:
         optional: dict[str, Any] = {
             "media": ("*",),
             "media_filename": ("STRING", {"default": ""}),
+            "h3_bundle": ("H3_STUDIO_BUNDLE",),
         }
         for index in range(1, MAX_REFERENCE_IMAGES + 1):
             optional[f"media_{index}"] = ("*",)
@@ -245,6 +250,7 @@ class H3StudioDirector:
         **kwargs,
     ):
         del resolution, seconds, advanced, fps, keyframe_role, ref_image_size, reference_mention_mode
+        h3_bundle = kwargs.pop("h3_bundle", None)
         images, filenames, storage_names = collect_images(kwargs)
         state = _state_from_widgets(
             prompt,
@@ -267,7 +273,22 @@ class H3StudioDirector:
             kwargs,
         )
         compiler = PromptCompiler()
-        compile_result, vlm_note = compile_with_optional_vlm(state, images, compiler=compiler)
+        if state.prompt_options.enhance_mode == "vlm" and images:
+            from ..prompting.comfy_analyzer import analyze_references
+
+            analyzer = h3_bundle.analyzer_for_analysis() if isinstance(h3_bundle, H3StudioBundle) else None
+            analyzed_references, vlm_note = analyze_references(
+                analyzer,
+                state.prompt,
+                state.enabled_references,
+                images,
+            )
+            state = state.with_references(analyzed_references)
+            compile_result = compiler.compile(state)
+        else:
+            compile_result, vlm_note = compile_with_optional_vlm(state, images, compiler=compiler)
+        # Persist both deterministic and visual role decisions into the cards.
+        state = state.with_references(compile_result.references)
         plan = state.generation.resolution()
         from ..acceleration import route_for_profile
 
@@ -304,6 +325,7 @@ class H3StudioDirector:
                 "reference_labels": reference_labels,
                 "reference_roles": [reference.effective_role for reference in compile_result.references],
                 "reference_retentions": [reference.retention for reference in compile_result.references],
+                "reference_descriptions": [reference.description for reference in compile_result.references],
                 "diagnostics": [diagnostics],
             },
             "result": result,
@@ -462,7 +484,8 @@ class H3StudioContextSamplingPreset:
 
     def build(self, model, studio_context):
         global _PDD_PATCH_CACHE_KEY, _PDD_PATCH_CACHE_VALUE
-        from ..acceleration import build_pdd_backend, is_pdd_profile
+        global _LIGHTX_PATCH_CACHE_KEY, _LIGHTX_PATCH_CACHE_VALUE
+        from ..acceleration import build_lightx_backend, build_pdd_backend, is_pdd_profile
         from .image_runtime import H3StudioSamplingPreset
 
         if not isinstance(studio_context, H3StudioContext):
@@ -484,6 +507,17 @@ class H3StudioContextSamplingPreset:
                     )
                     _PDD_PATCH_CACHE_KEY = cache_key
                     _PDD_PATCH_CACHE_VALUE = result
+        elif profile.startswith("lightx_"):
+            cache_key = (id(model), profile)
+            with _LIGHTX_PATCH_CACHE_LOCK:
+                if cache_key == _LIGHTX_PATCH_CACHE_KEY and _LIGHTX_PATCH_CACHE_VALUE is not None:
+                    result = _LIGHTX_PATCH_CACHE_VALUE
+                    result = (*result[:3], f"{result[3]} | patch_cache=hit")
+                    LOGGER.info("[H3 Studio] LightX patch cache hit; reused the loaded adapter")
+                else:
+                    result = build_lightx_backend(model, profile)
+                    _LIGHTX_PATCH_CACHE_KEY = cache_key
+                    _LIGHTX_PATCH_CACHE_VALUE = result
         else:
             runtime_profile = SAMPLING_PROFILE_TO_RUNTIME[profile]
             result = H3StudioSamplingPreset().build(model, runtime_profile)

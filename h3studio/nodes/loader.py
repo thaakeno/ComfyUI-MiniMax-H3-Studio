@@ -23,6 +23,8 @@ except Exception:  # pragma: no cover - ComfyUI always provides this at runtime
     comfy = None
 
 NONE_MODEL = "None"
+AUTO_ANALYZER = "Auto · Qwen3-VL 4B"
+DISABLED_ANALYZER = "Disabled"
 _WEIGHT_SUFFIXES = (".safetensors", ".gguf", ".ckpt", ".pt", ".pth", ".bin")
 _H3_TOKENS = ("minimax", "h3", "fl2va", "ref2va")
 LOGGER = logging.getLogger(__name__)
@@ -89,6 +91,26 @@ def clip_choices() -> list[str]:
     )
 
 
+def analyzer_choices() -> list[str]:
+    values = _filenames("text_encoders", "clip")
+    selected = [
+        value
+        for value in values
+        if "qwen3vl" in _compact(value) and "minimax" not in _compact(value) and "h3" not in _compact(value)
+    ]
+    return [AUTO_ANALYZER, DISABLED_ANALYZER, *selected]
+
+
+def _resolve_analyzer(name: str) -> str | None:
+    if name == DISABLED_ANALYZER or _is_none(name):
+        return None
+    values = analyzer_choices()[2:]
+    if name != AUTO_ANALYZER:
+        return name
+    preferred = next((value for value in values if "qwen3vl4bfp8scaled" in _compact(value)), None)
+    return preferred or next((value for value in values if "qwen3vl4b" in _compact(value)), None)
+
+
 def vae_choices() -> list[str]:
     values = _filenames("vae")
     return _filtered(values, lambda value: "minimaxh3video" in _compact(value), "minimax_h3_video_vae_fp16.safetensors")
@@ -127,6 +149,14 @@ def _load_clip(name: str):
         return loader.load_clip(name, type="minimax")[0]
 
 
+def _load_analyzer_clip(name: str):
+    loader = nodes.CLIPLoader()
+    try:
+        return loader.load_clip(name, "krea2")[0]
+    except TypeError:
+        return loader.load_clip(name, type="krea2")[0]
+
+
 def _load_vae(name: str):
     return nodes.VAELoader().load_vae(name)[0]
 
@@ -137,8 +167,10 @@ class H3StudioBundle:
     ref2va_name: str
     clip_name: str
     video_vae_name: str
+    analyzer_name: str | None
     clip: Any
     video_vae: Any
+    analyzer_clip: Any = None
     _model: Any = field(default=None, init=False, repr=False)
     _model_name: str = field(default="", init=False, repr=False)
     _model_kind: str = field(default="", init=False, repr=False)
@@ -152,6 +184,15 @@ class H3StudioBundle:
         if not _is_none(fallback):
             return fallback
         raise ValueError("Select at least one H3 transformer in H3 Studio Loader.")
+
+    def analyzer_for_analysis(self):
+        if not self.analyzer_name:
+            return None
+        with self._lock:
+            if self.analyzer_clip is None:
+                LOGGER.info("[H3 Studio] Loading visual analyzer=%s", self.analyzer_name)
+                self.analyzer_clip = _load_analyzer_clip(self.analyzer_name)
+            return self.analyzer_clip
 
     def model_for(self, kind: str):
         kind = "ref2va" if kind == "ref2va" else "fl2va"
@@ -177,7 +218,8 @@ class H3StudioBundle:
     def summary(self) -> str:
         return (
             f"FL2VA={self.fl2va_name} | REF2VA={self.ref2va_name} | "
-            f"CLIP={self.clip_name} | Video VAE={self.video_vae_name}"
+            f"CLIP={self.clip_name} | Video VAE={self.video_vae_name} | "
+            f"Image analyzer={self.analyzer_name or 'disabled/missing'}"
         )
 
 
@@ -196,19 +238,39 @@ class H3StudioLoader:
                 "ref2va_model": (ref2va_choices(), {"default": next((v for v in ref2va_choices() if v != NONE_MODEL), NONE_MODEL)}),
                 "text_encoder": (clip_choices(),),
                 "video_vae": (vae_choices(),),
+                "image_analyzer": (analyzer_choices(), {"default": AUTO_ANALYZER}),
             }
         }
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
-        return "|".join(str(kwargs.get(key, "")) for key in ("fl2va_model", "ref2va_model", "text_encoder", "video_vae"))
+        return "|".join(
+            str(kwargs.get(key, ""))
+            for key in ("fl2va_model", "ref2va_model", "text_encoder", "video_vae", "image_analyzer")
+        )
 
     @staticmethod
-    def load(fl2va_model: str, ref2va_model: str, text_encoder: str, video_vae: str):
+    def load(
+        fl2va_model: str,
+        ref2va_model: str,
+        text_encoder: str,
+        video_vae: str,
+        image_analyzer: str = AUTO_ANALYZER,
+    ):
         if _is_none(fl2va_model) and _is_none(ref2va_model):
             raise ValueError("Select at least one MiniMax H3 transformer: FL2VA or REF2VA.")
         clip = _load_clip(text_encoder)
         vae = _load_vae(video_vae)
-        bundle = H3StudioBundle(fl2va_model, ref2va_model, text_encoder, video_vae, clip, vae)
+        analyzer_name = _resolve_analyzer(image_analyzer)
+        bundle = H3StudioBundle(
+            fl2va_model,
+            ref2va_model,
+            text_encoder,
+            video_vae,
+            analyzer_name,
+            clip,
+            vae,
+            None,
+        )
         LOGGER.info("\n[H3 Studio] Model bundle\n  %s", bundle.summary())
         return bundle, clip, vae, bundle.summary()

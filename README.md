@@ -17,7 +17,7 @@ This repository keeps the strongest parts and changes the architecture:
 - Text-to-image works with no reference attached.
 - Aspect ratio and megapixels resolve to H3-safe dimensions aligned to 32.
 - Prompt compilation emits only `subject_definitions`, `summary`, `retention_analysis`, and `detailed_description`.
-- Optional VLM analysis is explicit, local, and never downloads a model silently.
+- Optional visual analysis uses a full native ComfyUI Qwen3-VL checkpoint, is lazy and cached, and never downloads a model silently.
 - FL2VA and REF2VA remain observable routes instead of an unproven REF2VA-only assumption.
 - The Qwen3-VL encoder is used once in H3 conditioning; the Studio compiler does not duplicate that expensive pass.
 - Exact decode preserves the requested temporal packet before selecting a single still.
@@ -40,11 +40,11 @@ The generation panel exposes mode, aspect ratio, megapixels, seed, sampling spee
 
 ## Prompt enhancement
 
-The Director offers three prompt-shaping choices. **Keep my prompt** sends your wording unchanged apart from converting `@Image N` into H3's native `<Picture N>` labels. **Clear one-line instruction** turns a short request into one direct, heading-free instruction with explicit reference roles and preservation rules; this is the recommended choice for edits such as “change his hair to green @Image 1” and combinations such as “use the person from @Image 2 with the clothes from @Image 1.” **Structured production brief** builds the four-section format for complex posters, layouts, art direction, and longer multi-part requests.
+The Director offers four prompt-shaping choices. **Keep my prompt** sends your wording unchanged apart from converting `@Image N` into H3's native `<Picture N>` labels. **Clear one-line instruction** creates a direct heading-free instruction. **Structured production brief** builds the four-section format. **Analyze images + production brief** uses the full Qwen3-VL analyzer selected in the Loader to inspect the actual reference pixels, assign roles and retention, fill each card's visible description, and then build the same strict four-section brief. Image analysis is cached when only the seed changes.
 
 Generation modes name their model path in the UI. Text to image uses FL2VA. Image to image uses FL2VA with Image 1 as a first-frame/source anchor and preserves its canvas. Reference mix/edit uses REF2VA and treats one or more tagged images as independent sources to combine. Auto chooses text-to-image FL2VA with no references, anchored FL2VA with one reference, and REF2VA with two or more references.
 
-`Production brief` is the safe default. It deterministically converts the user's request and reference metadata into:
+`Analyze images + production brief` is the maintained workflow default when references are present. `Structured production brief` provides the deterministic no-analysis version. Both produce:
 
 ```text
 subject_definitions:
@@ -62,7 +62,7 @@ detailed_description:
 A coherent natural-language production brief preserving the user's intent.
 ```
 
-`VLM analysis + brief` can use a separately selected local instruction-capable vision-language model through Transformers. It may inspect the attached images and draft richer definitions before the deterministic compiler enforces the four-section contract. The model path is explicit, automatic downloading is disabled, and the analyzer unloads by default.
+`Analyze images + production brief` uses ComfyUI's native full Qwen3-VL 4B implementation. The maintained workflow selects `qwen3vl_4b_fp8_scaled.safetensors` automatically when present. The model is loaded only when references actually need analysis; manual card descriptions are never overwritten.
 
 The `qwen3vl_32b_minimax_h3_int8_convrot.safetensors` loaded with ComfyUI's `CLIPLoader`/MiniMax path remains H3's multimodal conditioning encoder. A ConvRot encoder checkpoint is not assumed to expose a general autoregressive chat interface, so it is not silently treated as the separate prompt writer.
 
@@ -90,12 +90,6 @@ pip install -r requirements.txt
 
 Restart ComfyUI and open `example_workflows/H3_Studio_Unified_Image.json`.
 
-For optional local VLM analysis:
-
-```bash
-pip install -e ".[vlm]"
-```
-
 No install script moves, deletes, or downloads model files. Select the models already present in your ComfyUI folders through the H3 Studio Loader.
 
 Expected model categories:
@@ -103,11 +97,19 @@ Expected model categories:
 ```text
 ComfyUI/models/diffusion_models/  MiniMax H3 FL2VA and REF2VA transformers
 ComfyUI/models/text_encoders/     qwen3vl_32b_minimax_h3_int8_convrot.safetensors
+ComfyUI/models/text_encoders/     qwen3vl_4b_fp8_scaled.safetensors (full image analyzer)
 ComfyUI/models/vae/               minimax_h3_video_vae_int8_convrot.safetensors
 ComfyUI/models/vae_approx/        taeh3.safetensors (optional live preview only)
+ComfyUI/models/loras/             minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy_resized_avg_rank_21_bf16.safetensors
 ```
 
 Exact filenames depend on the checkpoint distribution. The bundled workflow contains the filenames used by Alier's current Lightning setup; choose the actual installed entries if they differ.
+
+The full 4B analyzer is separate because H3's 32B ConvRot checkpoint is deliberately truncated for conditioning and has no language-model head capable of writing descriptions. Both remain inside ComfyUI; LM Studio and Ollama are not involved.
+
+### LightX v0.1 acceleration
+
+Both four-step LightX choices load Kijai's real LightX v0.1 LoRA automatically at strength `0.8`. ER-SDE is an extended reverse-time stochastic solver; SA-Solver is a stochastic Adams multistep solver that reuses previous evaluations. Neither is universally better, so compare them with the same prompt and seed. On current ComfyUI, H3 Studio uses bypass-forward LoRA injection to avoid eagerly merging and requantizing the INT8/FP8 base model.
 
 ### Optional Mamad8 PDD REF2VA acceleration
 
@@ -127,7 +129,7 @@ ComfyUI/models/loras/       LORA_h3_pdd_af384_step600_s.safetensors or step900
 ComfyUI/models/pdd_heads/   HEADS_h3_pdd_af384_step600_bank.safetensors or step900
 ```
 
-Restart ComfyUI after installing the package. Selecting PDD without the external nodes, a matching artifact pair, at least one reference, or a REF2VA route fails with a specific corrective message instead of silently falling back. Base profiles remain completely independent of PDD.
+Restart ComfyUI after installing the package. Selecting PDD without the external nodes, a matching artifact pair, at least one reference, or a REF2VA route fails with a specific corrective message instead of silently falling back. Current ComfyUI uses bypass-forward LoRA injection, which avoids the multi-minute quantized merge/requantize stall; older ComfyUI builds fall back to legacy patches and print a clear warning. Base profiles remain completely independent of PDD.
 
 For fast approximate previews during sampling, download [Kijai's TAEH3 decoder](https://huggingface.co/Kijai/MiniMax-H3-TAE/blob/main/vae_approx/taeh3.safetensors) into `ComfyUI/models/vae_approx/`, then enable the bundled **Live Preview · TAEH3** node. Leave it disabled if the file is absent. Final saving always uses the full H3 VAE.
 

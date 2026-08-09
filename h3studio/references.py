@@ -86,6 +86,7 @@ class ReferenceImage:
     tags: tuple[str, ...] = field(default_factory=tuple)
     role_auto: bool = False
     retention_auto: bool = False
+    description_auto: bool = False
 
     @property
     def mention(self) -> str:
@@ -123,6 +124,7 @@ class ReferenceImage:
             "tags": list(self.tags),
             "role_auto": self.role_auto,
             "retention_auto": self.retention_auto,
+            "description_auto": self.description_auto,
         }
         if self.storage_name:
             payload["storage_name"] = self.storage_name
@@ -158,6 +160,7 @@ class ReferenceImage:
             tags=tags,
             role_auto=bool(value.get("role_auto", canonical_role(value.get("role")) == "auto")),
             retention_auto=bool(value.get("retention_auto", canonical_role(value.get("role")) == "auto")),
+            description_auto=bool(value.get("description_auto", not str(value.get("description") or "").strip())),
         )
 
 
@@ -307,7 +310,7 @@ def infer_roles_from_prompt(prompt: str, references: Sequence[ReferenceImage], w
     mentions = list(iter_mentions(prompt))
     inferred: list[ReferenceImage] = []
     for reference in references:
-        if reference.role != "auto" and not reference.role_auto:
+        if "visually_analyzed" in reference.tags or (reference.role != "auto" and not reference.role_auto):
             inferred.append(reference)
             continue
         matching = [mention for mention in mentions if mention.ordinal == reference.ordinal]

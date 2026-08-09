@@ -180,6 +180,16 @@ def test_adherence_changes_discipline_text() -> None:
     assert "substantial visual interpretation" in PromptCompiler().compile(loose_state).rendered
 
 
+def test_directional_gaze_becomes_a_hard_frame_constraint() -> None:
+    state = StudioState(
+        prompt="Show the person in @Image1 with the glasses from @Image2 and make him look to the right",
+        references=(ref(1), ref(2)),
+    )
+    result = PromptCompiler().compile(state)
+    assert "turn the head and direct the eyes toward frame-right" in result.native_prompt
+    assert "do not preserve a frontal head direction or frontal gaze" in result.native_prompt
+
+
 def test_accept_enhanced_normalizes_sections() -> None:
     base = PromptCompiler().compile(StudioState(prompt="A poster"))
     enhanced = """subject_definitions:

@@ -118,7 +118,7 @@ def director_widgets(state_json: str):
         "index",
         1.0,
         42,
-        "compile_only",
+        "vlm",
         0.85,
         "auto",
         "base_quality_20",
@@ -348,11 +348,11 @@ def build_subgraph():
 def build_workflow():
     links = Links()
     state = {
-        "schema_version": 5,
+        "schema_version": 6,
         "prompt": "Describe the final still image.",
         "references": [],
         "prompt_options": {
-            "enhance_mode": "compile_only",
+            "enhance_mode": "vlm",
             "adherence": 0.85,
             "detail_level": "detailed",
             "preserve_user_text": True,
@@ -386,6 +386,7 @@ def build_workflow():
 
     l_context_condition = links.add(10, 0, 12, 1, "H3_STUDIO_CONTEXT")
     l_bundle_condition = links.add(11, 0, 12, 0, "H3_STUDIO_BUNDLE")
+    l_bundle_director = links.add(11, 0, 10, 23, "H3_STUDIO_BUNDLE")
     l_model_preview = links.add(12, 0, 16, 0, "MODEL")
     l_preview_sub = links.add(16, 0, 13, 0, "MODEL")
     l_positive_sub = links.add(12, 2, 13, 1, "CONDITIONING")
@@ -419,6 +420,8 @@ def build_workflow():
         socket("analyzer_model", "STRING", widget="analyzer_model"),
         socket("studio_state", "STRING", widget="studio_state"),
         socket("media", "*", None, shape=7),
+        socket("media_filename", "STRING", widget="media_filename"),
+        socket("h3_bundle", "H3_STUDIO_BUNDLE", l_bundle_director),
     ]
     nodes = [
         node(
@@ -459,9 +462,10 @@ def build_workflow():
                 socket("ref2va_model", "COMBO", widget="ref2va_model"),
                 socket("text_encoder", "COMBO", widget="text_encoder"),
                 socket("video_vae", "COMBO", widget="video_vae"),
+                socket("image_analyzer", "COMBO", widget="image_analyzer"),
             ],
             outputs=[
-                output("h3_bundle", "H3_STUDIO_BUNDLE", [l_bundle_condition]),
+                output("h3_bundle", "H3_STUDIO_BUNDLE", [l_bundle_condition, l_bundle_director]),
                 output("clip", "CLIP", None),
                 output("video_vae", "VAE", None),
                 output("model_info", "STRING", None),
@@ -471,6 +475,7 @@ def build_workflow():
                 "minimax_h3_ref2va_pruned_w4a8_mixed.safetensors",
                 "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
                 "minimax_h3_video_vae_int8_convrot.safetensors",
+                "Auto · Qwen3-VL 4B",
             ],
             color="#31475c",
             bgcolor="#202e3c",
@@ -586,7 +591,7 @@ def build_workflow():
             21,
             "Prompt enhancement · what actually happens",
             "settings",
-            "Production brief compiles deterministic sections: subject_definitions, summary, retention_analysis, and detailed_description. VLM analysis is optional and requires an explicitly selected local instruction-capable vision-language model. The Qwen3-VL ConvRot encoder loaded for H3 conditioning is not silently repurposed as a text generator. No model is downloaded automatically.",
+            "Analyze images + production brief uses a full native ComfyUI Qwen3-VL 4B checkpoint to inspect actual reference pixels, assign roles and descriptions, then compile subject_definitions, summary, retention_analysis, and detailed_description. The H3 ConvRot encoder remains the separate conditioning encoder because it has no language-model head. No model is downloaded automatically.",
             [-910, -180],
             [520, 320],
             11,
@@ -631,7 +636,7 @@ def build_workflow():
             26,
             "Sampling and frame extraction",
             "models",
-            "H3 emits a short temporal latent even when the desired output is one image. The bundled subgraph samples that packet, decodes the exact requested profile, and selects the decoder-recommended stable frame. Base Quality needs no acceleration files. LightX profiles expect their matching LoRA upstream. Mamad8 PDD profiles are REF2VA-only and automatically pair the selected 600/900 student LoRA with its heads bank through the separately installed Mamad8 node package.",
+            "H3 emits a short temporal latent even when the desired output is one image. The bundled subgraph samples that packet, decodes the exact requested profile, and selects the decoder-recommended stable frame. Base Quality needs no acceleration files. LightX profiles automatically apply Kijai's matching v0.1 LoRA. Mamad8 PDD profiles are REF2VA-only and pair the selected 600/900 student LoRA with its heads bank through the separately installed Mamad8 node package. Current ComfyUI uses bypass-forward adapters to avoid slow quantized weight merging.",
             [1560, 700],
             [430, 310],
             16,
@@ -701,7 +706,7 @@ def build_workflow():
             "ds": {"scale": 0.72, "offset": [1120, 330]},
             "frontendVersion": "1.30.0",
             "h3studio": {
-                "schema_version": 5,
+                "schema_version": 6,
                 "template_version": "1.2.0",
                 "design_source": "Alier v1.3.7 geometry",
                 "audio_prompt_sections": False,

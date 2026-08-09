@@ -35,6 +35,24 @@ _LEGACY_RUNTIME_REF_RE = re.compile(
 )
 
 
+def _hard_constraints(prompt: str) -> tuple[str, ...]:
+    """Translate easy-to-miss pose/gaze language into visible frame constraints."""
+
+    lowered = str(prompt or "").lower()
+    constraints: list[str] = []
+    if re.search(r"\b(?:look|looking|gaze|face|turn(?:ed)?(?: his| her| their)? head)\b[^.!?]{0,35}\bto (?:the )?right\b", lowered):
+        constraints.append(
+            "The requested person must visibly turn the head and direct the eyes toward frame-right; "
+            "do not preserve a frontal head direction or frontal gaze from any reference."
+        )
+    if re.search(r"\b(?:look|looking|gaze|face|turn(?:ed)?(?: his| her| their)? head)\b[^.!?]{0,35}\bto (?:the )?left\b", lowered):
+        constraints.append(
+            "The requested person must visibly turn the head and direct the eyes toward frame-left; "
+            "do not preserve a frontal head direction or frontal gaze from any reference."
+        )
+    return tuple(constraints)
+
+
 def normalize_user_prompt(value: str) -> str:
     text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
     text = _INVISIBLE_RE.sub("", text)
@@ -128,9 +146,11 @@ def _summary(prompt: str, references: Sequence[ReferenceImage], mode: str) -> st
         )
         for reference in references
     )
+    hard = " ".join(_hard_constraints(prompt))
     return (
         f"[image generation] {mode_text}: {compact}. "
-        f"Reference assignments: {assignments}. Produce one coherent final image, not a reference sheet or collage."
+        f"Reference assignments: {assignments}. Produce one coherent final image, not a reference sheet or collage. "
+        f"{hard}"
     ).strip()
 
 
@@ -153,10 +173,17 @@ def _description(prompt: str, references: Sequence[ReferenceImage], state: Studi
         )
         for reference in references
     ) or "- No reference images."
+    hard_constraints = _hard_constraints(prompt)
+    hard_text = (
+        "\n".join(f"- {constraint}" for constraint in hard_constraints)
+        if hard_constraints
+        else "- Preserve every explicit user-requested action, edit, pose, gaze, direction, object and relationship."
+    )
     return (
         f"Create one finished {resolution.aspect_ratio} {resolution.orientation} image at approximately "
         f"{resolution.actual_megapixels:.2f} megapixels ({resolution.width} × {resolution.height}).\n\n"
         f"Final-image instruction: {prompt}\n\n"
+        f"Hard constraints (must be visibly satisfied):\n{hard_text}\n\n"
         f"Reference contract:\n{reference_text}\n\n"
         "Synthesis rule: render one finished scene containing only the subject(s) requested by the user. Reference "
         "images are source material, not extra people, cutouts, panels, mannequins, or objects to reproduce. Never "
@@ -217,6 +244,9 @@ def _infer_retentions(
 
     resolved: list[ReferenceImage] = []
     for reference in references:
+        if "visually_analyzed" in reference.tags:
+            resolved.append(reference)
+            continue
         auto_managed = reference.retention_auto or reference.role_auto or reference.role == "auto"
         if not auto_managed:
             resolved.append(reference)

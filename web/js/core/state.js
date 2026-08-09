@@ -1,4 +1,4 @@
-export const STATE_SCHEMA_VERSION = 5;
+export const STATE_SCHEMA_VERSION = 6;
 export const MAX_REFERENCES = 9;
 export const MIN_MEGAPIXELS = 0.2;
 export const MAX_MEGAPIXELS = 2;
@@ -140,6 +140,7 @@ export function normalizeReference(value, ordinal) {
     role_auto: source.role_auto == null ? choice(source.role, ROLES, "auto") === "auto" : source.role_auto === true,
     retention_auto: source.retention_auto == null ? choice(source.role, ROLES, "auto") === "auto" : source.retention_auto === true,
     description: String(source.description || ""),
+    description_auto: source.description_auto == null ? !String(source.description || "").trim() : source.description_auto === true,
     enabled: source.enabled !== false,
     source_node_id: source.source_node_id == null ? null : String(source.source_node_id),
     source_slot: Math.max(0, Number(source.source_slot) || 0),
@@ -204,12 +205,13 @@ export function normalizeState(value) {
   };
 }
 
-export function applyReferenceInferences(value, roles = [], retentions = []) {
+export function applyReferenceInferences(value, roles = [], retentions = [], descriptions = []) {
   const state = normalizeState(value);
   const changes = {};
   state.references = state.references.map((reference, index) => {
     const nextRole = String(roles[index] || reference.role);
     const nextRetention = String(retentions[index] || reference.retention);
+    const nextDescription = String(descriptions[index] || "").trim();
     const canUpdateRole = reference.role === "auto" || reference.role_auto === true;
     const canUpdateRetention = reference.retention_auto === true || reference.role === "auto";
     const updated = {
@@ -218,9 +220,20 @@ export function applyReferenceInferences(value, roles = [], retentions = []) {
       retention: canUpdateRetention ? choice(nextRetention, RETENTION, reference.retention) : reference.retention,
       role_auto: canUpdateRole,
       retention_auto: canUpdateRetention,
+      description: nextDescription && (reference.description_auto === true || !reference.description.trim())
+        ? nextDescription
+        : reference.description,
+      description_auto: nextDescription && (reference.description_auto === true || !reference.description.trim())
+        ? true
+        : reference.description_auto,
     };
-    if ((canUpdateRole && updated.role !== reference.role) || (canUpdateRetention && updated.retention !== reference.retention)) {
+    if (
+      (canUpdateRole && updated.role !== reference.role)
+      || (canUpdateRetention && updated.retention !== reference.retention)
+      || updated.description !== reference.description
+    ) {
       changes[index] = { role: updated.role, retention: updated.retention };
+      if (updated.description !== reference.description) changes[index].analyzed = true;
     }
     return updated;
   });

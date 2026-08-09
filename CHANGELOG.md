@@ -2,6 +2,21 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [0.1.0-alpha.9] - 2026-08-09
+
+### Fixed
+
+- Made the visible seed follow ComfyUI's hidden `control_after_generate` widget, so Randomize advances and remains visible after every queue instead of being overwritten by stale Studio state.
+- Turned gaze and head-direction requests such as “look to the right” into explicit frame-right/frame-left hard constraints that override a reference image's original frontal pose.
+- Replaced quantized LoRA weight merging with ComfyUI's bypass-forward adapter path for LightX and PDD when supported, avoiding the multi-minute merge/requantize initialization seen with INT8/FP8 H3 models.
+- Made both LightX profiles load Kijai's actual LightX v0.1 LoRA instead of applying only a four-step sampling schedule.
+
+### Added
+
+- Added lazy native ComfyUI Qwen3-VL 4B visual analysis. It inspects the actual reference tensors, assigns role and retention, writes visible descriptions into the image cards, and caches analysis across seed-only reruns.
+- Added the full analyzer selector to H3 Studio Loader and wired its bundle directly into the Director in the maintained workflow.
+- Added accurate in-node explanations for ER-SDE, SA-Solver, LightX adapter loading, and PDD's accelerated adapter backend.
+
 ## [0.1.0-alpha.8] - 2026-08-09
 
 ### Fixed

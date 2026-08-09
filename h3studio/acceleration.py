@@ -13,6 +13,9 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
 
+LIGHTX_MODEL_REPOSITORY = "https://huggingface.co/Kijai/MiniMax-H3_comfy"
+LIGHTX_LORA_FILENAME = "minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy_resized_avg_rank_21_bf16.safetensors"
+
 PDD_REPOSITORY = "https://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8"
 PDD_MODEL_REPOSITORY = "https://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8"
 PDD_NODE_IDS = (
@@ -82,6 +85,7 @@ def resolve_artifact(
     expected: str,
     tokens: Iterable[str],
     kind: str,
+    repository: str = PDD_MODEL_REPOSITORY,
 ) -> str:
     """Resolve one artifact deterministically, rejecting ambiguous fallbacks."""
 
@@ -101,8 +105,7 @@ def resolve_artifact(
             "or remove the ambiguous duplicates."
         )
     raise PDDBackendError(
-        f"Missing {kind} artifact {expected!r}. Download the matching Mamad8 checkpoint from "
-        f"{PDD_MODEL_REPOSITORY}."
+        f"Missing {kind} artifact {expected!r}. Download the matching checkpoint from {repository}."
     )
 
 
@@ -130,19 +133,95 @@ def _first_output(result: Any, *, node_name: str) -> Any:
     return values[0]
 
 
-def _load_model_lora(model: Any, lora_name: str, strength: float, node_mappings: Mapping[str, Any]) -> Any:
+def _load_model_lora(
+    model: Any,
+    lora_name: str,
+    strength: float,
+    node_mappings: Mapping[str, Any],
+) -> tuple[Any, str]:
+    """Load an adapter without eagerly materializing quantized H3 weights.
+
+    Current ComfyUI exposes a bypass adapter path which performs the LoRA
+    contribution during each layer's forward pass.  This avoids the very slow
+    merge -> requantize cycle seen with INT8/FP8 H3 checkpoints.  Older ComfyUI
+    builds retain the normal node-loader fallback for compatibility.
+    """
+
+    try:
+        import comfy.sd
+        import comfy.utils
+        import folder_paths
+
+        bypass_loader = getattr(comfy.sd, "load_bypass_lora_for_models", None)
+        if bypass_loader is not None:
+            path = folder_paths.get_full_path_or_raise("loras", lora_name)
+            weights = comfy.utils.load_torch_file(path, safe_load=True)
+            patched, _clip = bypass_loader(model, None, weights, float(strength), 0.0)
+            return patched, "bypass-forward"
+    except Exception as exc:
+        # Keep an actionable fallback on older ComfyUI rather than making every
+        # acceleration profile unavailable.  The caller prints the backend so
+        # users can see whether the fast path was active.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "[H3 Studio] Bypass LoRA unavailable for %s (%s); using legacy weight patches. Update ComfyUI for fast quantized adapter loading.",
+            lora_name,
+            exc,
+        )
+
     loader_class = node_mappings.get("LoraLoaderModelOnly")
     if loader_class is not None:
         loader = loader_class()
         result = loader.load_lora_model_only(model, lora_name, float(strength))
-        return _first_output(result, node_name="ComfyUI LoRA Loader (model only)")
+        return _first_output(result, node_name="ComfyUI LoRA Loader (model only)"), "legacy-weight-patch"
 
     loader_class = node_mappings.get("LoraLoader")
     if loader_class is None:
         raise PDDBackendError("ComfyUI's LoRA Loader is unavailable; update ComfyUI before using Mamad8 PDD.")
     loader = loader_class()
     result = loader.load_lora(model, None, lora_name, float(strength), 0.0)
-    return _first_output(result, node_name="ComfyUI LoRA Loader")
+    return _first_output(result, node_name="ComfyUI LoRA Loader"), "legacy-weight-patch"
+
+
+def build_lightx_backend(model: Any, profile_key: str):
+    """Apply Kijai's actual LightX v0.1 adapter and its selected solver."""
+
+    if profile_key not in {"lightx_er_sde_4", "lightx_sa_solver_4"}:
+        raise PDDBackendError(f"Unknown LightX profile: {profile_key}")
+
+    import folder_paths
+    import nodes
+
+    choices = folder_paths.get_filename_list("loras")
+    lora_name = resolve_artifact(
+        choices,
+        expected=LIGHTX_LORA_FILENAME,
+        tokens=("minimax", "h3", "lightx", "4step"),
+        kind="LightX v0.1 LoRA",
+        repository=LIGHTX_MODEL_REPOSITORY,
+    )
+    strength = 0.8
+    patched_model, patch_backend = _load_model_lora(
+        model,
+        lora_name,
+        strength,
+        getattr(nodes, "NODE_CLASS_MAPPINGS", {}),
+    )
+
+    from .nodes.image_runtime import H3StudioSamplingPreset
+
+    runtime_profile = (
+        "LightX v0.1 | ER-SDE 4 steps"
+        if profile_key == "lightx_er_sde_4"
+        else "LightX v0.1 | SA-Solver 4 steps"
+    )
+    built_model, sampler, sigmas, base_info = H3StudioSamplingPreset().build(patched_model, runtime_profile)
+    info = (
+        f"{base_info} | adapter=LightX v0.1 | lora={lora_name} @ {strength:g} | "
+        f"lora_backend={patch_backend}"
+    )
+    return built_model, sampler, sigmas, info
 
 
 def build_pdd_backend(model: Any, profile_key: str, *, selected_route: str, reference_count: int):
@@ -180,7 +259,7 @@ def build_pdd_backend(model: Any, profile_key: str, *, selected_route: str, refe
         kind="PDD heads bank",
     )
 
-    lora_model = _load_model_lora(model, lora_name, profile.lora_strength, mappings)
+    lora_model, patch_backend = _load_model_lora(model, lora_name, profile.lora_strength, mappings)
 
     # Apply H3's trained 12/3 AV shift before the external patch so Mamad8's
     # enforce contract can validate the live model path rather than guessing.
@@ -216,6 +295,7 @@ def build_pdd_backend(model: Any, profile_key: str, *, selected_route: str, refe
         f"profile={profile.key} | backend=Mamad8 PDD external | checkpoint={profile.training_step} | "
         f"sampler=euler | scheduler=trained_blocks | steps={profile.blocks} | denoise=1 | "
         f"shift_video=12 | shift_audio=3 | lora={lora_name} @ {profile.lora_strength:g} | "
-        f"heads={heads_name} @ {profile.head_strength:g} | contract=enforce | sampling_backend={sampling_backend}"
+        f"lora_backend={patch_backend} | heads={heads_name} @ {profile.head_strength:g} | "
+        f"contract=enforce | sampling_backend={sampling_backend}"
     )
     return patched_model, sampler, sigmas, info
