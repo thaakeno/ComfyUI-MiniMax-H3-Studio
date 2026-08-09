@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from h3studio.benchmark import build_ab_variants, resolve_accelerator, short_profile_label
+from h3studio.benchmark import (
+    SEED_STRATEGIES,
+    build_ab_variants,
+    build_seed_plan,
+    resolve_accelerator,
+    short_profile_label,
+)
 
 
 def test_ab_matrix_builds_resolution_rows_with_baseline_then_accelerator() -> None:
@@ -27,3 +33,21 @@ def test_director_base_profile_requires_an_explicit_accelerator() -> None:
 def test_ab_labels_say_whether_a_lora_is_active() -> None:
     assert short_profile_label("base_quality_20", False).startswith("No LoRA")
     assert short_profile_label("lightx_er_sde_4", True).startswith("LoRA")
+
+
+def test_ab_seed_strategies_preserve_their_comparison_contracts() -> None:
+    assert build_seed_plan(42, SEED_STRATEGIES[0]) == (42, 42, 42, 42, 42, 42)
+    assert build_seed_plan(42, SEED_STRATEGIES[1], 10) == (42, 42, 52, 52, 62, 62)
+    assert build_seed_plan(42, SEED_STRATEGIES[2]) == (42, 43, 44, 45, 46, 47)
+
+
+def test_ab_variants_store_the_seed_shown_for_each_cell() -> None:
+    variants = build_ab_variants(
+        "Base Quality - RES 20",
+        "LightX v0.1 - ER-SDE 4",
+        "base_quality_20",
+        100,
+        SEED_STRATEGIES[1],
+        5,
+    )
+    assert [item.seed for item in variants] == [100, 100, 105, 105, 110, 110]

@@ -12,7 +12,14 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from ..benchmark import ACCELERATOR_PROFILES, BASELINE_PROFILES, ABVariantSpec, build_ab_variants, short_profile_label
+from ..benchmark import (
+    ACCELERATOR_PROFILES,
+    BASELINE_PROFILES,
+    SEED_STRATEGIES,
+    ABVariantSpec,
+    build_ab_variants,
+    short_profile_label,
+)
 from ..context import H3StudioContext
 from .director import H3StudioCondition, H3StudioContextSamplingPreset
 from .image_runtime import H3StudioDecode, H3StudioFrameSelector
@@ -50,7 +57,12 @@ def _outputs(value: Any) -> tuple[Any, ...]:
 
 
 def _variant_context(context: H3StudioContext, spec: ABVariantSpec) -> H3StudioContext:
-    generation = replace(context.state.generation, megapixels=spec.requested_megapixels, sampling_profile=spec.profile)
+    generation = replace(
+        context.state.generation,
+        megapixels=spec.requested_megapixels,
+        sampling_profile=spec.profile,
+        seed=spec.seed,
+    )
     state = replace(context.state, generation=generation)
     resolution = state.generation.resolution()
     replacement = (
@@ -123,7 +135,7 @@ def _to_pil(image: torch.Tensor | None, size: int, error: str = "") -> Image.Ima
     return canvas
 
 
-def _comparison_grid(results: list[_ABResult], seed: int, cell_size: int) -> torch.Tensor:
+def _comparison_grid(results: list[_ABResult], seed_strategy: str, cell_size: int) -> torch.Tensor:
     gap = 10
     header_height = 58
     label_height = 70
@@ -134,7 +146,7 @@ def _comparison_grid(results: list[_ABResult], seed: int, cell_size: int) -> tor
     draw = ImageDraw.Draw(grid)
     draw.text(
         (gap, 14),
-        f"H3 Studio A/B Matrix - same prompt, references and seed {seed}",
+        f"H3 Studio A/B Matrix - same prompt and references - {seed_strategy}",
         fill="#e5e7eb",
         font=_font(22, bold=True),
     )
@@ -151,23 +163,23 @@ def _comparison_grid(results: list[_ABResult], seed: int, cell_size: int) -> tor
         profile = short_profile_label(result.spec.profile, result.spec.accelerated)
         timing = "failed" if result.sampling_seconds is None else f"sampling {result.sampling_seconds:.2f}s"
         draw.text((x + 10, label_y + 8), f"{requested} - {actual}", fill="#f3f4f6", font=_font(16, bold=True))
-        draw.text((x + 10, label_y + 37), f"{profile} - {timing}", fill="#67e8d0", font=_font(15))
+        draw.text((x + 10, label_y + 37), f"seed {result.spec.seed} - {profile} - {timing}", fill="#67e8d0", font=_font(15))
 
     array = np.asarray(grid, dtype=np.uint8).copy()
     return torch.from_numpy(array).to(dtype=torch.float32).div_(255.0).unsqueeze(0)
 
 
 class H3StudioABComparison:
-    """Generate a six-cell, same-seed resolution and LoRA comparison grid."""
+    """Generate a six-cell, explicitly seeded resolution and LoRA comparison grid."""
 
     CATEGORY = "H3 Studio/Benchmark"
     FUNCTION = "compare"
-    RETURN_TYPES = ("IMAGE", "STRING")
-    RETURN_NAMES = ("comparison_grid", "comparison_report")
+    RETURN_TYPES = ("IMAGE", "STRING", "H3_STUDIO_CONTEXT")
+    RETURN_NAMES = ("comparison_grid", "comparison_report", "normal_generation_context")
     DESCRIPTION = (
-        "Runs 0.40, 1.00 and 2.00 MP at one fixed seed. Each resolution compares a native no-LoRA Base profile "
-        "against the selected LightX/PDD accelerator, measures the synchronized sampling call, and produces one "
-        "labeled grid. This is intentionally expensive: enabling it queues six complete generations."
+        "Runs 0.40, 1.00 and 2.00 MP with fixed, paired-row, or per-image seeds. Each resolution compares a native "
+        "no-LoRA Base profile against LightX/PDD, measures the synchronized sampling call, and labels every seed. "
+        "When enabled it blocks the normal branch, so the matrix performs exactly six generations rather than seven."
     )
 
     @classmethod
@@ -178,7 +190,7 @@ class H3StudioABComparison:
                 "studio_context": ("H3_STUDIO_CONTEXT",),
                 "enabled": (
                     "BOOLEAN",
-                    {"default": False, "tooltip": "OFF is instant. ON runs all six same-seed benchmark generations."},
+                    {"default": False, "tooltip": "OFF passes context to normal generation. ON runs six matrix generations and blocks the normal branch."},
                 ),
                 "baseline_profile": (
                     list(BASELINE_PROFILES.keys()),
@@ -187,6 +199,23 @@ class H3StudioABComparison:
                 "accelerator_profile": (
                     list(ACCELERATOR_PROFILES.keys()),
                     {"default": "Director selected accelerator", "tooltip": "LoRA/PDD comparison column."},
+                ),
+                "seed_strategy": (
+                    list(SEED_STRATEGIES),
+                    {
+                        "default": SEED_STRATEGIES[0],
+                        "tooltip": "Same seed is the fairest A/B. New seed each row keeps Base/LoRA paired. New seed every image explores diversity but no longer isolates the accelerator.",
+                    },
+                ),
+                "seed_step": (
+                    "INT",
+                    {
+                        "default": 1,
+                        "min": 1,
+                        "max": 1000000,
+                        "step": 1,
+                        "tooltip": "Offset added between row or image seeds. The Director seed is the matrix base seed.",
+                    },
                 ),
                 "grid_cell_size": (
                     "INT",
@@ -208,6 +237,8 @@ class H3StudioABComparison:
         enabled: bool,
         baseline_profile: str,
         accelerator_profile: str,
+        seed_strategy: str,
+        seed_step: int,
         grid_cell_size: int,
     ):
         if not isinstance(h3_bundle, H3StudioBundle):
@@ -216,15 +247,18 @@ class H3StudioABComparison:
             raise ValueError("Connect H3 Studio Director's studio_context output.")
         cell_size = max(320, min(1024, int(grid_cell_size)))
         if not enabled:
-            disabled = _placeholder("A/B Matrix is disabled\nEnable it to run six same-seed generations.", cell_size)
+            disabled = _placeholder("A/B Matrix is disabled\nEnable it to run six comparison generations.", cell_size)
             array = np.asarray(disabled, dtype=np.uint8).copy()
             image = torch.from_numpy(array).to(dtype=torch.float32).div_(255.0).unsqueeze(0)
-            return image, "A/B Matrix disabled; no model, conditioning, sampling, or decode work ran."
+            return image, "A/B Matrix disabled; the normal generation branch remains active.", studio_context
 
         variants = build_ab_variants(
             baseline_profile,
             accelerator_profile,
             studio_context.state.generation.sampling_profile,
+            studio_context.seed,
+            seed_strategy,
+            seed_step,
         )
         results: list[_ABResult] = []
         progress = None
@@ -236,8 +270,9 @@ class H3StudioABComparison:
             pass
 
         LOGGER.info(
-            "[H3 Studio - A/B] Starting six-run matrix | seed=%d | baseline=%s | accelerator=%s",
+            "[H3 Studio - A/B] Starting six-run matrix | base seed=%d | strategy=%s | baseline=%s | accelerator=%s",
             studio_context.seed,
+            seed_strategy,
             variants[0].profile,
             variants[1].profile,
         )
@@ -268,10 +303,11 @@ class H3StudioABComparison:
                 else:
                     label = short_profile_label(spec.profile, spec.accelerated)
                     LOGGER.info(
-                        "[H3 Studio - A/B] Running %.2f MP requested -> %dx%d actual | %s",
+                        "[H3 Studio - A/B] Running %.2f MP requested -> %dx%d actual | seed=%d | %s",
                         spec.requested_megapixels,
                         context.width,
                         context.height,
+                        context.seed,
                         label,
                     )
                     try:
@@ -294,7 +330,7 @@ class H3StudioABComparison:
                     progress.update(1)
 
         report_lines = [
-            f"H3 Studio A/B Matrix | seed={studio_context.seed} | same prompt and references",
+            f"H3 Studio A/B Matrix | base_seed={studio_context.seed} | strategy={seed_strategy} | same prompt and references",
             "Sampling time is CUDA-synchronized time inside SamplerCustomAdvanced; conditioning and VAE decode are excluded.",
             "The first sampled cell can include lazy model initialization; later cells may benefit from warm caches.",
         ]
@@ -303,13 +339,17 @@ class H3StudioABComparison:
             timing = "FAILED" if result.sampling_seconds is None else f"{result.sampling_seconds:.3f}s"
             report_lines.append(
                 f"{result.spec.requested_megapixels:.2f} MP requested -> {result.width}x{result.height} "
-                f"({result.actual_megapixels:.3f} MP actual) | {label} | sampling={timing}"
+                f"({result.actual_megapixels:.3f} MP actual) | seed={result.spec.seed} | {label} | sampling={timing}"
                 + (f" | error={result.error}" if result.error else "")
             )
         report = "\n".join(report_lines)
         LOGGER.info("[H3 Studio - A/B] Matrix complete\n%s", report)
-        return _comparison_grid(results, studio_context.seed, cell_size), report
+        try:
+            from comfy_execution.graph_utils import ExecutionBlocker
+        except ImportError as exc:  # pragma: no cover - current ComfyUI always provides it
+            raise RuntimeError("Update ComfyUI: A/B branch gating requires ExecutionBlocker support.") from exc
+        return _comparison_grid(results, seed_strategy, cell_size), report, ExecutionBlocker(None)
 
 
 NODE_CLASS_MAPPINGS = {"H3StudioABComparison": H3StudioABComparison}
-NODE_DISPLAY_NAME_MAPPINGS = {"H3StudioABComparison": "H3 Studio - Same-Seed A/B Matrix"}
+NODE_DISPLAY_NAME_MAPPINGS = {"H3StudioABComparison": "H3 Studio - Seeded A/B Matrix"}
