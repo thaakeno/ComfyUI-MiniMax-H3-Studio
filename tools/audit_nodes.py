@@ -7,7 +7,11 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCES = [ROOT / "h3studio" / "extension.py", ROOT / "h3studio" / "nodes" / "image_runtime.py"]
+SOURCES = [
+    ROOT / "h3studio" / "extension.py",
+    ROOT / "h3studio" / "nodes" / "benchmark.py",
+    ROOT / "h3studio" / "nodes" / "image_runtime.py",
+]
 
 
 def mapping_keys(path: Path):
