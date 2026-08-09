@@ -4,7 +4,7 @@
   "state": {
     "lastGroupid": 0,
     "lastNodeId": 106,
-    "lastLinkId": 16,
+    "lastLinkId": 17,
     "lastRerouteId": 0
   },
   "revision": 0,
@@ -88,6 +88,18 @@
         -160,
         340
       ]
+    },
+    {
+      "id": "61cd865a-970b-507d-b878-275416e10d15",
+      "name": "studio_context",
+      "type": "H3_STUDIO_CONTEXT",
+      "linkIds": [
+        17
+      ],
+      "pos": [
+        -160,
+        392
+      ]
     }
   ],
   "outputs": [
@@ -132,7 +144,7 @@
   "nodes": [
     {
       "id": 101,
-      "type": "H3StudioSamplingPreset",
+      "type": "H3StudioContextSamplingPreset",
       "pos": [
         40,
         40
@@ -151,12 +163,9 @@
           "link": 1
         },
         {
-          "name": "sampling_profile",
-          "type": "COMBO",
-          "link": null,
-          "widget": {
-            "name": "sampling_profile"
-          }
+          "name": "studio_context",
+          "type": "H3_STUDIO_CONTEXT",
+          "link": 17
         }
       ],
       "outputs": [
@@ -187,13 +196,11 @@
           "links": null
         }
       ],
-      "title": "H3 image sampling profile",
+      "title": "Director-selected sampling profile",
       "properties": {
-        "Node name for S&R": "H3StudioSamplingPreset"
+        "Node name for S&R": "H3StudioContextSamplingPreset"
       },
-      "widgets_values": [
-        "base quality | RES 20 steps"
-      ]
+      "widgets_values": []
     },
     {
       "id": 102,
@@ -710,6 +717,14 @@
       "target_id": -20,
       "target_slot": 2,
       "type": "STRING"
+    },
+    {
+      "id": 17,
+      "origin_id": -10,
+      "origin_slot": 5,
+      "target_id": 101,
+      "target_slot": 1,
+      "type": "H3_STUDIO_CONTEXT"
     }
   ],
   "extra": {

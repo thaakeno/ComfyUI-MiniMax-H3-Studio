@@ -43,8 +43,8 @@ export const RETENTION = Object.freeze([
 export const SAMPLING_PROFILES = Object.freeze([
   ["base_quality_20", "Base Quality · RES 20"],
   ["base_balanced_12", "Base Balanced · RES 12"],
-  ["turbo_er_sde_6", "Turbo Experimental · ER-SDE 6"],
-  ["turbo_sa_solver_4", "Turbo Experimental · SA-Solver 4"],
+  ["lightx_er_sde_4", "LightX v0.1 · ER-SDE 4"],
+  ["lightx_sa_solver_4", "LightX v0.1 · SA-Solver 4"],
 ]);
 
 export const FRAME_PROFILES = Object.freeze([
@@ -53,6 +53,10 @@ export const FRAME_PROFILES = Object.freeze([
   ["quality_13", "High Quality · 13 frames"],
   ["maximum_20", "Maximum · 20 frames"],
 ]);
+
+export function backendResolutionValue(value) {
+  return String(value || "").toLowerCase() === "custom" ? "Custom" : String(value || "480P");
+}
 
 export function clamp(value, minimum, maximum, fallback = minimum) {
   const number = Number(value);
@@ -168,6 +172,10 @@ export function normalizeState(value) {
   generation.megapixels = clamp(generation.megapixels, 0.2, 2, 1);
   generation.custom_width = Math.round(clamp(generation.custom_width, 32, 16384, 1024));
   generation.custom_height = Math.round(clamp(generation.custom_height, 32, 16384, 1024));
+  generation.sampling_profile = ({
+    turbo_er_sde_6: "lightx_er_sde_4",
+    turbo_sa_solver_4: "lightx_sa_solver_4",
+  })[generation.sampling_profile] || generation.sampling_profile;
   generation.sampling_profile = choice(generation.sampling_profile, SAMPLING_PROFILES.map(([key]) => key), "base_quality_20");
   generation.frame_profile = choice(generation.frame_profile, FRAME_PROFILES.map(([key]) => key), "recommended_5");
   const references = Array.isArray(source.references)

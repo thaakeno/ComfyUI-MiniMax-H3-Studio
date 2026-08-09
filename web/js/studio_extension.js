@@ -15,24 +15,16 @@ import {
 } from "./core/state.js";
 import { element, field, iconButton, numberControl, rangeControl, selectControl } from "./core/dom.js";
 import { installTheme } from "./core/theme.js";
-import { chooseImageFiles, previewUrlForStorage, uploadImage } from "./features/image_upload.js";
+import {
+  chooseImageFiles,
+  imageFilesFromTransfer,
+  previewUrlForStorage,
+  uploadImages,
+} from "./features/image_upload.js";
 
 const TARGET = "H3StudioDirector";
 const LINKS_PROPERTY = "h3studio_virtual_media_links";
-const PANEL_HEIGHT = 500;
-const HIDDEN_WIDGETS = new Set([
-  "mode", "resolution", "aspect_ratio", "width", "height", "seconds", "advanced", "fps",
-  "keyframe_role", "ref_image_size", "reference_mention_mode", "megapixels", "seed", "enhance_mode",
-  "adherence", "route", "sampling_profile", "frame_profile", "analyzer_model", "studio_state",
-]);
-
-for (let index = 1; index <= MAX_REFERENCES; index += 1) {
-  HIDDEN_WIDGETS.add(`media_filename_${index}`);
-  HIDDEN_WIDGETS.add(`media_type_${index}`);
-  HIDDEN_WIDGETS.add(`role_${index}`);
-  HIDDEN_WIDGETS.add(`retention_${index}`);
-  HIDDEN_WIDGETS.add(`description_${index}`);
-}
+const PANEL_HEIGHT = 418;
 
 function widget(node, name) {
   return node.widgets?.find((candidate) => candidate.name === name) || null;
@@ -46,11 +38,22 @@ function setWidget(node, name, value, invoke = false) {
 }
 
 function hideWidget(target) {
-  if (!target || target.__h3studioHidden) return;
-  target.__h3studioHidden = true;
-  target.__h3studioComputeSize = target.computeSize;
+  if (!target) return;
+  if (!target.__h3studioHidden) {
+    target.__h3studioHidden = true;
+    target.__h3studioComputeSize = target.computeSize;
+    target.__h3studioType = target.type;
+  }
   target.computeSize = () => [0, -4];
   target.hidden = true;
+  target.type = "h3studio_hidden";
+}
+
+function enforceNativeWidgetVisibility(node) {
+  for (const target of node.widgets || []) {
+    if (target.name === "prompt" || target.name === "h3studio_controls") continue;
+    hideWidget(target);
+  }
 }
 
 function sourceNode(link) {
@@ -218,10 +221,46 @@ function applyState(node, state, dirty = true) {
   }
   node.__h3studioState = normalized;
   if (dirty) {
+    node.__h3studioResult = null;
     node.setDirtyCanvas?.(true, true);
     app.graph?.setDirtyCanvas?.(true, true);
   }
   return normalized;
+}
+
+function executionValue(message, key) {
+  const value = message?.[key];
+  if (Array.isArray(value)) return value.map((item) => String(item ?? ""));
+  return value == null ? [] : [String(value)];
+}
+
+function resultsSection(node) {
+  const result = node.__h3studioResult;
+  if (!result?.prompt) return null;
+  const copy = element("button", {
+    className: "h3s-copy-result",
+    type: "button",
+    text: "Copy",
+    attrs: { "aria-label": "Copy compiled prompt" },
+    on: {
+      click: async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        await globalThis.navigator?.clipboard?.writeText?.(result.prompt);
+        event.currentTarget.textContent = "Copied";
+        setTimeout(() => { event.currentTarget.textContent = "Copy"; }, 1200);
+      },
+    },
+  });
+  const labels = element("div", { className: "h3s-result-labels" }, result.labels.map((label) => (
+    element("span", { className: "h3s-result-label", text: label, title: label })
+  )));
+  const details = element("details", { className: "h3s-result", attrs: { open: "" } }, [
+    element("summary", {}, [element("span", { text: "Compiled brief" }), copy]),
+    labels,
+    element("pre", { className: "h3s-result-prompt", text: result.prompt }),
+  ]);
+  return details;
 }
 
 function controlRow(label, control) {
@@ -249,6 +288,8 @@ function generationSection(node, state, refresh) {
   ], "Generation mode", (value) => update({ mode: value }));
   const ratio = selectControl(generation.aspect_ratio, Object.keys(ASPECT_RATIOS), "Aspect ratio", (value) => update({ aspect_ratio: value }));
   const megapixels = numberControl(generation.megapixels, { min: 0.2, max: 2, step: 0.05 }, "Megapixels", (value) => update({ megapixels: value }));
+  const sampling = selectControl(generation.sampling_profile, SAMPLING_PROFILES, "Sampling speed", (value) => update({ sampling_profile: value }));
+  const frames = selectControl(generation.frame_profile, FRAME_PROFILES, "Temporal packet length", (value) => update({ frame_profile: value }));
   const seed = numberControl(generation.seed, { min: 0, max: Number.MAX_SAFE_INTEGER, step: 1 }, "Seed", (value) => update({ seed: Math.max(0, Math.trunc(value)) }));
   const random = iconButton("Randomize seed", "↻", () => update({ seed: Math.floor(Math.random() * 0x7fffffff) }));
   const seedWrap = element("div", { className: "h3s-seed-row" }, [seed, random]);
@@ -259,6 +300,7 @@ function generationSection(node, state, refresh) {
   ]);
   const grid = element("div", { className: "h3s-grid" }, [
     controlRow("Mode", mode), controlRow("Aspect", ratio), controlRow("Megapixels", megapixels), controlRow("Seed", seedWrap),
+    controlRow("Speed", sampling), controlRow("Frames", frames),
   ]);
   return section("Generation", element("div", {}, [grid, preview]));
 }
@@ -342,20 +384,25 @@ function referenceCard(node, state, reference, index, refresh) {
   return element("article", { className: "h3s-reference-card" }, [thumb, element("div", { className: "h3s-reference-body" }, [title, controls, description])]);
 }
 
-async function addImages(node, state, refresh) {
+async function addImages(node, state, refresh, providedFiles = null) {
   const capacity = MAX_REFERENCES - state.references.length;
   if (capacity <= 0 || node.__h3studioUploading) return;
-  const files = (await chooseImageFiles({ multiple: true })).slice(0, capacity);
+  const selected = providedFiles || await chooseImageFiles({ multiple: true });
+  const files = [...selected].slice(0, capacity);
   if (!files.length) return;
   node.__h3studioUploading = true;
   node.__h3studioUploadError = "";
   node.__h3studioUploadLabel = `Uploading 0/${files.length}`;
   refresh();
   try {
-    for (let index = 0; index < files.length; index += 1) {
-      node.__h3studioUploadLabel = `Uploading ${index + 1}/${files.length}`;
-      refresh();
-      const uploaded = await uploadImage(api, files[index]);
+    const uploadedFiles = await uploadImages(api, files, {
+      concurrency: 3,
+      onProgress: (completed, total) => {
+        node.__h3studioUploadLabel = `Uploading ${completed}/${total}`;
+        refresh();
+      },
+    });
+    uploadedFiles.forEach((uploaded, index) => {
       state.references.push({
         id: `upload_${globalThis.crypto?.randomUUID?.() || `${Date.now()}_${index}`}`,
         filename: uploaded.filename,
@@ -368,8 +415,8 @@ async function addImages(node, state, refresh) {
         source_node_id: null,
         source_slot: 0,
       });
-      applyState(node, state);
-    }
+    });
+    applyState(node, state);
     notifyReferenceChange(node);
   } catch (error) {
     node.__h3studioUploadError = error instanceof Error ? error.message : String(error);
@@ -381,11 +428,26 @@ async function addImages(node, state, refresh) {
 }
 
 function referencesSection(node, state, refresh) {
-  const list = element("div", { className: "h3s-reference-list" });
+  const list = element("div", {
+    className: "h3s-reference-list",
+    attrs: { "aria-label": "Reference images; drop one or more image files here" },
+    on: {
+      dragenter: (event) => { event.preventDefault(); event.stopPropagation(); list.classList.add("is-dragging"); },
+      dragover: (event) => { event.preventDefault(); event.stopPropagation(); if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"; },
+      dragleave: (event) => { event.preventDefault(); if (!list.contains(event.relatedTarget)) list.classList.remove("is-dragging"); },
+      drop: (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        list.classList.remove("is-dragging");
+        const files = imageFilesFromTransfer(event.dataTransfer);
+        if (files.length) addImages(node, state, refresh, files);
+      },
+    },
+  });
   if (!state.references.length) {
     list.append(element("div", { className: "h3s-empty" }, [
       element("strong", { text: "Text-to-image ready" }),
-      element("span", { text: "Upload images here to create @Image 1 through @Image 9. External image links remain supported." }),
+      element("span", { text: "Drop images here or add several at once. They become @Image 1 through @Image 9." }),
     ]));
   } else {
     state.references.forEach((reference, index) => list.append(referenceCard(node, state, reference, index, refresh)));
@@ -418,8 +480,6 @@ function advancedSection(node, state, refresh) {
   };
   content.append(
     controlRow("Route", selectControl(state.generation.route, ["auto", "fl2va", "ref2va"], "Conditioning route", (value) => update({ route: value }))),
-    controlRow("Sampling", selectControl(state.generation.sampling_profile, SAMPLING_PROFILES, "Sampling profile", (value) => update({ sampling_profile: value }))),
-    controlRow("Frames", selectControl(state.generation.frame_profile, FRAME_PROFILES, "Frame profile", (value) => update({ frame_profile: value }))),
   );
   const model = element("input", {
     className: "h3s-control", type: "text", value: state.prompt_options.analyzer_model,
@@ -448,6 +508,7 @@ function renderPanel(node) {
     ]),
     generationSection(node, state, refresh),
     promptSection(node, state, refresh),
+    resultsSection(node),
     referencesSection(node, state, refresh),
     advancedSection(node, state, refresh),
   );
@@ -458,7 +519,7 @@ function installPanel(node) {
   if (node.__h3studioPanelInstalled || typeof node.addDOMWidget !== "function") return;
   node.__h3studioPanelInstalled = true;
   installTheme();
-  for (const target of node.widgets || []) if (HIDDEN_WIDGETS.has(target.name)) hideWidget(target);
+  enforceNativeWidgetVisibility(node);
   const root = element("div", { className: "h3s-studio-panel", attrs: { role: "group", "aria-label": "MiniMax H3 Studio controls" } });
   node.__h3studioPanel = root;
   const panelWidget = node.addDOMWidget("h3studio_controls", "h3studio_controls", root, {
@@ -479,6 +540,17 @@ function installPanel(node) {
     queueMicrotask(() => renderPanel(this));
     return result;
   };
+  const originalExecuted = node.onExecuted;
+  node.onExecuted = function h3studioExecuted(message) {
+    const result = originalExecuted?.apply(this, arguments);
+    this.__h3studioResult = {
+      prompt: executionValue(message, "compiled_prompt")[0] || "",
+      labels: executionValue(message, "reference_labels"),
+      diagnostics: executionValue(message, "diagnostics")[0] || "",
+    };
+    queueMicrotask(() => renderPanel(this));
+    return result;
+  };
   const originalConnectionsChange = node.onConnectionsChange;
   node.onConnectionsChange = function h3studioConnectionsChange() {
     const result = originalConnectionsChange?.apply(this, arguments);
@@ -488,6 +560,7 @@ function installPanel(node) {
   const originalForeground = node.onDrawForeground;
   node.onDrawForeground = function h3studioForeground(context) {
     originalForeground?.apply(this, arguments);
+    enforceNativeWidgetVisibility(this);
     const signature = linkSignature(this);
     if (signature !== this.__h3studioLinkSignature && !this.__h3studioRenderQueued) {
       this.__h3studioRenderQueued = true;
@@ -497,7 +570,7 @@ function installPanel(node) {
       });
     }
   };
-  node.size = [Math.max(430, node.size?.[0] || 0), Math.max(820, node.size?.[1] || 0)];
+  node.size = [Math.max(520, node.size?.[0] || 0), Math.min(660, Math.max(590, node.size?.[1] || 0))];
   renderPanel(node);
 }
 

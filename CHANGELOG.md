@@ -2,6 +2,20 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [0.1.0-alpha.3] - 2026-08-09
+
+### Fixed
+
+- Preserved the backend's exact `Custom` resolution value, eliminating prompt validation failures.
+- Hidden Width, Height, seed control, and serialized state plumbing from the product UI.
+- Reduced the prompt editor and Director footprint and connected the visible Speed selector to subgraph sampling.
+- Replaced sequential full-size upload previews with parallel multi-upload, drag-and-drop, and cached thumbnails.
+
+### Added
+
+- Execution results now reveal the compiled production brief and inferred role/retention label for every `@Image`.
+- Added an optional native TAEH3 live-preview node. It affects sampling previews only; the full H3 VAE still produces final images.
+
 ## [0.1.0-alpha.2] - 2026-08-09
 
 ### Fixed

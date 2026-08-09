@@ -143,6 +143,10 @@ class GenerationOptions:
     def from_dict(cls, value: Mapping[str, Any] | None) -> GenerationOptions:
         value = value or {}
         sampling = str(value.get("sampling_profile") or "base_quality_20")
+        sampling = {
+            "turbo_er_sde_6": "lightx_er_sde_4",
+            "turbo_sa_solver_4": "lightx_sa_solver_4",
+        }.get(sampling, sampling)
         if sampling not in SAMPLING_PROFILES:
             sampling = "base_quality_20"
         frame_profile = str(value.get("frame_profile") or "recommended_5")

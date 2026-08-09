@@ -28,3 +28,12 @@ The role-aware reference compiler, adherence controls, explicit model routing, a
 
 This repository does not include H3 Studio Hub and does not claim compatibility with it.
 
+## Optional TAEH3 preview asset
+
+The optional `taeh3.safetensors` checkpoint is distributed by Kijai under Apache-2.0 and is not bundled in this repository:
+https://huggingface.co/Kijai/MiniMax-H3-TAE
+
+The independent tiny-decoder integration uses ComfyUI's public wrapper APIs and the established tiny-autoencoder architecture described by madebyollin's MIT-licensed TAEHV project:
+https://github.com/madebyollin/taehv
+
+No ComfyUI-KJNodes source code is copied into this MIT-licensed repository.

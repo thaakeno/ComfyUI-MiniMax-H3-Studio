@@ -2,7 +2,7 @@
   "id": "51ffc0bb-1b7a-4a1c-a183-1ce99edb4e5e",
   "revision": 0,
   "last_node_id": 26,
-  "last_link_id": 9,
+  "last_link_id": 11,
   "nodes": [
     {
       "id": 10,
@@ -12,8 +12,8 @@
         220
       ],
       "size": [
-        760,
-        820
+        700,
+        650
       ],
       "flags": {},
       "order": 0,
@@ -199,7 +199,8 @@
           "name": "studio_context",
           "type": "H3_STUDIO_CONTEXT",
           "links": [
-            1
+            1,
+            9
           ]
         },
         {
@@ -226,7 +227,7 @@
           "name": "seed",
           "type": "INT",
           "links": [
-            7
+            8
           ]
         },
         {
@@ -449,21 +450,21 @@
           "name": "positive",
           "type": "CONDITIONING",
           "links": [
-            4
+            5
           ]
         },
         {
           "name": "h3_latent",
           "type": "LATENT",
           "links": [
-            5
+            6
           ]
         },
         {
           "name": "video_vae",
           "type": "VAE",
           "links": [
-            6
+            7
           ]
         },
         {
@@ -486,15 +487,15 @@
       "bgcolor": "#352e1d"
     },
     {
-      "id": 13,
-      "type": "5930b00d-9f8e-4b87-9cb5-ff5f7cf3b30a",
+      "id": 16,
+      "type": "H3StudioTAEH3Preview",
       "pos": [
         220,
-        360
+        260
       ],
       "size": [
         620,
-        420
+        360
       ],
       "flags": {},
       "order": 3,
@@ -506,24 +507,113 @@
           "link": 3
         },
         {
+          "name": "enabled",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "enabled"
+          }
+        },
+        {
+          "name": "tiny_vae",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "tiny_vae"
+          }
+        },
+        {
+          "name": "max_resolution",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "max_resolution"
+          }
+        },
+        {
+          "name": "jpeg_quality",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "jpeg_quality"
+          }
+        },
+        {
+          "name": "preview_every_n_steps",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "preview_every_n_steps"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "title": "Live preview · TAEH3 (optional)",
+      "properties": {
+        "Node name for S&R": "H3StudioTAEH3Preview"
+      },
+      "widgets_values": [
+        false,
+        "taeh3.safetensors",
+        512,
+        80,
+        1
+      ],
+      "color": "#31475c",
+      "bgcolor": "#202e3c"
+    },
+    {
+      "id": 13,
+      "type": "5930b00d-9f8e-4b87-9cb5-ff5f7cf3b30a",
+      "pos": [
+        220,
+        700
+      ],
+      "size": [
+        620,
+        420
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 4
+        },
+        {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 4
+          "link": 5
         },
         {
           "name": "h3_latent",
           "type": "LATENT",
-          "link": 5
+          "link": 6
         },
         {
           "name": "video_vae",
           "type": "VAE",
-          "link": 6
+          "link": 7
         },
         {
           "name": "seed",
           "type": "INT",
-          "link": 7
+          "link": 8
+        },
+        {
+          "name": "studio_context",
+          "type": "H3_STUDIO_CONTEXT",
+          "link": 9
         }
       ],
       "outputs": [
@@ -531,8 +621,8 @@
           "name": "image",
           "type": "IMAGE",
           "links": [
-            8,
-            9
+            10,
+            11
           ]
         },
         {
@@ -574,7 +664,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 8
+          "link": 10
         }
       ],
       "outputs": [],
@@ -604,7 +694,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 9
+          "link": 11
         },
         {
           "name": "filename_prefix",
@@ -963,12 +1053,20 @@
       3,
       12,
       0,
-      13,
+      16,
       0,
       "MODEL"
     ],
     [
       4,
+      16,
+      0,
+      13,
+      0,
+      "MODEL"
+    ],
+    [
+      5,
       12,
       2,
       13,
@@ -976,7 +1074,7 @@
       "CONDITIONING"
     ],
     [
-      5,
+      6,
       12,
       3,
       13,
@@ -984,7 +1082,7 @@
       "LATENT"
     ],
     [
-      6,
+      7,
       12,
       4,
       13,
@@ -992,7 +1090,7 @@
       "VAE"
     ],
     [
-      7,
+      8,
       10,
       5,
       13,
@@ -1000,7 +1098,15 @@
       "INT"
     ],
     [
-      8,
+      9,
+      10,
+      0,
+      13,
+      5,
+      "H3_STUDIO_CONTEXT"
+    ],
+    [
+      10,
       13,
       0,
       14,
@@ -1008,7 +1114,7 @@
       "IMAGE"
     ],
     [
-      9,
+      11,
       13,
       0,
       15,
@@ -1104,7 +1210,7 @@
         "state": {
           "lastGroupid": 0,
           "lastNodeId": 106,
-          "lastLinkId": 16,
+          "lastLinkId": 17,
           "lastRerouteId": 0
         },
         "revision": 0,
@@ -1188,6 +1294,18 @@
               -160,
               340
             ]
+          },
+          {
+            "id": "61cd865a-970b-507d-b878-275416e10d15",
+            "name": "studio_context",
+            "type": "H3_STUDIO_CONTEXT",
+            "linkIds": [
+              17
+            ],
+            "pos": [
+              -160,
+              392
+            ]
           }
         ],
         "outputs": [
@@ -1232,7 +1350,7 @@
         "nodes": [
           {
             "id": 101,
-            "type": "H3StudioSamplingPreset",
+            "type": "H3StudioContextSamplingPreset",
             "pos": [
               40,
               40
@@ -1251,12 +1369,9 @@
                 "link": 1
               },
               {
-                "name": "sampling_profile",
-                "type": "COMBO",
-                "link": null,
-                "widget": {
-                  "name": "sampling_profile"
-                }
+                "name": "studio_context",
+                "type": "H3_STUDIO_CONTEXT",
+                "link": 17
               }
             ],
             "outputs": [
@@ -1287,13 +1402,11 @@
                 "links": null
               }
             ],
-            "title": "H3 image sampling profile",
+            "title": "Director-selected sampling profile",
             "properties": {
-              "Node name for S&R": "H3StudioSamplingPreset"
+              "Node name for S&R": "H3StudioContextSamplingPreset"
             },
-            "widgets_values": [
-              "base quality | RES 20 steps"
-            ]
+            "widgets_values": []
           },
           {
             "id": 102,
@@ -1810,6 +1923,14 @@
             "target_id": -20,
             "target_slot": 2,
             "type": "STRING"
+          },
+          {
+            "id": 17,
+            "origin_id": -10,
+            "origin_slot": 5,
+            "target_id": 101,
+            "target_slot": 1,
+            "type": "H3_STUDIO_CONTEXT"
           }
         ],
         "extra": {

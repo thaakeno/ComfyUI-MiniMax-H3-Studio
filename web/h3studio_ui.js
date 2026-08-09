@@ -7,6 +7,8 @@
  */
 import { app } from "../../scripts/app.js";
 import "./js/studio_extension.js";
+import "./js/preview_extension.js";
+import { backendResolutionValue } from "./js/core/state.js";
 
 const NODE_CLASS = "H3StudioDirector";
 const LOADER_CLASS = "H3StudioLoader";
@@ -1388,7 +1390,9 @@ function patchGraphToPrompt() {
             });
             promptNode.inputs.prompt = buildRuntimePrompt(node, runtimeLinks);
             promptNode.inputs.mode = canonicalOption("mode", getWidgetValue(node, "mode", MODE_IMAGE));
-            promptNode.inputs.resolution = canonicalOption("resolution", getWidgetValue(node, "resolution", "480P"));
+            promptNode.inputs.resolution = backendResolutionValue(
+                canonicalOption("resolution", getWidgetValue(node, "resolution", "480P")),
+            );
             promptNode.inputs.aspect_ratio = canonicalOption("aspect_ratio", getWidgetValue(node, "aspect_ratio", "16:9"));
             promptNode.inputs.width = Number(getWidgetValue(node, "width", 1344));
             promptNode.inputs.height = Number(getWidgetValue(node, "height", 768));
@@ -3723,7 +3727,7 @@ function ensurePromptEditor(node) {
     setWidgetOption(domWidget, "canvasOnly", false);
     domWidget.__h3sEditorType = domWidget.type;
     domWidget.__h3sEditorComputeSize = domWidget.computeSize;
-    domWidget.computeSize = (width) => [width, 240];
+    domWidget.computeSize = (width) => [width, 112];
     const domIndex = node.widgets?.indexOf(domWidget) ?? -1;
     const promptIndex = node.widgets?.indexOf(widget) ?? -1;
     if (domIndex >= 0 && promptIndex >= 0 && domIndex !== promptIndex + 1) {

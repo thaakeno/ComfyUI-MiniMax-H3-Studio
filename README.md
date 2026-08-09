@@ -100,9 +100,12 @@ Expected model categories:
 ComfyUI/models/diffusion_models/  MiniMax H3 FL2VA and REF2VA transformers
 ComfyUI/models/text_encoders/     qwen3vl_32b_minimax_h3_int8_convrot.safetensors
 ComfyUI/models/vae/               minimax_h3_video_vae_int8_convrot.safetensors
+ComfyUI/models/vae_approx/        taeh3.safetensors (optional live preview only)
 ```
 
 Exact filenames depend on the checkpoint distribution. The bundled workflow contains the filenames used by Alier's current Lightning setup; choose the actual installed entries if they differ.
+
+For fast approximate previews during sampling, download [Kijai's TAEH3 decoder](https://huggingface.co/Kijai/MiniMax-H3-TAE/blob/main/vae_approx/taeh3.safetensors) into `ComfyUI/models/vae_approx/`, then enable the bundled **Live Preview · TAEH3** node. Leave it disabled if the file is absent. Final saving always uses the full H3 VAE.
 
 ## Bundled workflow
 

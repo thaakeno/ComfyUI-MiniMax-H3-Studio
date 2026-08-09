@@ -20,10 +20,10 @@ export function storageNameFromUpload(result) {
 }
 
 export function previewUrlForStorage(storageName) {
-  const { filename, subfolder, type } = parseStorageName(storageName);
+  const { filename } = parseStorageName(storageName);
   if (!filename) return "";
-  const query = new URLSearchParams({ filename, type, subfolder, preview: "webp;90" });
-  return `/view?${query.toString()}`;
+  const query = new URLSearchParams({ storage: String(storageName), size: "112" });
+  return `/h3studio/thumbnail?${query.toString()}`;
 }
 
 export async function uploadImage(api, file, subfolder = "h3studio") {
@@ -66,4 +66,26 @@ export function chooseImageFiles({ multiple = true } = {}) {
     document.body.append(input);
     input.click();
   });
+}
+
+export function imageFilesFromTransfer(transfer) {
+  return [...(transfer?.files || [])].filter((file) => String(file.type || "").startsWith("image/"));
+}
+
+export async function uploadImages(api, files, { concurrency = 3, onProgress = () => {} } = {}) {
+  const source = [...files];
+  const results = new Array(source.length);
+  let cursor = 0;
+  let completed = 0;
+  const worker = async () => {
+    while (cursor < source.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await uploadImage(api, source[index]);
+      completed += 1;
+      onProgress(completed, source.length);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), source.length) }, worker));
+  return results;
 }

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   MAX_REFERENCES,
+  backendResolutionValue,
   defaultState,
   normalizeState,
   parseState,
@@ -17,6 +18,12 @@ test("default state is an immediately usable text-to-image request", () => {
   assert.equal(state.schema_version, 3);
   assert.equal(state.generation.mode, "auto");
   assert.deepEqual(state.references, []);
+});
+
+test("custom resolution uses the exact backend combo label", () => {
+  assert.equal(backendResolutionValue("custom"), "Custom");
+  assert.equal(backendResolutionValue("Custom"), "Custom");
+  assert.equal(backendResolutionValue("768P"), "768P");
 });
 
 test("state round-trips without losing reference metadata", () => {
@@ -101,7 +108,7 @@ test("upload responses produce loadable storage names and previews", () => {
   assert.equal(storage, "h3studio/face.png");
   assert.deepEqual(parseStorageName(storage), { filename: "face.png", subfolder: "h3studio", type: "input" });
   const preview = previewUrlForStorage(storage);
-  assert.match(preview, /^\/view\?/);
-  assert.match(preview, /filename=face.png/);
-  assert.match(preview, /subfolder=h3studio/);
+  assert.match(preview, /^\/h3studio\/thumbnail\?/);
+  assert.match(preview, /storage=h3studio%2Fface.png/);
+  assert.match(preview, /size=112/);
 });

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-VERSION: Final = "0.1.0-alpha.2"
+VERSION: Final = "0.1.0-alpha.3"
 STATE_SCHEMA_VERSION: Final = 3
 CONTEXT_SCHEMA_VERSION: Final = 1
 
@@ -99,19 +99,19 @@ SAMPLING_PROFILES: Final = {
         "shift_audio": 3.0,
         "experimental": False,
     },
-    "turbo_er_sde_6": {
-        "label": "Turbo Experimental · ER-SDE 6",
+    "lightx_er_sde_4": {
+        "label": "LightX v0.1 · ER-SDE 4",
         "sampler": "er_sde",
         "scheduler": "simple",
-        "steps": 6,
+        "steps": 4,
         "cfg": 1.0,
         "shift_video": 12.0,
         "shift_audio": 3.0,
         "lora_strength": 0.8,
         "experimental": True,
     },
-    "turbo_sa_solver_4": {
-        "label": "Turbo Experimental · SA-Solver 4",
+    "lightx_sa_solver_4": {
+        "label": "LightX v0.1 · SA-Solver 4",
         "sampler": "sa_solver",
         "scheduler": "simple",
         "steps": 4,

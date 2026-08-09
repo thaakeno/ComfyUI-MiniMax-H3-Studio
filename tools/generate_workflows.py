@@ -151,19 +151,19 @@ def build_subgraph():
     nodes = [
         node(
             101,
-            "H3StudioSamplingPreset",
-            "H3 image sampling profile",
+            "H3StudioContextSamplingPreset",
+            "Director-selected sampling profile",
             [40, 40],
             [340, 100],
             order=0,
-            inputs=[socket("model", "MODEL", 1), socket("sampling_profile", "COMBO", widget="sampling_profile")],
+            inputs=[socket("model", "MODEL", 1), socket("studio_context", "H3_STUDIO_CONTEXT", 17)],
             outputs=[
                 output("model", "MODEL", [6]),
                 output("sampler", "SAMPLER", [7]),
                 output("sigmas", "SIGMAS", [8]),
                 output("sampling_info", "STRING", None),
             ],
-            widgets=["base quality | RES 20 steps"],
+            widgets=[],
         ),
         node(
             102,
@@ -266,21 +266,23 @@ def build_subgraph():
     add(14, 106, 0, -20, 0, "IMAGE")
     add(15, 105, 2, -20, 1, "STRING")
     add(16, 106, 4, -20, 2, "STRING")
+    add(17, -10, 5, 101, 1, "H3_STUDIO_CONTEXT")
     inputs = [
         {
             "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"h3studio-input-{name}")),
             "name": name,
             "type": kind,
-            "linkIds": [index],
+            "linkIds": [link_id],
             "pos": [-160, 80 + index * 52],
         }
-        for index, (name, kind) in enumerate(
+        for index, (name, kind, link_id) in enumerate(
             [
-                ("model", "MODEL"),
-                ("positive", "CONDITIONING"),
-                ("h3_latent", "LATENT"),
-                ("video_vae", "VAE"),
-                ("seed", "INT"),
+                ("model", "MODEL", 1),
+                ("positive", "CONDITIONING", 2),
+                ("h3_latent", "LATENT", 3),
+                ("video_vae", "VAE", 4),
+                ("seed", "INT", 5),
+                ("studio_context", "H3_STUDIO_CONTEXT", 17),
             ],
             1,
         )
@@ -300,7 +302,7 @@ def build_subgraph():
     return {
         "id": SUBGRAPH_ID,
         "version": 1,
-        "state": {"lastGroupid": 0, "lastNodeId": 106, "lastLinkId": 16, "lastRerouteId": 0},
+        "state": {"lastGroupid": 0, "lastNodeId": 106, "lastLinkId": 17, "lastRerouteId": 0},
         "revision": 0,
         "config": {},
         "name": "H3 Studio · Sampling and Exact Still Decode",
@@ -384,11 +386,13 @@ def build_workflow():
 
     l_context_condition = links.add(10, 0, 12, 1, "H3_STUDIO_CONTEXT")
     l_bundle_condition = links.add(11, 0, 12, 0, "H3_STUDIO_BUNDLE")
-    l_model_sub = links.add(12, 0, 13, 0, "MODEL")
+    l_model_preview = links.add(12, 0, 16, 0, "MODEL")
+    l_preview_sub = links.add(16, 0, 13, 0, "MODEL")
     l_positive_sub = links.add(12, 2, 13, 1, "CONDITIONING")
     l_latent_sub = links.add(12, 3, 13, 2, "LATENT")
     l_vae_sub = links.add(12, 4, 13, 3, "VAE")
     l_seed_sub = links.add(10, 5, 13, 4, "INT")
+    l_context_sub = links.add(10, 0, 13, 5, "H3_STUDIO_CONTEXT")
     l_image_preview = links.add(13, 0, 14, 0, "IMAGE")
     l_image_save = links.add(13, 0, 15, 0, "IMAGE")
 
@@ -422,11 +426,11 @@ def build_workflow():
             "H3StudioDirector",
             "MiniMax H3 Studio · Image Director",
             [-1450, 220],
-            [760, 820],
+            [700, 650],
             order=0,
             inputs=director_inputs,
             outputs=[
-                output("studio_context", "H3_STUDIO_CONTEXT", [l_context_condition]),
+                output("studio_context", "H3_STUDIO_CONTEXT", [l_context_condition, l_context_sub]),
                 output("compiled_prompt", "STRING", None),
                 output("state_json", "STRING", None),
                 output("width", "INT", None),
@@ -483,7 +487,7 @@ def build_workflow():
                 socket("studio_context", "H3_STUDIO_CONTEXT", l_context_condition),
             ],
             outputs=[
-                output("model", "MODEL", [l_model_sub]),
+                output("model", "MODEL", [l_model_preview]),
                 output("generation", "H3_STUDIO_GENERATION", None),
                 output("positive", "CONDITIONING", [l_positive_sub]),
                 output("h3_latent", "LATENT", [l_latent_sub]),
@@ -496,18 +500,39 @@ def build_workflow():
             bgcolor="#352e1d",
         ),
         node(
+            16,
+            "H3StudioTAEH3Preview",
+            "Live preview · TAEH3 (optional)",
+            [220, 260],
+            [620, 360],
+            order=3,
+            inputs=[
+                socket("model", "MODEL", l_model_preview),
+                socket("enabled", "BOOLEAN", widget="enabled"),
+                socket("tiny_vae", "COMBO", widget="tiny_vae"),
+                socket("max_resolution", "INT", widget="max_resolution"),
+                socket("jpeg_quality", "INT", widget="jpeg_quality"),
+                socket("preview_every_n_steps", "INT", widget="preview_every_n_steps"),
+            ],
+            outputs=[output("model", "MODEL", [l_preview_sub])],
+            widgets=[False, "taeh3.safetensors", 512, 80, 1],
+            color="#31475c",
+            bgcolor="#202e3c",
+        ),
+        node(
             13,
             SUBGRAPH_ID,
             "H3 Studio · Sampling + exact still",
-            [220, 360],
+            [220, 700],
             [620, 420],
-            order=3,
+            order=4,
             inputs=[
-                socket("model", "MODEL", l_model_sub),
+                socket("model", "MODEL", l_preview_sub),
                 socket("positive", "CONDITIONING", l_positive_sub),
                 socket("h3_latent", "LATENT", l_latent_sub),
                 socket("video_vae", "VAE", l_vae_sub),
                 socket("seed", "INT", l_seed_sub),
+                socket("studio_context", "H3_STUDIO_CONTEXT", l_context_sub),
             ],
             outputs=[
                 output("image", "IMAGE", [l_image_preview, l_image_save]),

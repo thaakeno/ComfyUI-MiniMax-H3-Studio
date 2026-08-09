@@ -36,6 +36,16 @@ FRAME_PROFILE_TO_RUNTIME = {
     "quality_13": "high quality | 13 frames",
     "maximum_20": "maximum quality | 20 frames (slow)",
 }
+SAMPLING_PROFILE_TO_RUNTIME = {
+    "base_quality_20": "base quality | RES 20 steps",
+    "base_balanced_12": "base speed | RES 12 steps",
+    "lightx_er_sde_4": "LightX v0.1 | ER-SDE 4 steps",
+    "lightx_sa_solver_4": "LightX v0.1 | SA-Solver 4 steps",
+}
+SAMPLING_PROFILE_ALIASES = {
+    "turbo_er_sde_6": "lightx_er_sde_4",
+    "turbo_sa_solver_4": "lightx_sa_solver_4",
+}
 
 
 def _frame_profile(value: str) -> str:
@@ -45,6 +55,7 @@ def _frame_profile(value: str) -> str:
 
 def _sampling_profile(value: str) -> str:
     value = str(value or "base_quality_20")
+    value = SAMPLING_PROFILE_ALIASES.get(value, value)
     return value if value in SAMPLING_PROFILES else "base_quality_20"
 
 
@@ -250,7 +261,27 @@ class H3StudioDirector:
         route_decision = choose_route(state.generation.route, compile_result.resolved_mode, len(images))
         context = H3StudioContext.create(state, compile_result, plan, route_decision, images, filenames)
         diagnostics = context.summary() + vlm_note
-        return context, compile_result.native_prompt, state.to_json(), plan.width, plan.height, state.generation.seed, diagnostics
+        reference_labels = [
+            f"@Image {reference.ordinal} · {reference.effective_role} · {reference.retention} · {reference.filename}"
+            for reference in compile_result.references
+        ]
+        result = (
+            context,
+            compile_result.native_prompt,
+            state.to_json(),
+            plan.width,
+            plan.height,
+            state.generation.seed,
+            diagnostics,
+        )
+        return {
+            "ui": {
+                "compiled_prompt": [compile_result.native_prompt],
+                "reference_labels": reference_labels,
+                "diagnostics": [diagnostics],
+            },
+            "result": result,
+        }
 
 
 class H3StudioCondition:
@@ -358,6 +389,30 @@ class H3StudioOutput:
             generation.fitted_source,
             generation.run_info,
         )
+
+
+class H3StudioContextSamplingPreset:
+    """Resolve the sampling recipe selected in the Studio Director."""
+
+    CATEGORY = "H3 Studio"
+    FUNCTION = "build"
+    RETURN_TYPES = ("MODEL", "SAMPLER", "SIGMAS", "STRING")
+    RETURN_NAMES = ("model", "sampler", "sigmas", "sampling_info")
+    DESCRIPTION = "Apply the Director's visible Speed selection inside a workflow or subgraph."
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"model": ("MODEL",), "studio_context": ("H3_STUDIO_CONTEXT",)}}
+
+    @staticmethod
+    def build(model, studio_context):
+        from .image_runtime import H3StudioSamplingPreset
+
+        if not isinstance(studio_context, H3StudioContext):
+            raise ValueError("Connect H3 Studio Director's studio_context output.")
+        profile = _sampling_profile(studio_context.state.generation.sampling_profile)
+        runtime_profile = SAMPLING_PROFILE_TO_RUNTIME[profile]
+        return H3StudioSamplingPreset().build(model, runtime_profile)
 
 
 class H3StudioContextInspector:

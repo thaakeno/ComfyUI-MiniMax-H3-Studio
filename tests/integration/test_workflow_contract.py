@@ -16,9 +16,10 @@ def test_director_is_top_level_and_sampling_is_subgraphed():
     assert "H3StudioDirector" in top_types
     assert len(subgraphs) == 1
     assert "H3StudioDirector" not in {node["type"] for node in subgraphs[0]["nodes"]}
-    assert {"H3StudioSamplingPreset", "H3StudioDecode", "H3StudioFrameSelector"} <= {
+    assert {"H3StudioContextSamplingPreset", "H3StudioDecode", "H3StudioFrameSelector"} <= {
         node["type"] for node in subgraphs[0]["nodes"]
     }
+    assert "H3StudioTAEH3Preview" in top_types
 
 
 def test_workflow_opens_without_placeholder_images():
