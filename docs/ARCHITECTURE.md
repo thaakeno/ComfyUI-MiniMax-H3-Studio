@@ -9,7 +9,7 @@ H3 Studio owns still-image direction, reference metadata, prompt compilation, H3
 ```text
 user prompt + ordered image links + role metadata
                     |
-              H3 Studio state v2
+              H3 Studio state v4
                     |
         deterministic compiler or optional VLM
                     |
@@ -44,6 +44,7 @@ The graph-to-prompt hook merges integrated uploads and optional virtual media li
 - `prompting/` owns four-section production briefs and VLM adapters.
 - `loader.py` loads shared encoder/VAE objects and lazily switches transformer models.
 - `director.py` exposes the normal ComfyUI path.
+- `acceleration.py` is the MIT interoperability boundary for optional external backends. It contains no Mamad8 PDD implementation; it discovers and invokes the separately installed registered nodes.
 - `image_runtime.py` contains attributed resolution, prepare, sampling, decode, and selection foundations adapted from Image Studio.
 
 ## Why the Director remains top-level

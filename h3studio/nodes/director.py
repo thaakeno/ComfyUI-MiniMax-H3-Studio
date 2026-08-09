@@ -258,7 +258,19 @@ class H3StudioDirector:
             compile_result = compiler.compile(state)
             vlm_note = ""
         plan = state.generation.resolution()
-        route_decision = choose_route(state.generation.route, compile_result.resolved_mode, len(images))
+        from ..acceleration import route_for_profile
+
+        route_request = route_for_profile(
+            state.generation.sampling_profile,
+            state.generation.route,
+            len(images),
+        )
+        route_decision = choose_route(route_request, compile_result.resolved_mode, len(images))
+        if route_request == "ref2va" and state.generation.route == "auto":
+            route_decision = replace(
+                route_decision,
+                reason="selected REF2VA because the active Mamad8 PDD profile is trained for reference generation",
+            )
         context = H3StudioContext.create(state, compile_result, plan, route_decision, images, filenames)
         diagnostics = context.summary() + vlm_note
         reference_labels = [
@@ -398,7 +410,10 @@ class H3StudioContextSamplingPreset:
     FUNCTION = "build"
     RETURN_TYPES = ("MODEL", "SAMPLER", "SIGMAS", "STRING")
     RETURN_NAMES = ("model", "sampler", "sigmas", "sampling_info")
-    DESCRIPTION = "Apply the Director's visible Speed selection inside a workflow or subgraph."
+    DESCRIPTION = (
+        "Apply the Director's visible Speed selection inside a workflow or subgraph. Base and LightX recipes remain "
+        "local; Mamad8 PDD profiles delegate to the separately installed external node package and matching artifacts."
+    )
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -406,11 +421,19 @@ class H3StudioContextSamplingPreset:
 
     @staticmethod
     def build(model, studio_context):
+        from ..acceleration import build_pdd_backend, is_pdd_profile
         from .image_runtime import H3StudioSamplingPreset
 
         if not isinstance(studio_context, H3StudioContext):
             raise ValueError("Connect H3 Studio Director's studio_context output.")
         profile = _sampling_profile(studio_context.state.generation.sampling_profile)
+        if is_pdd_profile(profile):
+            return build_pdd_backend(
+                model,
+                profile,
+                selected_route=studio_context.route.selected,
+                reference_count=len(studio_context.images),
+            )
         runtime_profile = SAMPLING_PROFILE_TO_RUNTIME[profile]
         return H3StudioSamplingPreset().build(model, runtime_profile)
 

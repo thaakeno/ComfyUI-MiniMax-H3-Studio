@@ -18,7 +18,7 @@ Consumes the model bundle and Studio context. It selects the route, encodes the 
 
 ### H3 Studio · Sampling Preset
 
-Builds model sampling, sampler, and sigma values for conservative base profiles or explicitly labeled experimental acceleration profiles. Base Quality (`RES 20`) is the default.
+Builds model sampling, sampler, and sigma values for conservative base profiles or explicitly labeled experimental acceleration profiles. Base Quality (`RES 20`) is the default. Mamad8 PDD checkpoint-600/900 profiles are REF2VA-only: the preset detects the separately installed GPL node package, pairs the matching local student LoRA and heads bank, and delegates patching and trained-block scheduling to those registered nodes. Missing dependencies fail with corrective instructions and never alter Base behavior.
 
 ### H3 Studio · Exact Frame Decode
 

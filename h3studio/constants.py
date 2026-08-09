@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Final
 
-VERSION: Final = "0.1.0-alpha.3"
-STATE_SCHEMA_VERSION: Final = 3
+VERSION: Final = "0.1.0-alpha.4"
+STATE_SCHEMA_VERSION: Final = 4
 CONTEXT_SCHEMA_VERSION: Final = 1
 
 CANVAS_MULTIPLE: Final = 32
@@ -120,6 +120,32 @@ SAMPLING_PROFILES: Final = {
         "shift_audio": 3.0,
         "lora_strength": 0.8,
         "experimental": True,
+    },
+    "pdd_ref2va_4_600": {
+        "label": "Mamad8 PDD REF2VA · 4-step · ckpt 600",
+        "sampler": "euler",
+        "scheduler": "trained_blocks",
+        "steps": 4,
+        "cfg": 1.0,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "lora_strength": 2.0,
+        "head_strength": 1.0,
+        "experimental": True,
+        "external_backend": "mamad8_pdd",
+    },
+    "pdd_ref2va_4_900": {
+        "label": "Mamad8 PDD REF2VA · 4-step · ckpt 900",
+        "sampler": "euler",
+        "scheduler": "trained_blocks",
+        "steps": 4,
+        "cfg": 1.0,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "lora_strength": 2.0,
+        "head_strength": 1.0,
+        "experimental": True,
+        "external_backend": "mamad8_pdd",
     },
 }
 

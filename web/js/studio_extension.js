@@ -24,7 +24,11 @@ import {
 
 const TARGET = "H3StudioDirector";
 const LINKS_PROPERTY = "h3studio_virtual_media_links";
-const PANEL_HEIGHT = 418;
+const PANEL_DEFAULT_HEIGHT = 530;
+const PANEL_MIN_HEIGHT = 350;
+const NODE_DEFAULT_HEIGHT = 780;
+const NON_PANEL_HEIGHT = 205;
+const VISIBLE_STUDIO_WIDGETS = new Set(["prompt", "h3_prompt_mentions", "h3studio_controls"]);
 
 function widget(node, name) {
   return node.widgets?.find((candidate) => candidate.name === name) || null;
@@ -49,9 +53,23 @@ function hideWidget(target) {
   target.type = "h3studio_hidden";
 }
 
+function restoreWidgetHiddenByStudio(target) {
+  if (!target?.__h3studioHidden) return;
+  target.computeSize = target.__h3studioComputeSize;
+  target.hidden = false;
+  target.type = target.__h3studioType;
+  target.__h3studioHidden = false;
+}
+
 function enforceNativeWidgetVisibility(node) {
   for (const target of node.widgets || []) {
-    if (target.name === "prompt" || target.name === "h3studio_controls") continue;
+    // h3studio_ui.js replaces the hidden native prompt widget with the
+    // h3_prompt_mentions DOM editor. Keep both names exempt so either frontend
+    // initialization order leaves exactly one usable prompt surface visible.
+    if (VISIBLE_STUDIO_WIDGETS.has(target.name)) {
+      restoreWidgetHiddenByStudio(target);
+      continue;
+    }
     hideWidget(target);
   }
 }
@@ -267,12 +285,26 @@ function controlRow(label, control) {
   return field(label, control);
 }
 
-function section(title, body, accessory = null) {
+function section(title, body, accessory = null, description = "") {
   const header = element("div", { className: "h3s-section-header" }, [
     element("span", { className: "h3s-section-title", text: title }),
     accessory,
   ]);
-  return element("section", { className: "h3s-section" }, [header, body]);
+  const children = [header];
+  if (description) children.push(element("p", { className: "h3s-section-description", text: description }));
+  children.push(body);
+  return element("section", { className: "h3s-section" }, children);
+}
+
+function samplingHelp(profile) {
+  if (String(profile).startsWith("pdd_ref2va")) {
+    return "Four-step REF2VA acceleration. H3 Studio automatically finds the matching Mamad8 student LoRA and PDD heads. Requires references and the external Mamad8 node package.";
+  }
+  if (String(profile).startsWith("lightx")) {
+    return "Experimental four-step LightX schedule. Use it only with the matching LightX LoRA loaded on the model path.";
+  }
+  if (profile === "base_balanced_12") return "Faster native H3 sampling with fewer steps; no acceleration files required.";
+  return "Highest-confidence native H3 sampling. No turbo LoRA or external acceleration package required.";
 }
 
 function generationSection(node, state, refresh) {
@@ -302,7 +334,8 @@ function generationSection(node, state, refresh) {
     controlRow("Mode", mode), controlRow("Aspect", ratio), controlRow("Megapixels", megapixels), controlRow("Seed", seedWrap),
     controlRow("Speed", sampling), controlRow("Frames", frames),
   ]);
-  return section("Generation", element("div", {}, [grid, preview]));
+  const help = element("p", { className: "h3s-context-help", text: samplingHelp(generation.sampling_profile) });
+  return section("Generation", element("div", { className: "h3s-section-stack" }, [grid, preview, help]));
 }
 
 function promptSection(node, state, refresh) {
@@ -313,7 +346,7 @@ function promptSection(node, state, refresh) {
   };
   const options = state.prompt_options;
   const enhance = selectControl(options.enhance_mode, [
-    ["off", "Pass through"], ["compile_only", "Production brief"], ["vlm", "VLM analysis + brief"],
+    ["off", "Keep my prompt"], ["compile_only", "Build H3 production brief"], ["vlm", "Analyze images + build brief"],
   ], "Prompt enhancement", (value) => update({ enhance_mode: value }));
   const adherenceValue = element("span", { className: "h3s-inline-value", text: `${Math.round(options.adherence * 100)}%` });
   const adherence = rangeControl(options.adherence, { min: 0, max: 1, step: 0.05 }, "Reference adherence", (value) => {
@@ -322,9 +355,18 @@ function promptSection(node, state, refresh) {
     applyState(node, state);
   });
   const adherenceWrap = element("div", {}, [adherence, adherenceValue]);
-  return section("Direction", element("div", { className: "h3s-grid" }, [
-    controlRow("Enhancement", enhance), controlRow("Adherence", adherenceWrap),
-  ]));
+  const explanations = {
+    off: "Keeps your wording and only converts @Image tags into H3's native reference syntax.",
+    compile_only: "Organizes your request into H3's subject, summary, retention, and detailed-description sections. It does not invent an image analysis.",
+    vlm: "A separate local vision-language model studies the references first, then H3 Studio builds the same structured production brief.",
+  };
+  const body = element("div", { className: "h3s-section-stack" }, [
+    element("div", { className: "h3s-grid" }, [
+      controlRow("Prompt shaping", enhance), controlRow("Reference priority", adherenceWrap),
+    ]),
+    element("p", { className: "h3s-context-help", text: `${explanations[options.enhance_mode]} Reference priority controls how strongly the written brief tells H3 to preserve reference details; it is not a LoRA strength.` }),
+  ]);
+  return section("Direction", body, null, "Choose how H3 Studio prepares your words before Qwen3-VL encodes them for H3.");
 }
 
 function referenceCard(node, state, reference, index, refresh) {
@@ -470,7 +512,7 @@ function referencesSection(node, state, refresh) {
 }
 
 function advancedSection(node, state, refresh) {
-  const content = element("div", { className: "h3s-advanced-content h3s-grid" });
+  const content = element("div", { className: "h3s-advanced-content h3s-section-stack" });
   content.hidden = !state.ui.advanced_open;
   const update = (generationPatch = {}, promptPatch = {}) => {
     state.generation = { ...state.generation, ...generationPatch };
@@ -478,15 +520,21 @@ function advancedSection(node, state, refresh) {
     applyState(node, state);
     refresh();
   };
-  content.append(
-    controlRow("Route", selectControl(state.generation.route, ["auto", "fl2va", "ref2va"], "Conditioning route", (value) => update({ route: value }))),
-  );
-  const model = element("input", {
-    className: "h3s-control", type: "text", value: state.prompt_options.analyzer_model,
-    placeholder: "Local Qwen-VL path (optional)", attrs: { "aria-label": "VLM analyzer model" },
-    on: { change: (event) => update({}, { analyzer_model: event.target.value }) },
-  });
-  content.append(controlRow("Analyzer", model));
+  content.append(element("div", { className: "h3s-grid" }, [
+    controlRow("Model route", selectControl(state.generation.route, [
+      ["auto", "Auto · choose for me"], ["fl2va", "Force FL2VA"], ["ref2va", "Force REF2VA"],
+    ], "Conditioning route", (value) => update({ route: value }))),
+  ]));
+  content.append(element("p", { className: "h3s-context-help", text: "Auto uses FL2VA for pure text and selects REF2VA when the request needs references. Force a route only for controlled comparisons." }));
+  if (state.prompt_options.enhance_mode === "vlm") {
+    const model = element("input", {
+      className: "h3s-control", type: "text", value: state.prompt_options.analyzer_model,
+      placeholder: "Path to an instruction-capable local VLM", attrs: { "aria-label": "VLM analyzer model path" },
+      on: { change: (event) => update({}, { analyzer_model: event.target.value }) },
+    });
+    content.append(controlRow("Image-analysis model", model));
+    content.append(element("p", { className: "h3s-context-help", text: "Only used by ‘Analyze images + build brief’. This is separate from H3's ConvRot Qwen3-VL encoder and nothing is downloaded automatically." }));
+  }
   const toggle = element("button", {
     className: "h3s-advanced-toggle", type: "button", attrs: { "aria-expanded": String(state.ui.advanced_open) },
     on: { click: () => { state.ui.advanced_open = !state.ui.advanced_open; applyState(node, state); refresh(); } },
@@ -501,7 +549,7 @@ function renderPanel(node) {
   root.replaceChildren();
   const refresh = () => renderPanel(node);
   const resolvedMode = state.references.length ? "Reference ready" : "T2I ready";
-  root.append(
+  const children = [
     element("header", { className: "h3s-studio-header" }, [
       element("div", { className: "h3s-studio-brand" }, [element("span", { className: "h3s-studio-mark" }), element("span", { className: "h3s-studio-title", text: "MiniMax H3 Studio" })]),
       element("span", { className: "h3s-status-pill", text: resolvedMode }),
@@ -511,7 +559,8 @@ function renderPanel(node) {
     resultsSection(node),
     referencesSection(node, state, refresh),
     advancedSection(node, state, refresh),
-  );
+  ].filter(Boolean);
+  root.append(...children);
   node.__h3studioLinkSignature = linkSignature(node);
 }
 
@@ -527,7 +576,24 @@ function installPanel(node) {
     hideOnZoom: false,
     getValue: () => undefined,
   });
-  panelWidget.computeSize = (width) => [width, PANEL_HEIGHT];
+  node.__h3studioPanelHeight = Math.max(
+    PANEL_MIN_HEIGHT,
+    Number(node.size?.[1] || NODE_DEFAULT_HEIGHT) - NON_PANEL_HEIGHT,
+  );
+  panelWidget.computeSize = (width) => [width, node.__h3studioPanelHeight || PANEL_DEFAULT_HEIGHT];
+  panelWidget.computedHeight = node.__h3studioPanelHeight;
+
+  const originalResize = node.onResize;
+  node.onResize = function h3studioResize(size) {
+    const result = originalResize?.apply(this, arguments);
+    const height = Number(size?.[1] ?? this.size?.[1]);
+    if (Number.isFinite(height)) {
+      this.__h3studioPanelHeight = Math.max(PANEL_MIN_HEIGHT, height - NON_PANEL_HEIGHT);
+      panelWidget.computedHeight = this.__h3studioPanelHeight;
+    }
+    this.setDirtyCanvas?.(true, true);
+    return result;
+  };
 
   const originalSerialize = node.onSerialize;
   node.onSerialize = function h3studioSerialize(data) {
@@ -570,7 +636,9 @@ function installPanel(node) {
       });
     }
   };
-  node.size = [Math.max(520, node.size?.[0] || 0), Math.min(660, Math.max(590, node.size?.[1] || 0))];
+  node.size = [Math.max(520, node.size?.[0] || 0), Math.max(NODE_DEFAULT_HEIGHT, node.size?.[1] || 0)];
+  node.__h3studioPanelHeight = Math.max(PANEL_DEFAULT_HEIGHT, node.size[1] - NON_PANEL_HEIGHT);
+  panelWidget.computedHeight = node.__h3studioPanelHeight;
   renderPanel(node);
 }
 

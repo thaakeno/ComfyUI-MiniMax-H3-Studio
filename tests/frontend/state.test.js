@@ -15,7 +15,7 @@ import { parseStorageName, previewUrlForStorage, storageNameFromUpload } from ".
 
 test("default state is an immediately usable text-to-image request", () => {
   const state = defaultState();
-  assert.equal(state.schema_version, 3);
+  assert.equal(state.schema_version, 4);
   assert.equal(state.generation.mode, "auto");
   assert.deepEqual(state.references, []);
 });
@@ -49,7 +49,7 @@ test("schema one settings migrate into their typed sections", () => {
     schema_version: 1,
     settings: { mode: "reference_edit", megapixels: 1.4, enhance_mode: "vlm", adherence: 0.7 },
   });
-  assert.equal(state.schema_version, 3);
+  assert.equal(state.schema_version, 4);
   assert.equal(state.generation.mode, "reference_edit");
   assert.equal(state.generation.megapixels, 1.4);
   assert.equal(state.prompt_options.enhance_mode, "vlm");
@@ -95,7 +95,7 @@ test("custom dimensions determine custom aspect while area follows megapixels", 
 
 test("uploaded ComfyUI storage names survive state normalization", () => {
   const state = normalizeState({
-    schema_version: 3,
+    schema_version: 4,
     references: [{ filename: "portrait.png", storage_name: "h3studio/portrait.png", ordinal: 1 }],
   });
   assert.equal(state.references[0].filename, "portrait.png");

@@ -37,3 +37,10 @@ The independent tiny-decoder integration uses ComfyUI's public wrapper APIs and 
 https://github.com/madebyollin/taehv
 
 No ComfyUI-KJNodes source code is copied into this MIT-licensed repository.
+
+## Optional Mamad8 PDD backend
+
+The optional REF2VA PDD profiles interoperate with `mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8`, distributed under GPL-3.0:
+https://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8
+
+H3 Studio does not bundle, copy, modify, or relicense that implementation. Its MIT-licensed adapter only discovers the node IDs registered by the separately installed package and invokes their public execution surface. The external package and its model artifacts remain separate dependencies under their own terms.

@@ -35,6 +35,9 @@ export function installTheme() {
     .h3s-section { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--h3s-border); border-radius: 7px; background: var(--h3s-surface); }
     .h3s-section-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .h3s-section-title { color: var(--h3s-muted); font-size: 9px; font-weight: 720; letter-spacing: .09em; text-transform: uppercase; }
+    .h3s-section-description { margin: -1px 0 1px; color: var(--h3s-muted); font-size: 10px; line-height: 1.45; }
+    .h3s-section-stack { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .h3s-context-help { margin: 0; color: color-mix(in srgb, var(--h3s-muted) 90%, var(--h3s-text) 10%); font-size: 9px; line-height: 1.45; }
     .h3s-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px; }
     .h3s-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
     .h3s-field-label { color: var(--h3s-muted); font-size: 10px; font-weight: 600; }

@@ -62,7 +62,7 @@ def test_v1_settings_are_migrated() -> None:
         "settings": {"mode": "text_to_image", "seed": 9, "enhance_mode": "off", "adherence": 0.4},
     }
     migrated = migrate_state_dict(old)
-    assert migrated["schema_version"] == 3
+    assert migrated["schema_version"] == 4
     assert migrated["generation"]["seed"] == 9
     assert migrated["prompt_options"]["enhance_mode"] == "off"
 

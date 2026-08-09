@@ -13,7 +13,7 @@
       ],
       "size": [
         700,
-        650
+        780
       ],
       "flags": {},
       "order": 0,
@@ -271,7 +271,7 @@
         "base_quality_20",
         "recommended_5",
         "",
-        "{\"schema_version\":3,\"prompt\":\"Describe the final still image.\",\"references\":[],\"prompt_options\":{\"enhance_mode\":\"compile_only\",\"adherence\":0.85,\"detail_level\":\"detailed\",\"preserve_user_text\":true,\"infer_roles\":true,\"system_instruction\":\"\",\"analyzer_model\":\"\",\"analyzer_device\":\"auto\",\"analyzer_quantization\":\"auto\",\"analyzer_max_tokens\":1800,\"analyzer_keep_loaded\":false},\"generation\":{\"mode\":\"auto\",\"route\":\"auto\",\"seed\":42,\"aspect_ratio\":\"1:1\",\"megapixels\":1.0,\"custom_width\":1024,\"custom_height\":1024,\"cap_native_resolution\":true,\"sampling_profile\":\"base_quality_20\",\"frame_profile\":\"recommended_5\",\"frame_selection\":\"decode_recommended\",\"reference_short_edge\":2048,\"source_image_ordinal\":1},\"ui\":{\"advanced_open\":false,\"reference_details\":{}}}",
+        "{\"schema_version\":4,\"prompt\":\"Describe the final still image.\",\"references\":[],\"prompt_options\":{\"enhance_mode\":\"compile_only\",\"adherence\":0.85,\"detail_level\":\"detailed\",\"preserve_user_text\":true,\"infer_roles\":true,\"system_instruction\":\"\",\"analyzer_model\":\"\",\"analyzer_device\":\"auto\",\"analyzer_quantization\":\"auto\",\"analyzer_max_tokens\":1800,\"analyzer_keep_loaded\":false},\"generation\":{\"mode\":\"auto\",\"route\":\"auto\",\"seed\":42,\"aspect_ratio\":\"1:1\",\"megapixels\":1.0,\"custom_width\":1024,\"custom_height\":1024,\"cap_native_resolution\":true,\"sampling_profile\":\"base_quality_20\",\"frame_profile\":\"recommended_5\",\"frame_selection\":\"decode_recommended\",\"reference_short_edge\":2048,\"source_image_ordinal\":1},\"ui\":{\"advanced_open\":false,\"reference_details\":{}}}",
         "",
         "image",
         "",
@@ -1026,7 +1026,7 @@
       },
       "widgets_values": [
         "models",
-        "H3 emits a short temporal latent even when the desired output is one image. The bundled subgraph samples that packet, decodes the exact requested profile, and selects the decoder-recommended stable frame. Base Quality uses the conservative RES Multistep profile. Turbo profiles are labeled experimental and expect their matching upstream acceleration assets."
+        "H3 emits a short temporal latent even when the desired output is one image. The bundled subgraph samples that packet, decodes the exact requested profile, and selects the decoder-recommended stable frame. Base Quality needs no acceleration files. LightX profiles expect their matching LoRA upstream. Mamad8 PDD profiles are REF2VA-only and automatically pair the selected 600/900 student LoRA with its heads bank through the separately installed Mamad8 node package."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1950,8 +1950,8 @@
     },
     "frontendVersion": "1.30.0",
     "h3studio": {
-      "schema_version": 3,
-      "template_version": "1.1.0",
+      "schema_version": 4,
+      "template_version": "1.2.0",
       "design_source": "Alier v1.3.7 geometry",
       "audio_prompt_sections": false,
       "hub_included": false

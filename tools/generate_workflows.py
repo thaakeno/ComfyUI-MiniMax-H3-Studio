@@ -348,7 +348,7 @@ def build_subgraph():
 def build_workflow():
     links = Links()
     state = {
-        "schema_version": 3,
+        "schema_version": 4,
         "prompt": "Describe the final still image.",
         "references": [],
         "prompt_options": {
@@ -426,7 +426,7 @@ def build_workflow():
             "H3StudioDirector",
             "MiniMax H3 Studio · Image Director",
             [-1450, 220],
-            [700, 650],
+            [700, 780],
             order=0,
             inputs=director_inputs,
             outputs=[
@@ -631,7 +631,7 @@ def build_workflow():
             26,
             "Sampling and frame extraction",
             "models",
-            "H3 emits a short temporal latent even when the desired output is one image. The bundled subgraph samples that packet, decodes the exact requested profile, and selects the decoder-recommended stable frame. Base Quality uses the conservative RES Multistep profile. Turbo profiles are labeled experimental and expect their matching upstream acceleration assets.",
+            "H3 emits a short temporal latent even when the desired output is one image. The bundled subgraph samples that packet, decodes the exact requested profile, and selects the decoder-recommended stable frame. Base Quality needs no acceleration files. LightX profiles expect their matching LoRA upstream. Mamad8 PDD profiles are REF2VA-only and automatically pair the selected 600/900 student LoRA with its heads bank through the separately installed Mamad8 node package.",
             [1560, 700],
             [430, 310],
             16,
@@ -701,8 +701,8 @@ def build_workflow():
             "ds": {"scale": 0.72, "offset": [1120, 330]},
             "frontendVersion": "1.30.0",
             "h3studio": {
-                "schema_version": 3,
-                "template_version": "1.1.0",
+                "schema_version": 4,
+                "template_version": "1.2.0",
                 "design_source": "Alier v1.3.7 geometry",
                 "audio_prompt_sections": False,
                 "hub_included": False,

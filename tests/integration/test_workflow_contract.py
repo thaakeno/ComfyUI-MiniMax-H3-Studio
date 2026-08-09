@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / "example_workflows" / "H3_Studio_Unified_Image.json"
+STUDIO_FRONTEND = ROOT / "web" / "js" / "studio_extension.js"
 
 
 def load_workflow():
@@ -37,7 +38,7 @@ def test_persisted_studio_state_is_image_only_and_versioned():
     workflow = load_workflow()
     director = next(node for node in workflow["nodes"] if node["type"] == "H3StudioDirector")
     state = json.loads(director["widgets_values"][20])
-    assert state["schema_version"] == 3
+    assert state["schema_version"] == 4
     assert state["references"] == []
     assert state["generation"]["route"] == "auto"
     serialized = json.dumps(workflow).lower()
@@ -69,3 +70,11 @@ def test_functional_nodes_do_not_overlap():
             rw, rh = right["size"]
             overlap = lx < rx + rw and lx + lw > rx and ly < ry + rh and ly + lh > ry
             assert not overlap, f"{left['title']} overlaps {right['title']}"
+
+
+def test_prompt_editor_and_empty_result_regression_contract():
+    source = STUDIO_FRONTEND.read_text(encoding="utf-8")
+    assert '"h3_prompt_mentions"' in source
+    assert "restoreWidgetHiddenByStudio(target)" in source
+    assert "].filter(Boolean);" in source
+    assert "NODE_DEFAULT_HEIGHT = 780" in source

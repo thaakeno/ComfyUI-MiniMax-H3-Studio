@@ -23,6 +23,8 @@ Run only these representative paths:
 
 For each run, record resolved dimensions, route diagnostic, sampling profile, decoded frame count, selected index, peak VRAM if convenient, and whether Preview/Save received exactly one final image.
 
+If Mamad8 PDD is installed, run one additional three-reference comparison with `PDD REF2VA · 4-step · ckpt 900`. Confirm the console reports the matched step-900 LoRA and heads filenames, Euler, `trained_blocks`, four steps, strengths `2.0/1.0`, shifts `12/3`, and `contract=enforce`. Then temporarily rename neither file: instead select checkpoint 600 without its files and confirm H3 Studio fails with an actionable missing-artifact message rather than falling back.
+
 ## Prompt checks
 
 In Production Brief mode, inspect the compiled prompt and confirm section order, correct image ordinals, exact quoted text, and no audio fields. In VLM mode, use an explicit local instruction model path and verify ComfyUI performs no download. Confirm the enhanced output is materially richer than deterministic role inference before keeping that analyzer configuration.

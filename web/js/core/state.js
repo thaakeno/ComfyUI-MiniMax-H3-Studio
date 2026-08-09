@@ -1,4 +1,4 @@
-export const STATE_SCHEMA_VERSION = 3;
+export const STATE_SCHEMA_VERSION = 4;
 export const MAX_REFERENCES = 9;
 
 export const ASPECT_RATIOS = Object.freeze({
@@ -45,6 +45,8 @@ export const SAMPLING_PROFILES = Object.freeze([
   ["base_balanced_12", "Base Balanced · RES 12"],
   ["lightx_er_sde_4", "LightX v0.1 · ER-SDE 4"],
   ["lightx_sa_solver_4", "LightX v0.1 · SA-Solver 4"],
+  ["pdd_ref2va_4_600", "PDD REF2VA · 4-step · ckpt 600"],
+  ["pdd_ref2va_4_900", "PDD REF2VA · 4-step · ckpt 900"],
 ]);
 
 export const FRAME_PROFILES = Object.freeze([

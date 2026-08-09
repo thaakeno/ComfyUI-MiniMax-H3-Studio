@@ -298,4 +298,9 @@ def migrate_state_dict(value: Mapping[str, Any]) -> dict[str, Any]:
         # Schema 3 adds an optional storage_name to references uploaded inside
         # the Director. Existing link-backed references need no transformation.
         migrated["schema_version"] = 3
+        version = 3
+    if version == 3:
+        # Schema 4 adds optional acceleration profiles. Existing workflows keep
+        # their selected base/LightX profile without any structural rewrite.
+        migrated["schema_version"] = 4
     return migrated

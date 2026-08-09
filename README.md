@@ -36,7 +36,7 @@ Click **Add images** inside the Director to upload up to nine references directl
 
 Type `@` in the prompt editor to insert a reference. Reordering cards updates their runtime order without depending on filename guesses. Removing all images leaves a valid text-to-image request.
 
-The generation panel exposes mode, aspect ratio, megapixels, seed, prompt enhancement, and adherence. Route, sampling profile, frame profile, and optional analyzer path are available under Advanced.
+The generation panel exposes mode, aspect ratio, megapixels, seed, sampling speed, frame count, prompt shaping, and reference priority. Every non-obvious control includes a short explanation in the node. Route remains under Advanced; the separate analyzer path appears only when **Analyze images + build brief** is selected. The Director opens at a useful full height and its control panel follows manual node resizing, using internal scrolling only when the node is deliberately made small or contains many references.
 
 ## Prompt enhancement
 
@@ -105,6 +105,26 @@ ComfyUI/models/vae_approx/        taeh3.safetensors (optional live preview only)
 
 Exact filenames depend on the checkpoint distribution. The bundled workflow contains the filenames used by Alier's current Lightning setup; choose the actual installed entries if they differ.
 
+### Optional Mamad8 PDD REF2VA acceleration
+
+The Director includes checkpoint-600 and checkpoint-900 Mamad8 PDD profiles as optional REF2VA four-step backends. H3 Studio does not copy or relicense Mamad8's GPL implementation. When selected, it detects the separately registered PDD nodes, loads the matching student LoRA at strength `2.0`, loads the matching heads bank at strength `1.0`, applies the trained `12/3` AV shifts, and requests Mamad8's enforced four-step Euler/trained-block schedule.
+
+Install the external package beside H3 Studio:
+
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8.git
+```
+
+Place the paired files from [Mamad8's model repository](https://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8) as follows:
+
+```text
+ComfyUI/models/loras/       LORA_h3_pdd_af384_step600_s.safetensors or step900
+ComfyUI/models/pdd_heads/   HEADS_h3_pdd_af384_step600_bank.safetensors or step900
+```
+
+Restart ComfyUI after installing the package. Selecting PDD without the external nodes, a matching artifact pair, at least one reference, or a REF2VA route fails with a specific corrective message instead of silently falling back. Base profiles remain completely independent of PDD.
+
 For fast approximate previews during sampling, download [Kijai's TAEH3 decoder](https://huggingface.co/Kijai/MiniMax-H3-TAE/blob/main/vae_approx/taeh3.safetensors) into `ComfyUI/models/vae_approx/`, then enable the bundled **Live Preview · TAEH3** node. Leave it disabled if the file is absent. Final saving always uses the full H3 VAE.
 
 ## Bundled workflow
@@ -162,7 +182,7 @@ These checks do not prove GPU generation. Run the concise [Lightning smoke-test 
 
 The backend is split into state, references, resolution, routing, prompt sections, templates, VLM adapter, loader, and node modules. Frontend additions are split into state, DOM helpers, theme, and Studio controls. The adapted Easy mention runtime remains isolated so future upstream comparison is possible.
 
-State is versioned (`schema_version: 3`) and migrates old settings into typed prompt/generation sections. Schema 3 keeps the safe ComfyUI storage name of an integrated upload separate from its display filename. Workflows store the full Studio state plus compatibility widget values, so the node remains inspectable even if the frontend extension is temporarily unavailable.
+State is versioned (`schema_version: 4`) and migrates old settings into typed prompt/generation sections. Schema 3 kept the safe ComfyUI storage name of an integrated upload separate from its display filename; schema 4 adds the optional PDD acceleration profiles without changing existing selections. Workflows store the full Studio state plus compatibility widget values, so the node remains inspectable even if the frontend extension is temporarily unavailable.
 
 Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PROMPTING.md](docs/PROMPTING.md), and [CONTRIBUTING.md](CONTRIBUTING.md) before changing serialization or route behavior.
 
@@ -172,6 +192,7 @@ This custom node is openly built with inspiration and code adaptation from:
 
 - [nkxx188/ComfyUI-MiniMaxH3-Easy](https://github.com/nkxx188/ComfyUI-MiniMaxH3-Easy) for ordered virtual media links, the excellent `@Image` mention interaction, reference chips, and parts of `web/h3studio_ui.js` (MIT).
 - [astropuzzo/ComfyUI-MiniMax-H3-Image-Studio](https://github.com/astropuzzo/ComfyUI-MiniMax-H3-Image-Studio) for resolution/sampling/decode/still-selection foundations and the adapted `image_runtime.py` (Unlicense).
+- [mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8](https://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8) for the optional external REF2VA PDD execution backend. H3 Studio calls its registered public node surface but includes none of its GPL implementation.
 - Alier's private H3 Studio Unified Image Director and v1.3.7 workflow for role-aware production briefs, bridge behavior, megapixel/aspect controls, route experimentation, and the workflow's visual hierarchy.
 
 The attribution and embedded MIT notice are preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This repository is an independent project and does not claim endorsement by MiniMax, ComfyUI, or either inspiration project.

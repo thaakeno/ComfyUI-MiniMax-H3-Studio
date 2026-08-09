@@ -2,6 +2,19 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [0.1.0-alpha.4] - 2026-08-09
+
+### Fixed
+
+- Restored the Easy-derived `@Image` prompt editor after the compact Studio panel accidentally hid both the native prompt widget and its DOM replacement.
+- Prevented an absent compiled-result section from rendering as the literal text `null`.
+- Made the Director open at a useful full height and let the panel expand or contract with manual node resizing.
+
+### Added
+
+- Added optional Mamad8 PDD REF2VA checkpoint-600 and checkpoint-900 profiles through external-node discovery, deterministic paired-artifact resolution, enforced four-step Euler scheduling, and actionable fail-closed diagnostics.
+- Added concise in-node explanations for prompt shaping, reference priority, sampling profiles, route selection, and the separate optional VLM analyzer.
+
 ## [0.1.0-alpha.3] - 2026-08-09
 
 ### Fixed
