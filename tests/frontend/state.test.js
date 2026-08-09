@@ -27,7 +27,13 @@ test("default state is an immediately usable text-to-image request", () => {
   const state = defaultState();
   assert.equal(state.schema_version, 7);
   assert.equal(state.generation.mode, "auto");
+  assert.equal(state.prompt_options.analyzer_resolution, 512);
   assert.deepEqual(state.references, []);
+});
+
+test("native analyzer resolution is preserved as the zero sentinel", () => {
+  const state = normalizeState({ prompt_options: { analyzer_resolution: 0 } });
+  assert.equal(state.prompt_options.analyzer_resolution, 0);
 });
 
 test("custom resolution uses the exact backend combo label", () => {

@@ -266,9 +266,17 @@ function executionValue(message, key) {
   return value == null ? [] : [String(value)];
 }
 
+function friendlyReferences(value) {
+  return String(value || "")
+    .replace(/<Picture\s+(\d+)>/gi, "@Image$1")
+    .replace(/<Subject\s+(\d+)>/gi, "@Image$1");
+}
+
 function resultsSection(node) {
   const result = node.__h3studioResult;
   if (!result?.prompt) return null;
+  const friendlyPrompt = friendlyReferences(result.prompt);
+  const enhancedInstruction = friendlyReferences(result.enhancedPrompt || result.prompt);
   const copy = element("button", {
     className: "h3s-copy-result",
     type: "button",
@@ -278,7 +286,7 @@ function resultsSection(node) {
       click: async (event) => {
         event.preventDefault();
         event.stopPropagation();
-        await globalThis.navigator?.clipboard?.writeText?.(result.prompt);
+        await globalThis.navigator?.clipboard?.writeText?.(enhancedInstruction);
         event.currentTarget.textContent = "Copied";
         setTimeout(() => { event.currentTarget.textContent = "Copy"; }, 1200);
       },
@@ -287,11 +295,20 @@ function resultsSection(node) {
   const labels = element("div", { className: "h3s-result-labels" }, result.labels.map((label) => (
     element("span", { className: "h3s-result-label", text: label, title: label })
   )));
-  const details = element("details", { className: "h3s-result", attrs: { open: "" } }, [
-    element("summary", {}, [element("span", { text: "Compiled brief" }), copy]),
+  const analyzed = stateFromNode(node).prompt_options.analyze_images;
+  const resultTitle = analyzed ? "Qwen-enhanced instruction" : "Compiled prompt";
+  const children = [
+    element("summary", {}, [element("span", { text: resultTitle }), copy]),
     labels,
-    element("pre", { className: "h3s-result-prompt", text: result.prompt }),
-  ]);
+    element("pre", { className: "h3s-result-prompt", text: enhancedInstruction }),
+  ];
+  if (analyzed && enhancedInstruction !== friendlyPrompt) {
+    children.push(element("details", { className: "h3s-runtime-prompt" }, [
+      element("summary", { text: "H3 runtime prompt" }),
+      element("pre", { className: "h3s-result-prompt", text: friendlyPrompt }),
+    ]));
+  }
+  const details = element("details", { className: "h3s-result", attrs: { open: "" } }, children);
   return details;
 }
 
@@ -420,6 +437,13 @@ function promptSection(node, state, refresh) {
     element("span", { className: "h3s-switch-track" }),
     element("span", { className: "h3s-switch-label", text: "Analyze image pixels" }),
   ]);
+  const analyzerResolution = selectControl(String(options.analyzer_resolution ?? 512), [
+    ["384", "Fast · 384 px"],
+    ["512", "Balanced · 512 px"],
+    ["768", "Fine details · 768 px"],
+    ["0", "Native · original pixels"],
+  ], "Analyzer image detail", (value) => update({ analyzer_resolution: Number(value) }));
+  analyzerResolution.disabled = options.analyze_images !== true || options.enhance_mode === "off";
   const adherenceValue = element("span", { className: "h3s-inline-value", text: `${Math.round(options.adherence * 100)}%` });
   const adherence = rangeControl(options.adherence, { min: 0, max: 1, step: 0.05 }, "Reference adherence", (value) => {
     adherenceValue.textContent = `${Math.round(value * 100)}%`;
@@ -432,13 +456,16 @@ function promptSection(node, state, refresh) {
     single_prompt: "Turns your request into one direct, easy-to-read H3 instruction with explicit image roles and preservation rules. It has no headings or line breaks and works especially well for simple edits and reference combinations.",
     compile_only: "Builds the four-section subject, summary, retention, and detailed-description format for complex art direction.",
   };
+  const analyzerDetail = Number(options.analyzer_resolution) === 0
+    ? "the original reference resolution (slowest, maximum fidelity)"
+    : `analysis copies up to ${options.analyzer_resolution || 512}px`;
   const analyzerHelp = options.analyze_images
-    ? "Qwen3-VL inspects the actual reference pixels and supplies source-only roles and descriptions. It reruns only when the prompt or reference images change."
+    ? `Qwen3-VL inspects ${analyzerDetail}, improves the instruction, and supplies source-only roles and descriptions. H3 always receives the untouched originals. It reruns only when the prompt, references, or analyzer detail changes.`
     : "Pixel analysis is off; roles come from your wording and manual reference controls.";
   const body = element("div", { className: "h3s-section-stack" }, [
     element("div", { className: "h3s-grid" }, [
       controlRow("Prompt format", enhance), controlRow("Image understanding", analyzerToggle),
-      controlRow("Reference priority", adherenceWrap),
+      controlRow("Analyzer detail", analyzerResolution), controlRow("Reference priority", adherenceWrap),
     ]),
     element("p", { className: "h3s-context-help", text: `${explanations[options.enhance_mode]} ${analyzerHelp} Reference priority controls how strongly the written prompt tells H3 to preserve reference details; it is not a LoRA strength.` }),
   ]);
@@ -704,6 +731,7 @@ function installPanel(node) {
     this.__h3studioAutoChanges = autoChanges;
     this.__h3studioResult = {
       prompt: executionValue(message, "compiled_prompt")[0] || "",
+      enhancedPrompt: executionValue(message, "enhanced_instruction")[0] || "",
       labels: executionValue(message, "reference_labels"),
       roles,
       retentions,

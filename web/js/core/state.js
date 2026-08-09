@@ -85,6 +85,7 @@ export function defaultState() {
     prompt_options: {
       enhance_mode: "compile_only",
       analyze_images: false,
+      analyzer_resolution: 512,
       adherence: 0.85,
       detail_level: "detailed",
       preserve_user_text: true,
@@ -182,6 +183,7 @@ export function normalizeState(value) {
     promptOptions.analyze_images = promptOptions.analyze_images === true;
   }
   promptOptions.adherence = clamp(promptOptions.adherence, 0, 1, 0.85);
+  promptOptions.analyzer_resolution = Math.round(clamp(promptOptions.analyzer_resolution, 0, 1024, 512));
   promptOptions.detail_level = choice(promptOptions.detail_level, ["concise", "detailed", "maximum"], "detailed");
   promptOptions.analyzer_max_tokens = Math.round(clamp(promptOptions.analyzer_max_tokens, 128, 8192, 1800));
   generation.mode = choice(generation.mode, ["auto", "text_to_image", "image_to_image", "reference_edit"], "auto");

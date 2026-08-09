@@ -94,6 +94,8 @@ export function installTheme() {
     .h3s-result-labels { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 8px 6px; }
     .h3s-result-label { max-width: 100%; overflow: hidden; padding: 2px 5px; border-radius: 4px; color: var(--h3s-muted); background: var(--h3s-bg); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
     .h3s-result-prompt { max-height: 138px; margin: 0; padding: 8px; overflow: auto; border-top: 1px solid var(--h3s-border); color: var(--h3s-text); background: var(--h3s-bg); font: 9px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
+    .h3s-runtime-prompt { border-top: 1px solid var(--h3s-border); }
+    .h3s-runtime-prompt > summary { min-height: 25px; padding-left: 8px; color: var(--h3s-muted); font-size: 9px; font-weight: 620; }
     .h3s-advanced-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0; border: 0; color: var(--h3s-muted); background: transparent; cursor: pointer; font: inherit; }
     .h3s-advanced-toggle:hover { color: var(--h3s-text); }
     .h3s-advanced-content[hidden] { display: none; }

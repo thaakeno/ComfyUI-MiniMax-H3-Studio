@@ -4039,18 +4039,18 @@ function install() {
         box-sizing: border-box; padding: 0; border-radius: var(--h3s-native-widget-radius, 0); overflow: hidden; contain: size layout paint;
       }
       .h3s-prompt-editor {
-        --h3s-prompt-text-size: var(--h3s-native-widget-text-size, var(--comfy-textarea-font-size, 12px));
+        --h3s-prompt-text-size: 14px;
         display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; max-height: 100%; box-sizing: border-box;
         padding: var(--h3s-native-widget-padding, 2px); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
         white-space: pre-wrap; overflow-wrap: anywhere; border: 0; border-radius: var(--h3s-native-widget-radius, 0); outline: none;
         resize: none; background-color: var(--h3s-native-widget-bg, var(--comfy-input-bg, #222));
         color: var(--h3s-native-widget-text, var(--input-text, #ddd)); caret-color: var(--h3s-native-widget-text, var(--input-text, #ddd));
         font-family: Consolas, "Courier New", monospace; font-size: var(--h3s-prompt-text-size); font-weight: 400;
-        font-style: normal; line-height: var(--h3s-native-widget-line-height, normal); letter-spacing: 0;
+        font-style: normal; line-height: 1.45; letter-spacing: 0;
       }
       .h3s-prompt-editor :not(.h3s-mention-chip):not(.h3s-mention-chip *):not(.h3s-dialogue-block):not(.h3s-dialogue-block *) {
         font-family: Consolas, "Courier New", monospace !important; font-size: var(--h3s-prompt-text-size) !important;
-        font-weight: 400 !important; font-style: normal !important; line-height: var(--h3s-native-widget-line-height, normal) !important; letter-spacing: 0 !important;
+        font-weight: 400 !important; font-style: normal !important; line-height: 1.45 !important; letter-spacing: 0 !important;
       }
       .h3s-prompt-editor-wrap.h3s-native-vue-nodes .h3s-prompt-editor:focus {
         box-shadow: 0 0 0 1px var(--h3s-native-widget-focus, var(--h3s-native-widget-outline, rgba(255,255,255,.18)));

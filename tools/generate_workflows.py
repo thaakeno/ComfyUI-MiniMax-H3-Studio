@@ -348,11 +348,13 @@ def build_subgraph():
 def build_workflow():
     links = Links()
     state = {
-        "schema_version": 6,
+        "schema_version": 7,
         "prompt": "Describe the final still image.",
         "references": [],
         "prompt_options": {
-            "enhance_mode": "vlm",
+            "enhance_mode": "compile_only",
+            "analyze_images": True,
+            "analyzer_resolution": 512,
             "adherence": 0.85,
             "detail_level": "detailed",
             "preserve_user_text": True,
@@ -706,7 +708,7 @@ def build_workflow():
             "ds": {"scale": 0.72, "offset": [1120, 330]},
             "frontendVersion": "1.30.0",
             "h3studio": {
-                "schema_version": 6,
+                "schema_version": 7,
                 "template_version": "1.2.0",
                 "design_source": "Alier v1.3.7 geometry",
                 "audio_prompt_sections": False,
