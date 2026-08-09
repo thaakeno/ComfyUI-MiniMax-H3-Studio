@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import replace
 from typing import Any
 
@@ -29,6 +30,15 @@ from ..state import StudioState
 from .loader import H3StudioBundle
 
 LOGGER = logging.getLogger(__name__)
+
+# One-entry process caches survive ComfyUI recreating a Python node instance
+# between queues, while remaining bounded when the user changes model/route.
+_CONDITIONING_CACHE_LOCK = threading.RLock()
+_CONDITIONING_CACHE_KEY = None
+_CONDITIONING_CACHE_VALUE = None
+_PDD_PATCH_CACHE_LOCK = threading.RLock()
+_PDD_PATCH_CACHE_KEY = None
+_PDD_PATCH_CACHE_VALUE = None
 
 LEGACY_MODE_IMAGE = "image"
 LEGACY_MODE_REFERENCE = "reference"
@@ -105,6 +115,8 @@ def _state_from_widgets(
                 retention=retention,
                 description=description,
                 enabled=True,
+                role_auto=existing.role_auto if existing else role == "auto",
+                retention_auto=existing.retention_auto if existing else role == "auto",
             )
         )
     if str(studio_state or "").strip() and persisted.generation.mode in MODES:
@@ -291,6 +303,7 @@ class H3StudioDirector:
                 "compiled_prompt": [compile_result.native_prompt],
                 "reference_labels": reference_labels,
                 "reference_roles": [reference.effective_role for reference in compile_result.references],
+                "reference_retentions": [reference.retention for reference in compile_result.references],
                 "diagnostics": [diagnostics],
             },
             "result": result,
@@ -316,7 +329,21 @@ class H3StudioCondition:
         }
 
     @staticmethod
-    def condition(h3_bundle, studio_context):
+    def _image_cache_key(studio_context):
+        values = []
+        for index, image in enumerate(studio_context.images):
+            reference = studio_context.state.references[index] if index < len(studio_context.state.references) else None
+            storage_name = reference.storage_name if reference is not None else None
+            if storage_name:
+                values.append(("stored", storage_name, tuple(getattr(image, "shape", ()))))
+                continue
+            data_ptr = getattr(image, "data_ptr", None)
+            pointer = data_ptr() if callable(data_ptr) else id(image)
+            values.append(("tensor", pointer, getattr(image, "_version", 0), tuple(getattr(image, "shape", ()))))
+        return tuple(values)
+
+    def condition(self, h3_bundle, studio_context):
+        global _CONDITIONING_CACHE_KEY, _CONDITIONING_CACHE_VALUE
         from .image_runtime import H3StudioPrepare
 
         if not isinstance(h3_bundle, H3StudioBundle):
@@ -341,29 +368,42 @@ class H3StudioCondition:
 
         frame_preset = FRAME_PROFILE_TO_RUNTIME[studio_context.state.generation.frame_profile]
         references = list(used_images) + [None] * (9 - len(used_images))
-        result = H3StudioPrepare().prepare(
-            clip=h3_bundle.clip,
-            mode=runtime_mode,
-            prompt=studio_context.prompt,
-            width=studio_context.width,
-            height=studio_context.height,
-            frame_preset=frame_preset,
-            optimize_prompt=False,
-            preserve_strength=studio_context.state.prompt_options.adherence,
-            source_fit="crop_center",
-            reference_size="max_identity_2048",
-            vae=h3_bundle.video_vae,
-            source_image=references[0],
-            reference_image_2=references[1],
-            reference_image_3=references[2],
-            reference_image_4=references[3],
-            reference_image_5=references[4],
-            reference_image_6=references[5],
-            reference_image_7=references[6],
-            reference_image_8=references[7],
-            reference_image_9=references[8],
+        cache_key = (
+            h3_bundle.fl2va_name, h3_bundle.ref2va_name, h3_bundle.clip_name, h3_bundle.video_vae_name,
+            route, runtime_mode, studio_context.prompt, studio_context.width, studio_context.height, frame_preset,
+            self._image_cache_key(studio_context),
         )
-        conditioning, latent, fitted, requested_frames, _prompt, runtime_info = result
+        with _CONDITIONING_CACHE_LOCK:
+            if cache_key == _CONDITIONING_CACHE_KEY and _CONDITIONING_CACHE_VALUE is not None:
+                conditioning, latent, fitted, requested_frames, runtime_info = _CONDITIONING_CACHE_VALUE
+                runtime_info = f"{runtime_info} Conditioning cache: HIT; Qwen3-VL/VAE reference encoding reused."
+                LOGGER.info("[H3 Studio] Conditioning cache hit; skipped Qwen3-VL and reference VAE encoding")
+            else:
+                result = H3StudioPrepare().prepare(
+                    clip=h3_bundle.clip,
+                    mode=runtime_mode,
+                    prompt=studio_context.prompt,
+                    width=studio_context.width,
+                    height=studio_context.height,
+                    frame_preset=frame_preset,
+                    optimize_prompt=False,
+                    preserve_strength=studio_context.state.prompt_options.adherence,
+                    source_fit="crop_center",
+                    reference_size="max_identity_2048",
+                    vae=h3_bundle.video_vae,
+                    source_image=references[0],
+                    reference_image_2=references[1],
+                    reference_image_3=references[2],
+                    reference_image_4=references[3],
+                    reference_image_5=references[4],
+                    reference_image_6=references[5],
+                    reference_image_7=references[6],
+                    reference_image_8=references[7],
+                    reference_image_9=references[8],
+                )
+                conditioning, latent, fitted, requested_frames, _prompt, runtime_info = result
+                _CONDITIONING_CACHE_KEY = cache_key
+                _CONDITIONING_CACHE_VALUE = (conditioning, latent, fitted, requested_frames, runtime_info)
         model = h3_bundle.model_for(route)
         run_info = f"{studio_context.summary()}\n\nRuntime: {runtime_info}{route_note}"
         generation = H3StudioGeneration(
@@ -420,8 +460,8 @@ class H3StudioContextSamplingPreset:
     def INPUT_TYPES(cls):
         return {"required": {"model": ("MODEL",), "studio_context": ("H3_STUDIO_CONTEXT",)}}
 
-    @staticmethod
-    def build(model, studio_context):
+    def build(self, model, studio_context):
+        global _PDD_PATCH_CACHE_KEY, _PDD_PATCH_CACHE_VALUE
         from ..acceleration import build_pdd_backend, is_pdd_profile
         from .image_runtime import H3StudioSamplingPreset
 
@@ -429,12 +469,21 @@ class H3StudioContextSamplingPreset:
             raise ValueError("Connect H3 Studio Director's studio_context output.")
         profile = _sampling_profile(studio_context.state.generation.sampling_profile)
         if is_pdd_profile(profile):
-            result = build_pdd_backend(
-                model,
-                profile,
-                selected_route=studio_context.route.selected,
-                reference_count=len(studio_context.images),
-            )
+            cache_key = (id(model), profile, studio_context.route.selected)
+            with _PDD_PATCH_CACHE_LOCK:
+                if cache_key == _PDD_PATCH_CACHE_KEY and _PDD_PATCH_CACHE_VALUE is not None:
+                    result = _PDD_PATCH_CACHE_VALUE
+                    result = (*result[:3], f"{result[3]} | patch_cache=hit")
+                    LOGGER.info("[H3 Studio] PDD patch cache hit; reused LoRA, heads and patched model")
+                else:
+                    result = build_pdd_backend(
+                        model,
+                        profile,
+                        selected_route=studio_context.route.selected,
+                        reference_count=len(studio_context.images),
+                    )
+                    _PDD_PATCH_CACHE_KEY = cache_key
+                    _PDD_PATCH_CACHE_VALUE = result
         else:
             runtime_profile = SAMPLING_PROFILE_TO_RUNTIME[profile]
             result = H3StudioSamplingPreset().build(model, runtime_profile)

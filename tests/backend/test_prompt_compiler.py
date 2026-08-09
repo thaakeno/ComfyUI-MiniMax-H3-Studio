@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from h3studio.constants import MODE_TEXT_TO_IMAGE
+from h3studio.constants import ENHANCE_OFF, ENHANCE_SINGLE, MODE_TEXT_TO_IMAGE
 from h3studio.errors import PromptFormatError
 from h3studio.prompting.compiler import PromptCompiler, normalize_user_prompt, resolve_mode
 from h3studio.prompting.sections import ImagePromptSections
@@ -17,6 +17,14 @@ def ref(ordinal: int, role: str = "auto", retention: str = "attribute_transfer")
 
 def test_normalize_user_prompt() -> None:
     assert normalize_user_prompt("  hello   world\r\n\r\n\r\nnext  ") == "hello world\n\nnext"
+
+
+@pytest.mark.parametrize(
+    "token",
+    ["@image_1", "H3STUDIO_REF_1", "__H3STUDIO_REF_1__", "**H3STUDIO\\_REF\\_1**"],
+)
+def test_normalize_all_editor_reference_tokens(token: str) -> None:
+    assert normalize_user_prompt(f"change his hair to green {token}") == "change his hair to green @Image 1"
 
 
 @pytest.mark.parametrize(
@@ -62,7 +70,8 @@ def test_compile_reference_prompt_uses_native_tags() -> None:
     result = PromptCompiler().compile(state)
     assert result.resolved_mode == "reference_edit"
     assert "<Picture 1>" in result.native_prompt
-    assert "<Subject 2>" in result.native_prompt
+    assert "<Picture 2>" in result.native_prompt
+    assert "<Subject" not in result.native_prompt
     assert "@Image" not in result.native_prompt
     assert "fully_preserved" in result.native_prompt
 
@@ -81,6 +90,61 @@ def test_easy_runtime_tokens_and_zero_width_chip_spacing_compile_to_native_ids()
     assert "<Picture 2>" in result.native_prompt
     assert result.references[0].role == "outfit"
     assert result.references[1].role in {"character", "identity"}
+    assert "not a reference sheet or collage" in result.native_prompt
+    assert "extra people" in result.native_prompt
+
+
+def test_single_reference_edit_is_a_locked_fl2va_source() -> None:
+    state = StudioState(prompt="change his hair to green @image_1", references=(ref(1),))
+    result = PromptCompiler().compile(state)
+    assert result.resolved_mode == "image_to_image"
+    assert "<Picture 1> is the single source image and locked canvas" in result.native_prompt
+    assert "preserve every unmentioned" in result.native_prompt.lower()
+    assert "fully_preserved" in result.native_prompt
+    assert "attribute_transfer" not in result.native_prompt
+    assert "H3STUDIO" not in result.native_prompt
+    assert result.references[0].role == "face"
+    assert result.references[0].role_auto is True
+    assert result.references[0].retention == "fully_preserved"
+    assert result.references[0].retention_auto is True
+
+
+def test_keep_prompt_does_not_add_structure() -> None:
+    state = StudioState(
+        prompt="change his hair to green @image_1",
+        references=(ref(1),),
+        prompt_options=PromptOptions(enhance_mode=ENHANCE_OFF),
+    )
+    result = PromptCompiler().compile(state)
+    assert result.native_prompt == "change his hair to green <Picture 1>"
+    assert "subject_definitions" not in result.native_prompt
+
+
+def test_single_prompt_is_one_line_and_explicit_for_source_edit() -> None:
+    state = StudioState(
+        prompt="change his hair to green @image_1",
+        references=(ref(1),),
+        prompt_options=PromptOptions(enhance_mode=ENHANCE_SINGLE),
+    )
+    result = PromptCompiler().compile(state)
+    assert "\n" not in result.native_prompt
+    assert result.native_prompt.startswith("Edit <Picture 1>, the single locked source image: change his hair to green.")
+    assert "Preserve the same identity" in result.native_prompt
+    assert "reference sheet" in result.native_prompt
+
+
+def test_single_prompt_assigns_multi_reference_roles_without_subject_tags() -> None:
+    state = StudioState(
+        prompt="Show the person from @Image2 with the clothes in @Image1 somewhere outside",
+        references=(ref(1), ref(2)),
+        prompt_options=PromptOptions(enhance_mode=ENHANCE_SINGLE),
+    )
+    result = PromptCompiler().compile(state)
+    assert "\n" not in result.native_prompt
+    assert "<Picture 1> supplies wardrobe" in result.native_prompt
+    assert "<Picture 2> supplies character identity" in result.native_prompt
+    assert "floating garments" in result.native_prompt
+    assert "<Subject" not in result.native_prompt
 
 
 def test_compile_warns_when_connected_references_are_not_mentioned() -> None:

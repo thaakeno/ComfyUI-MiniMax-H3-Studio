@@ -57,6 +57,7 @@ export function installTheme() {
     .h3s-reference-list { display: flex; flex-direction: column; gap: 6px; padding: 2px; border: 1px dashed transparent; border-radius: 7px; transition: border-color 120ms ease, background 120ms ease; }
     .h3s-reference-list.is-dragging { border-color: var(--h3s-accent); background: color-mix(in srgb, var(--h3s-accent) 8%, transparent); }
     .h3s-reference-card { display: grid; grid-template-columns: 48px minmax(0,1fr); gap: 7px; padding: 6px; border: 1px solid var(--h3s-border); border-radius: 6px; background: var(--h3s-bg); }
+    .h3s-reference-card-auto { border-color: color-mix(in srgb, var(--h3s-accent) 45%, var(--h3s-border)); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--h3s-accent) 75%, transparent); }
     .h3s-reference-thumb { position: relative; width: 48px; height: 48px; overflow: hidden; border-radius: 5px; background: var(--h3s-raised); }
     .h3s-reference-thumb img { width: 100%; height: 100%; object-fit: cover; }
     .h3s-thumb-placeholder { display: grid; place-items: center; width: 100%; height: 100%; color: var(--h3s-muted); font-size: 9px; font-weight: 750; letter-spacing: .08em; }
@@ -71,6 +72,7 @@ export function installTheme() {
     .h3s-icon-button:disabled { cursor: default; opacity: .35; }
     .h3s-reference-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     .h3s-auto-role { width: fit-content; padding: 2px 6px; border-radius: 999px; color: var(--h3s-accent); background: color-mix(in srgb, var(--h3s-accent) 10%, transparent); font-size: 8px; font-weight: 650; }
+    .h3s-reference-help { color: var(--h3s-muted); font-size: 8px; line-height: 1.35; }
     .h3s-reference-description { width: 100%; min-height: 38px; max-height: 74px; padding: 5px 7px; resize: vertical; border: 1px solid var(--h3s-border); border-radius: 6px; outline: none; color: var(--h3s-text); background: var(--h3s-surface); font: 10px/1.35 ui-sans-serif, system-ui; }
     .h3s-empty { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 14px 10px; border: 1px dashed var(--h3s-border); border-radius: 8px; color: var(--h3s-muted); text-align: center; }
     .h3s-empty strong { color: var(--h3s-text); font-size: 11px; }

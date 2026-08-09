@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Final
 
-VERSION: Final = "0.1.0-alpha.7"
-STATE_SCHEMA_VERSION: Final = 4
+VERSION: Final = "0.1.0-alpha.8"
+STATE_SCHEMA_VERSION: Final = 5
 CONTEXT_SCHEMA_VERSION: Final = 1
 
 CANVAS_MULTIPLE: Final = 32
@@ -35,9 +35,10 @@ ROUTE_REF2VA: Final = "ref2va"
 ROUTES: Final = (ROUTE_AUTO, ROUTE_FL2VA, ROUTE_REF2VA)
 
 ENHANCE_OFF: Final = "off"
+ENHANCE_SINGLE: Final = "single_prompt"
 ENHANCE_COMPILE: Final = "compile_only"
 ENHANCE_VLM: Final = "vlm"
-ENHANCE_MODES: Final = (ENHANCE_OFF, ENHANCE_COMPILE, ENHANCE_VLM)
+ENHANCE_MODES: Final = (ENHANCE_OFF, ENHANCE_SINGLE, ENHANCE_COMPILE, ENHANCE_VLM)
 
 REFERENCE_ROLES: Final = (
     "auto",
@@ -158,7 +159,7 @@ PROMPT_SECTION_NAMES: Final = (
 
 ROLE_KEYWORDS: Final = {
     "identity": ("identity", "same person", "same character", "recognizable", "likeness"),
-    "face": ("face", "facial", "eyes", "jaw", "portrait", "head"),
+    "face": ("face", "facial", "eyes", "jaw", "portrait", "head", "hair", "hairstyle", "haircut"),
     "character": ("character", "person", "subject", "hero", "villain"),
     "style": ("style", "rendering", "aesthetic", "art direction", "linework", "anime"),
     "composition": ("composition", "framing", "layout", "camera angle", "perspective"),

@@ -38,7 +38,7 @@ def test_persisted_studio_state_is_image_only_and_versioned():
     workflow = load_workflow()
     director = next(node for node in workflow["nodes"] if node["type"] == "H3StudioDirector")
     state = json.loads(director["widgets_values"][20])
-    assert state["schema_version"] == 4
+    assert state["schema_version"] == 5
     assert state["references"] == []
     assert state["generation"]["route"] == "auto"
     serialized = json.dumps(workflow).lower()

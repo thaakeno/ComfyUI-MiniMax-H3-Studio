@@ -40,6 +40,10 @@ The generation panel exposes mode, aspect ratio, megapixels, seed, sampling spee
 
 ## Prompt enhancement
 
+The Director offers three prompt-shaping choices. **Keep my prompt** sends your wording unchanged apart from converting `@Image N` into H3's native `<Picture N>` labels. **Clear one-line instruction** turns a short request into one direct, heading-free instruction with explicit reference roles and preservation rules; this is the recommended choice for edits such as “change his hair to green @Image 1” and combinations such as “use the person from @Image 2 with the clothes from @Image 1.” **Structured production brief** builds the four-section format for complex posters, layouts, art direction, and longer multi-part requests.
+
+Generation modes name their model path in the UI. Text to image uses FL2VA. Image to image uses FL2VA with Image 1 as a first-frame/source anchor and preserves its canvas. Reference mix/edit uses REF2VA and treats one or more tagged images as independent sources to combine. Auto chooses text-to-image FL2VA with no references, anchored FL2VA with one reference, and REF2VA with two or more references.
+
 `Production brief` is the safe default. It deterministically converts the user's request and reference metadata into:
 
 ```text

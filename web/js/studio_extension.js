@@ -2,6 +2,7 @@ import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 
 import {
+  applyReferenceInferences,
   ASPECT_RATIOS,
   FRAME_PROFILES,
   MAX_MEGAPIXELS,
@@ -156,6 +157,8 @@ function referenceForLink(previous, link, ordinal) {
     ordinal,
     role: inherited.role || "auto",
     retention: inherited.retention || "attribute_transfer",
+    role_auto: inherited.role_auto ?? (inherited.role || "auto") === "auto",
+    retention_auto: inherited.retention_auto ?? (inherited.role || "auto") === "auto",
     description: inherited.description || "",
     enabled: true,
     source_node_id: String(link.source_id),
@@ -299,13 +302,15 @@ function section(title, body, accessory = null, description = "") {
 
 function samplingHelp(profile) {
   if (String(profile).startsWith("pdd_ref2va")) {
-    return "Four-step REF2VA acceleration. H3 Studio automatically finds the matching Mamad8 student LoRA and PDD heads. Requires references and the external Mamad8 node package.";
+    if (String(profile).endsWith("600")) return "PDD checkpoint 600: an alternate Mamad8 four-step REF2VA student checkpoint. Requires its matching ckpt-600 LoRA and heads. The first patched-model load is expensive; repeated seeds now reuse the prepared patch and conditioning when the prompt and references are unchanged.";
+    return "PDD checkpoint 900: the later Mamad8 four-step REF2VA student checkpoint and the recommended PDD starting point. Requires its matching ckpt-900 LoRA and heads. The first patched-model load is expensive; repeated seeds now reuse the prepared patch and conditioning when the prompt and references are unchanged.";
   }
   if (String(profile).startsWith("lightx")) {
-    return "Experimental four-step LightX schedule. Use it only with the matching LightX LoRA loaded on the model path.";
+    if (String(profile).includes("sa_solver")) return "LightX SA-Solver 4: experimental four-step schedule for the matching LightX v0.1 LoRA. Fast after loading; use only when that exact LoRA is already applied to the selected model.";
+    return "LightX ER-SDE 4: experimental four-step schedule for the matching LightX v0.1 LoRA. Fast after loading; use only when that exact LoRA is already applied to the selected model.";
   }
-  if (profile === "base_balanced_12") return "Faster native H3 sampling with fewer steps; no acceleration files required.";
-  return "Highest-confidence native H3 sampling. No turbo LoRA or external acceleration package required.";
+  if (profile === "base_balanced_12") return "Base Balanced: native H3 at 12 RES steps. No LoRA or external package; faster than Base Quality with a smaller quality margin.";
+  return "Base Quality: native H3 at 20 RES steps. No LoRA or external package; slowest sampling but the safest quality baseline.";
 }
 
 function generationSection(node, state, refresh) {
@@ -316,11 +321,13 @@ function generationSection(node, state, refresh) {
     refresh();
   };
   const mode = selectControl(generation.mode, [
-    ["auto", "Auto"], ["text_to_image", "Text to image"], ["image_to_image", "Image to image"],
-    ["reference_edit", "Reference edit"],
+    ["auto", "Auto · choose model"], ["text_to_image", "Text to image · FL2VA"],
+    ["image_to_image", "Image to image · FL2VA anchor"],
+    ["reference_edit", "Reference mix/edit · REF2VA"],
   ], "Generation mode", (value) => update({ mode: value }));
   const ratio = selectControl(generation.aspect_ratio, Object.keys(ASPECT_RATIOS), "Aspect ratio", (value) => update({ aspect_ratio: value }));
   const sampling = selectControl(generation.sampling_profile, SAMPLING_PROFILES, "Sampling speed", (value) => update({ sampling_profile: value }));
+  sampling.title = samplingHelp(generation.sampling_profile);
   const frames = selectControl(generation.frame_profile, FRAME_PROFILES, "Temporal packet length", (value) => update({ frame_profile: value }));
   const seed = numberControl(generation.seed, { min: 0, max: Number.MAX_SAFE_INTEGER, step: 1 }, "Seed", (value) => update({ seed: Math.max(0, Math.trunc(value)) }));
   const random = iconButton("Randomize seed", "↻", () => update({ seed: Math.floor(Math.random() * 0x7fffffff) }));
@@ -371,7 +378,14 @@ function generationSection(node, state, refresh) {
     text: "Target size controls the requested image area from 0.20 MP (faster) to 2.00 MP (larger). H3's native safety cap can reduce the final area; the exact aligned dimensions and actual MP are shown directly below.",
   });
   const help = element("p", { className: "h3s-context-help", text: samplingHelp(generation.sampling_profile) });
-  return section("Generation", element("div", { className: "h3s-section-stack" }, [grid, sizeHelp, preview, help]));
+  const modeHelp = {
+    auto: "Auto: no images uses FL2VA text-to-image; one image uses FL2VA as a first-frame anchor; two or more images use REF2VA as ordered references.",
+    text_to_image: "Text to image · FL2VA: creates a new image from text. Uploaded references are intentionally ignored.",
+    image_to_image: "Image to image · FL2VA anchor: transforms one source image while anchoring frame 0 to its canvas. Only Image 1 is used.",
+    reference_edit: "Reference mix/edit · REF2VA: combines one or more independent references by their @Image roles, without treating any image as the locked canvas.",
+  };
+  const modeDescription = element("p", { className: "h3s-context-help", text: modeHelp[generation.mode] || modeHelp.auto });
+  return section("Generation", element("div", { className: "h3s-section-stack" }, [grid, modeDescription, sizeHelp, preview, help]));
 }
 
 function promptSection(node, state, refresh) {
@@ -383,7 +397,8 @@ function promptSection(node, state, refresh) {
   const options = state.prompt_options;
   const visibleEnhanceMode = options.enhance_mode === "vlm" ? "compile_only" : options.enhance_mode;
   const enhance = selectControl(visibleEnhanceMode, [
-    ["off", "Keep my prompt"], ["compile_only", "Build H3 production brief"],
+    ["off", "Keep my prompt"], ["single_prompt", "Clear one-line instruction"],
+    ["compile_only", "Structured production brief"],
   ], "Prompt enhancement", (value) => update({ enhance_mode: value }));
   const adherenceValue = element("span", { className: "h3s-inline-value", text: `${Math.round(options.adherence * 100)}%` });
   const adherence = rangeControl(options.adherence, { min: 0, max: 1, step: 0.05 }, "Reference adherence", (value) => {
@@ -393,8 +408,9 @@ function promptSection(node, state, refresh) {
   });
   const adherenceWrap = element("div", {}, [adherence, adherenceValue]);
   const explanations = {
-    off: "Keeps your wording and only converts @Image tags into H3's native reference syntax.",
-    compile_only: "Organizes your request into H3's subject, summary, retention, and detailed-description sections. It does not invent an image analysis.",
+    off: "Keeps your wording exactly and only converts @Image tags into H3's native reference syntax.",
+    single_prompt: "Turns your request into one direct, easy-to-read H3 instruction with explicit image roles and preservation rules. It has no headings or line breaks and works especially well for simple edits and reference combinations.",
+    compile_only: "Builds the four-section subject, summary, retention, and detailed-description format for complex art direction. It assigns roles from your wording but does not pretend to visually analyze an image.",
     vlm: options.analyzer_model
       ? "The selected standalone vision-language model studies the references first, then H3 Studio builds the structured production brief."
       : "No standalone analyzer is selected, so generation safely falls back to Build H3 production brief. H3's loaded ConvRot encoder still conditions the final generation but cannot act as this separate analyzer.",
@@ -421,6 +437,7 @@ function referenceCard(node, state, reference, index, refresh) {
   ]);
   const mutate = (patch) => {
     state.references[index] = { ...state.references[index], ...patch };
+    if (node.__h3studioAutoChanges) delete node.__h3studioAutoChanges[index];
     applyState(node, state);
   };
   const move = (delta) => {
@@ -454,21 +471,33 @@ function referenceCard(node, state, reference, index, refresh) {
   const title = element("div", { className: "h3s-reference-top" }, [
     element("span", { className: "h3s-reference-name", text: reference.filename, title: reference.filename }), actions,
   ]);
-  const role = selectControl(reference.role, ROLES, `Role for Image ${index + 1}`, (value) => mutate({ role: value }));
-  const retention = selectControl(reference.retention, RETENTION, `Retention for Image ${index + 1}`, (value) => mutate({ retention: value }));
+  const role = selectControl(reference.role, ROLES, `Role for Image ${index + 1}`, (value) => mutate({ role: value, role_auto: value === "auto" }));
+  const retentionHelp = {
+    attribute_transfer: "Transfer only the assigned trait, such as clothing or style; do not copy unrelated source content.",
+    fully_preserved: "Keep the assigned identity or source details as faithfully as possible; change only what the prompt requests.",
+    partially_preserved: "Keep the recognizable core while allowing the new scene, pose, framing, or edit to adapt it.",
+    reference_only: "Use the image as loose guidance; exact identity and details do not need to be copied.",
+  };
+  const retention = selectControl(reference.retention, RETENTION, retentionHelp[reference.retention], (value) => mutate({ retention: value, retention_auto: false }));
   const description = element("textarea", {
     className: "h3s-reference-description", value: reference.description,
     placeholder: "What this image defines…", attrs: { "aria-label": `Description for Image ${index + 1}` },
     on: { change: (event) => mutate({ description: event.target.value }) },
   });
   const controls = element("div", { className: "h3s-reference-controls" }, [role, retention]);
-  const inferredRole = node.__h3studioResult?.roles?.[index];
-  const roleHint = reference.role === "auto" && inferredRole && inferredRole !== "reference"
-    ? element("div", { className: "h3s-auto-role", text: `Auto detected from prompt: ${inferredRole}` })
+  const retentionHint = element("div", { className: "h3s-reference-help", text: retentionHelp[reference.retention] });
+  const changedNow = node.__h3studioAutoChanges?.[index];
+  const autoChange = changedNow || (
+    (reference.role_auto || reference.retention_auto) && reference.role !== "auto"
+      ? { role: reference.role, retention: reference.retention }
+      : null
+  );
+  const roleHint = autoChange
+    ? element("div", { className: "h3s-auto-role", text: `${changedNow ? "Prompt updated" : "Prompt-managed"} · ${autoChange.role} · ${autoChange.retention}` })
     : null;
-  return element("article", { className: "h3s-reference-card" }, [
+  return element("article", { className: `h3s-reference-card${autoChange ? " h3s-reference-card-auto" : ""}` }, [
     thumb,
-    element("div", { className: "h3s-reference-body" }, [title, controls, roleHint, description].filter(Boolean)),
+    element("div", { className: "h3s-reference-body" }, [title, controls, roleHint, retentionHint, description].filter(Boolean)),
   ]);
 }
 
@@ -498,6 +527,8 @@ async function addImages(node, state, refresh, providedFiles = null) {
         ordinal: state.references.length + 1,
         role: "auto",
         retention: "attribute_transfer",
+        role_auto: true,
+        retention_auto: true,
         description: "",
         enabled: true,
         source_node_id: null,
@@ -578,7 +609,7 @@ function advancedSection(node, state, refresh) {
       ["auto", "Auto · choose for me"], ["fl2va", "Force FL2VA"], ["ref2va", "Force REF2VA"],
     ], "Conditioning route", (value) => update({ route: value }))),
   ]));
-  content.append(element("p", { className: "h3s-context-help", text: "Auto uses FL2VA for pure text and selects REF2VA when the request needs references. Force a route only for controlled comparisons." }));
+  content.append(element("p", { className: "h3s-context-help", text: "Model route normally follows Mode. FL2VA handles text generation and a single first-frame anchor. REF2VA handles independently tagged reference images. Force a route only for controlled comparisons." }));
   const toggle = element("button", {
     className: "h3s-advanced-toggle", type: "button", attrs: { "aria-expanded": String(state.ui.advanced_open) },
     on: { click: () => { state.ui.advanced_open = !state.ui.advanced_open; applyState(node, state); refresh(); } },
@@ -640,10 +671,16 @@ function installPanel(node) {
   const originalExecuted = node.onExecuted;
   node.onExecuted = function h3studioExecuted(message) {
     const result = originalExecuted?.apply(this, arguments);
+    const roles = executionValue(message, "reference_roles");
+    const retentions = executionValue(message, "reference_retentions");
+    const { state, changes: autoChanges } = applyReferenceInferences(stateFromNode(this), roles, retentions);
+    applyState(this, state, false);
+    this.__h3studioAutoChanges = autoChanges;
     this.__h3studioResult = {
       prompt: executionValue(message, "compiled_prompt")[0] || "",
       labels: executionValue(message, "reference_labels"),
-      roles: executionValue(message, "reference_roles"),
+      roles,
+      retentions,
       diagnostics: executionValue(message, "diagnostics")[0] || "",
     };
     queueMicrotask(() => renderPanel(this));

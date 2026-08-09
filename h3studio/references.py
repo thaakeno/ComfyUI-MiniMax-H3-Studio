@@ -12,7 +12,7 @@ from typing import Any
 from .constants import MAX_REFERENCE_IMAGES, REFERENCE_ROLES, RETENTION_MARKERS, ROLE_KEYWORDS
 from .errors import DiagnosticBag, DuplicateReferenceError, MissingReferenceError, ReferenceError
 
-_MENTION_RE = re.compile(r"(?<![\w@])@Image\s*([1-9]\d*)\b", re.IGNORECASE)
+_MENTION_RE = re.compile(r"(?<![\w@])@Image[_\s]*([1-9]\d*)\b", re.IGNORECASE)
 _PICTURE_RE = re.compile(r"<Picture\s+([1-9]\d*)>", re.IGNORECASE)
 _SUBJECT_RE = re.compile(r"<Subject\s+([1-9]\d*)>", re.IGNORECASE)
 _SAFE_ID_RE = re.compile(r"[^a-zA-Z0-9_-]+")
@@ -84,6 +84,8 @@ class ReferenceImage:
     height: int | None = None
     fingerprint: str | None = None
     tags: tuple[str, ...] = field(default_factory=tuple)
+    role_auto: bool = False
+    retention_auto: bool = False
 
     @property
     def mention(self) -> str:
@@ -119,6 +121,8 @@ class ReferenceImage:
             "enabled": self.enabled,
             "source_slot": self.source_slot,
             "tags": list(self.tags),
+            "role_auto": self.role_auto,
+            "retention_auto": self.retention_auto,
         }
         if self.storage_name:
             payload["storage_name"] = self.storage_name
@@ -152,6 +156,8 @@ class ReferenceImage:
             height=_optional_positive_int(value.get("height")),
             fingerprint=_optional_string(value.get("fingerprint")),
             tags=tags,
+            role_auto=bool(value.get("role_auto", canonical_role(value.get("role")) == "auto")),
+            retention_auto=bool(value.get("retention_auto", canonical_role(value.get("role")) == "auto")),
         )
 
 
@@ -301,7 +307,7 @@ def infer_roles_from_prompt(prompt: str, references: Sequence[ReferenceImage], w
     mentions = list(iter_mentions(prompt))
     inferred: list[ReferenceImage] = []
     for reference in references:
-        if reference.role != "auto":
+        if reference.role != "auto" and not reference.role_auto:
             inferred.append(reference)
             continue
         matching = [mention for mention in mentions if mention.ordinal == reference.ordinal]
@@ -325,7 +331,7 @@ def infer_roles_from_prompt(prompt: str, references: Sequence[ReferenceImage], w
                 right = min(right, (mention.end + neighbor.start) // 2)
             snippets.append(prompt[left:right])
         role = infer_role(" ".join(snippets), fallback="auto")
-        inferred.append(replace(reference, role=role))
+        inferred.append(replace(reference, role=role, role_auto=True))
     return tuple(inferred)
 
 

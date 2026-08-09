@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  applyReferenceInferences,
   MAX_MEGAPIXELS,
   MAX_REFERENCES,
   MIN_MEGAPIXELS,
@@ -24,7 +25,7 @@ import { parseStorageName, previewUrlForStorage, storageNameFromUpload } from ".
 
 test("default state is an immediately usable text-to-image request", () => {
   const state = defaultState();
-  assert.equal(state.schema_version, 4);
+  assert.equal(state.schema_version, 5);
   assert.equal(state.generation.mode, "auto");
   assert.deepEqual(state.references, []);
 });
@@ -58,7 +59,7 @@ test("schema one settings migrate into their typed sections", () => {
     schema_version: 1,
     settings: { mode: "reference_edit", megapixels: 1.4, enhance_mode: "vlm", adherence: 0.7 },
   });
-  assert.equal(state.schema_version, 4);
+  assert.equal(state.schema_version, 5);
   assert.equal(state.generation.mode, "reference_edit");
   assert.equal(state.generation.megapixels, 1.4);
   assert.equal(state.prompt_options.enhance_mode, "vlm");
@@ -76,6 +77,30 @@ test("normalization clamps fields and limits references", () => {
   assert.equal(state.generation.seed, 0);
   assert.equal(state.prompt_options.adherence, 0);
   assert.equal(state.references.length, MAX_REFERENCES);
+});
+
+test("single-line prompt shaping survives state normalization", () => {
+  const state = normalizeState({ prompt_options: { enhance_mode: "single_prompt" } });
+  assert.equal(state.prompt_options.enhance_mode, "single_prompt");
+  assert.equal(parseState(serializeState(state)).prompt_options.enhance_mode, "single_prompt");
+});
+
+test("prompt inference updates auto-managed role and retention but preserves manual choices", () => {
+  const value = defaultState();
+  value.references = [
+    { filename: "auto.png", role: "auto", retention: "attribute_transfer", role_auto: true, retention_auto: true },
+    { filename: "manual.png", role: "style", retention: "reference_only", role_auto: false, retention_auto: false },
+  ];
+  const { state, changes } = applyReferenceInferences(
+    value,
+    ["face", "identity"],
+    ["fully_preserved", "fully_preserved"],
+  );
+  assert.equal(state.references[0].role, "face");
+  assert.equal(state.references[0].retention, "fully_preserved");
+  assert.deepEqual(changes[0], { role: "face", retention: "fully_preserved" });
+  assert.equal(state.references[1].role, "style");
+  assert.equal(state.references[1].retention, "reference_only");
 });
 
 test("mention rewriting changes only actual friendly image references", () => {

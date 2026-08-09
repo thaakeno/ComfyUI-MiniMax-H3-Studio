@@ -1,4 +1,4 @@
-export const STATE_SCHEMA_VERSION = 4;
+export const STATE_SCHEMA_VERSION = 5;
 export const MAX_REFERENCES = 9;
 export const MIN_MEGAPIXELS = 0.2;
 export const MAX_MEGAPIXELS = 2;
@@ -137,6 +137,8 @@ export function normalizeReference(value, ordinal) {
     ordinal,
     role: choice(source.role, ROLES, "auto"),
     retention: choice(source.retention, RETENTION, "attribute_transfer"),
+    role_auto: source.role_auto == null ? choice(source.role, ROLES, "auto") === "auto" : source.role_auto === true,
+    retention_auto: source.retention_auto == null ? choice(source.role, ROLES, "auto") === "auto" : source.retention_auto === true,
     description: String(source.description || ""),
     enabled: source.enabled !== false,
     source_node_id: source.source_node_id == null ? null : String(source.source_node_id),
@@ -170,7 +172,7 @@ export function normalizeState(value) {
   const source = migrateState(object(value));
   const promptOptions = { ...defaults.prompt_options, ...object(source.prompt_options) };
   const generation = { ...defaults.generation, ...object(source.generation) };
-  promptOptions.enhance_mode = choice(promptOptions.enhance_mode, ["off", "compile_only", "vlm"], "compile_only");
+  promptOptions.enhance_mode = choice(promptOptions.enhance_mode, ["off", "single_prompt", "compile_only", "vlm"], "compile_only");
   promptOptions.adherence = clamp(promptOptions.adherence, 0, 1, 0.85);
   promptOptions.detail_level = choice(promptOptions.detail_level, ["concise", "detailed", "maximum"], "detailed");
   promptOptions.analyzer_max_tokens = Math.round(clamp(promptOptions.analyzer_max_tokens, 128, 8192, 1800));
@@ -200,6 +202,29 @@ export function normalizeState(value) {
     generation,
     ui: { ...defaults.ui, ...object(source.ui) },
   };
+}
+
+export function applyReferenceInferences(value, roles = [], retentions = []) {
+  const state = normalizeState(value);
+  const changes = {};
+  state.references = state.references.map((reference, index) => {
+    const nextRole = String(roles[index] || reference.role);
+    const nextRetention = String(retentions[index] || reference.retention);
+    const canUpdateRole = reference.role === "auto" || reference.role_auto === true;
+    const canUpdateRetention = reference.retention_auto === true || reference.role === "auto";
+    const updated = {
+      ...reference,
+      role: canUpdateRole ? choice(nextRole, ROLES, reference.role) : reference.role,
+      retention: canUpdateRetention ? choice(nextRetention, RETENTION, reference.retention) : reference.retention,
+      role_auto: canUpdateRole,
+      retention_auto: canUpdateRetention,
+    };
+    if ((canUpdateRole && updated.role !== reference.role) || (canUpdateRetention && updated.retention !== reference.retention)) {
+      changes[index] = { role: updated.role, retention: updated.retention };
+    }
+    return updated;
+  });
+  return { state, changes };
 }
 
 export function parseState(value) {

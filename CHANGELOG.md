@@ -2,6 +2,29 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [0.1.0-alpha.8] - 2026-08-09
+
+### Fixed
+
+- Fixed TAEH3 live preview's sampler wrapper calling the current wrapper index recursively; it now advances through ComfyUI's wrapper chain exactly once per sample and reuses one preview-enabled model instead of accumulating wrappers across queues.
+- Matched the known-working Smart Multi-Ref REF2VA conditioning contract by attaching `minimax_frame_count` together with ordered reference latents.
+- Stopped production briefs from turning every reference into a separate `<Subject N>`, which could make H3 reproduce source panels, cutouts, floating clothing, or duplicate bodies instead of synthesizing one result.
+- Normalized `@image_1`, raw/underscored H3 Studio runtime tokens, Markdown-escaped mention tokens, and zero-width editor text into stable `<Picture N>` references.
+- Made one-reference Auto mode compile as a locked FL2VA source edit with full preservation of every unmentioned property.
+
+### Added
+
+- Added **Clear one-line instruction**, a heading-free prompt mode for direct edits and reference combinations with explicit role, preservation, and anti-collage rules.
+- Added subtle mode descriptions that state exactly when Auto, Text to image, Image to image, and Reference mix/edit use FL2VA or REF2VA.
+- Added prompt-managed role and retention controls: inferred values are written back into both dropdowns, remain auto-updatable on later prompts, show a visual cue, and are printed as auto/manual in the execution report.
+- Added bounded in-node caches for unchanged conditioning and PDD patch preparation, avoiding repeat Qwen3-VL/reference-VAE encoding and repeat LoRA/heads patch construction when only the seed changes.
+- Added plain-language retention explanations and detailed help for every Base, LightX, and PDD speed profile.
+
+### Changed
+
+- **Keep my prompt** now truly preserves the user's wording and only converts friendly image mentions; it no longer silently builds the four-section brief.
+- Structured briefs now use direct `<Picture N>` role contracts, preserve the user's operation as the final-image instruction, and explicitly require a single coherent result.
+
 ## [0.1.0-alpha.7] - 2026-08-09
 
 ### Fixed

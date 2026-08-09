@@ -853,6 +853,11 @@ class H3StudioPrepare:
             cond = clip.encode_from_tokens_scheduled(tokens)
             cond = node_helpers.conditioning_set_values(cond, {
                 "minimax_refs": ref_blocks,
+                # Native REF2VA expects the temporal packet size beside the
+                # reference latents. The known-good Smart Multi-Ref composer
+                # supplies both values; omitting this can make references act
+                # like content to reproduce instead of scoped conditioning.
+                "minimax_frame_count": natural_frames,
             })
             checkpoint_note = (
                 f"Use a REF2VA checkpoint; {len(references)} ordered reference image(s) encoded "

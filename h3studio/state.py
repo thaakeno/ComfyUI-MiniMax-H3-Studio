@@ -303,4 +303,9 @@ def migrate_state_dict(value: Mapping[str, Any]) -> dict[str, Any]:
         # Schema 4 adds optional acceleration profiles. Existing workflows keep
         # their selected base/LightX profile without any structural rewrite.
         migrated["schema_version"] = 4
+        version = 4
+    if version == 4:
+        # Schema 5 lets prompt inference update visible role/retention controls
+        # while preserving explicit manual selections.
+        migrated["schema_version"] = 5
     return migrated

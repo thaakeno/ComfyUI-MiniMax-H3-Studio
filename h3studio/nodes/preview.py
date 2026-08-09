@@ -11,12 +11,16 @@ import base64
 import io
 import logging
 import math
+import threading
 from dataclasses import dataclass
 from typing import Any
 
 LOGGER = logging.getLogger(__name__)
 WRAPPER_KEY = "h3studio_taeh3_preview"
 DEFAULT_TAEH3 = "taeh3.safetensors"
+_PREVIEW_MODEL_CACHE_LOCK = threading.RLock()
+_PREVIEW_MODEL_CACHE_KEY = None
+_PREVIEW_MODEL_CACHE_VALUE = None
 
 
 def _conv(torch, channels_in: int, channels_out: int, *, bias: bool = True):
@@ -207,7 +211,10 @@ class _PreviewWrapper:
             kwargs["callback"] = preview_callback
         else:
             positional[callback_index] = preview_callback
-        return executor.execute(*positional, **kwargs)
+        # A Comfy wrapper must call the executor object so it advances to the
+        # next wrapper. Calling executor.execute() restarts the current index
+        # and recursively invokes this same wrapper until Python overflows.
+        return executor(*positional, **kwargs)
 
 
 class H3StudioTAEH3Preview:
@@ -236,7 +243,11 @@ class H3StudioTAEH3Preview:
 
     @staticmethod
     def attach(model, enabled, tiny_vae, max_resolution, jpeg_quality, preview_every_n_steps, unique_id=None):
+        global _PREVIEW_MODEL_CACHE_KEY, _PREVIEW_MODEL_CACHE_VALUE
         if not enabled:
+            with _PREVIEW_MODEL_CACHE_LOCK:
+                _PREVIEW_MODEL_CACHE_KEY = None
+                _PREVIEW_MODEL_CACHE_VALUE = None
             return (model,)
 
         import comfy.patcher_extension
@@ -247,17 +258,27 @@ class H3StudioTAEH3Preview:
             raise FileNotFoundError(
                 f"TAEH3 preview file '{tiny_vae}' was not found. Put it in ComfyUI/models/vae_approx/."
             )
-        patched = model.clone()
-        patched.remove_wrappers_with_key(comfy.patcher_extension.WrappersMP.OUTER_SAMPLE, WRAPPER_KEY)
-        patched.add_wrapper_with_key(
-            comfy.patcher_extension.WrappersMP.OUTER_SAMPLE,
-            WRAPPER_KEY,
-            _PreviewWrapper(
-                checkpoint_path=checkpoint_path,
-                node_id=str(unique_id or ""),
-                max_resolution=int(max_resolution),
-                jpeg_quality=int(jpeg_quality),
-                every=max(1, int(preview_every_n_steps)),
-            ),
+        cache_key = (
+            id(model), checkpoint_path, str(unique_id or ""), int(max_resolution), int(jpeg_quality),
+            max(1, int(preview_every_n_steps)),
         )
-        return (patched,)
+        with _PREVIEW_MODEL_CACHE_LOCK:
+            if cache_key == _PREVIEW_MODEL_CACHE_KEY and _PREVIEW_MODEL_CACHE_VALUE is not None:
+                LOGGER.info("[H3 Studio] TAEH3 wrapper cache hit; reused the single preview-enabled model")
+                return (_PREVIEW_MODEL_CACHE_VALUE,)
+            patched = model.clone()
+            patched.remove_wrappers_with_key(comfy.patcher_extension.WrappersMP.OUTER_SAMPLE, WRAPPER_KEY)
+            patched.add_wrapper_with_key(
+                comfy.patcher_extension.WrappersMP.OUTER_SAMPLE,
+                WRAPPER_KEY,
+                _PreviewWrapper(
+                    checkpoint_path=checkpoint_path,
+                    node_id=str(unique_id or ""),
+                    max_resolution=int(max_resolution),
+                    jpeg_quality=int(jpeg_quality),
+                    every=max(1, int(preview_every_n_steps)),
+                ),
+            )
+            _PREVIEW_MODEL_CACHE_KEY = cache_key
+            _PREVIEW_MODEL_CACHE_VALUE = patched
+            return (patched,)
