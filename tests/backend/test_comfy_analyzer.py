@@ -17,6 +17,12 @@ class FakeImage:
         return self.pointer
 
 
+class FakeInferenceImage(FakeImage):
+    @property
+    def _version(self):
+        raise RuntimeError("Inference tensors do not track version counter.")
+
+
 class FakeClip:
     def __init__(self):
         self.seen_images = []
@@ -67,3 +73,18 @@ def test_native_analyzer_uses_pixels_and_returns_card_descriptions() -> None:
     )
     assert compiled.references[0].role == "character"
     assert compiled.references[1].role == "object"
+
+
+def test_inference_tensor_without_version_counter_is_cacheable() -> None:
+    clip = FakeClip()
+    references = (
+        ReferenceImage("one", "person.jpg", 1),
+        ReferenceImage("two", "glasses.png", 2),
+    )
+    analyzed, _note = analyze_references(
+        clip,
+        "Show the person in @Image1 with the glasses from @Image2 and make him look to the right",
+        references,
+        (FakeInferenceImage(303), FakeInferenceImage(404)),
+    )
+    assert analyzed[0].role == "character"

@@ -41,7 +41,13 @@ Do not rewrite, summarize, improve, or omit any user instruction. Do not emit Ma
 def _image_key(image: Any) -> tuple[Any, ...]:
     pointer = getattr(image, "data_ptr", None)
     identity = pointer() if callable(pointer) else id(image)
-    return identity, getattr(image, "_version", 0), tuple(getattr(image, "shape", ()))
+    # torch.inference_mode() tensors deliberately have no readable version
+    # counter and raise RuntimeError when `_version` is accessed.
+    try:
+        version = image._version
+    except (AttributeError, RuntimeError):
+        version = None
+    return identity, version, tuple(getattr(image, "shape", ()))
 
 
 def _extract_json(text: str) -> dict[str, Any]:
