@@ -5,13 +5,15 @@ from __future__ import annotations
 from typing import Final
 
 VERSION: Final = "0.1.0-alpha.11"
-STATE_SCHEMA_VERSION: Final = 8
+STATE_SCHEMA_VERSION: Final = 9
 CONTEXT_SCHEMA_VERSION: Final = 1
 
 CANVAS_MULTIPLE: Final = 32
 DEFAULT_MEGAPIXELS: Final = 1.0
 MIN_MEGAPIXELS: Final = 0.20
-MAX_MEGAPIXELS: Final = 2.00
+# 8.5 MP covers UHD/4K-class 16:9 after H3's 32-pixel canvas alignment.
+MAX_MEGAPIXELS: Final = 8.50
+UHD_4K_MEGAPIXELS: Final = 3840 * 2160 / 1_000_000
 NATIVE_MAX_PIXELS: Final = 768 * 1344
 MAX_REFERENCE_IMAGES: Final = 9
 DEFAULT_WIDTH: Final = 1024
