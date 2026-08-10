@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .conditioning_node import install_conditioning_pipeline
 from .constants import DEFAULT_MEGAPIXELS, MAX_MEGAPIXELS, MIN_MEGAPIXELS
 from .nodes.benchmark import NODE_CLASS_MAPPINGS as BENCHMARK_NODE_CLASS_MAPPINGS
 from .nodes.benchmark import NODE_DISPLAY_NAME_MAPPINGS as BENCHMARK_NODE_DISPLAY_NAME_MAPPINGS
@@ -18,6 +19,10 @@ from .nodes.loader import H3StudioLoader
 from .nodes.preview import H3StudioTAEH3Preview
 from .web_routes import register_routes
 
+# Benchmark code imports the canonical H3StudioCondition class directly before
+# registration. Install once on that shared class object so every caller uses
+# the same staged cache / DynamicVRAM handoff implementation.
+install_conditioning_pipeline(H3StudioCondition)
 register_routes()
 
 
