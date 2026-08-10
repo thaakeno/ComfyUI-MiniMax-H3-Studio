@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from h3studio.constants import STATE_SCHEMA_VERSION
+from h3studio.constants import MAX_MEGAPIXELS, STATE_SCHEMA_VERSION
 from h3studio.errors import StateDecodeError, StateVersionError
 from h3studio.references import ReferenceImage
 from h3studio.state import GenerationOptions, PromptOptions, StudioState, migrate_state_dict
@@ -64,14 +64,44 @@ def test_v1_settings_are_migrated() -> None:
     migrated = migrate_state_dict(old)
     assert migrated["schema_version"] == STATE_SCHEMA_VERSION
     assert migrated["generation"]["seed"] == 9
+    assert migrated["generation"]["cap_native_resolution"] is False
     assert migrated["prompt_options"]["enhance_mode"] == "off"
+
+
+def test_schema8_hidden_native_cap_migrates_to_direct() -> None:
+    old = {
+        "schema_version": 8,
+        "generation": {
+            "aspect_ratio": "1:1",
+            "megapixels": 2.0,
+            "cap_native_resolution": True,
+        },
+    }
+    restored = StudioState.from_dict(old)
+    assert restored.generation.cap_native_resolution is False
+    assert restored.generation.resolution().width == 1408
+    assert restored.generation.resolution().height == 1408
 
 
 def test_generation_options_clamp_values() -> None:
     options = GenerationOptions.from_dict({"seed": -4, "megapixels": 999, "custom_width": 1})
     assert options.seed == 0
-    assert options.megapixels == 2.0
+    assert options.megapixels == MAX_MEGAPIXELS
     assert options.custom_width == 32
+
+
+def test_generation_options_default_to_direct_resolution() -> None:
+    options = GenerationOptions.from_dict({"megapixels": 2.0})
+    assert options.cap_native_resolution is False
+    assert options.resolution().actual_megapixels > 1.9
+
+
+def test_generation_options_accept_4k_class_area() -> None:
+    options = GenerationOptions.from_dict({"aspect_ratio": "16:9", "megapixels": 8.2944})
+    plan = options.resolution()
+    assert options.megapixels == pytest.approx(8.2944)
+    assert (plan.width, plan.height) == (3840, 2176)
+    assert plan.actual_megapixels > 8.0
 
 
 def test_prompt_options_clamp_and_validate() -> None:
