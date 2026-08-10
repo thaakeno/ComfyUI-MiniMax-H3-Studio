@@ -120,10 +120,18 @@ def plan_resolution(
     *,
     custom_width: int = DEFAULT_WIDTH,
     custom_height: int = DEFAULT_HEIGHT,
-    cap_native: bool = True,
+    cap_native: bool = False,
     cap_pixels: int | None = NATIVE_MAX_PIXELS,
     multiple: int = CANVAS_MULTIPLE,
 ) -> ResolutionPlan:
+    """Plan the actual H3 canvas.
+
+    Direct generation is the default: the requested pixel area is aligned to
+    H3's 32-pixel grid and passed through unchanged apart from that alignment.
+    ``cap_native=True`` preserves the former ~1.03 MP conservative area as an
+    explicit compatibility/safety mode; it is no longer a hidden ceiling.
+    """
+
     try:
         requested_mp = float(megapixels)
     except (TypeError, ValueError) as exc:
