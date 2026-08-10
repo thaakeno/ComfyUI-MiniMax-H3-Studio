@@ -285,24 +285,24 @@ export function planResolution(aspectRatio, megapixels, customWidth = 1024, cust
     : ratioPair[0] / ratioPair[1];
   const requested = clamp(megapixels, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1);
   const nativeCap = 768 * 1344;
+  const requestedPixels = requested * 1_000_000;
+  const target = capNative ? Math.min(requestedPixels, nativeCap) : requestedPixels;
+  let width = roundToMultiple(Math.sqrt(target * ratio));
+  let height = roundToMultiple(Math.sqrt(target / ratio));
 
-  // The current Studio UI historically passed `true` here unconditionally,
-  // which silently collapsed 2 MP back to ~1 MP. Until the dedicated
-  // conservative/direct mode control lands, the browser planner is deliberately
-  // direct-only so displayed dimensions always match the state sent to H3.
-  // Backend `plan_resolution(..., cap_native=True)` still retains the explicit
-  // conservative planner for programmatic/compatibility use.
-  void capNative;
-  const target = requested * 1_000_000;
-  const width = roundToMultiple(Math.sqrt(target * ratio));
-  const height = roundToMultiple(Math.sqrt(target / ratio));
+  if (capNative && width * height > nativeCap) {
+    const scale = Math.sqrt(nativeCap / (width * height));
+    width = Math.max(32, Math.floor((width * scale) / 32) * 32);
+    height = Math.max(32, Math.floor((height * scale) / 32) * 32);
+  }
+
   return {
     width,
     height,
     requestedMegapixels: requested,
     actualMegapixels: (width * height) / 1_000_000,
-    capped: false,
-    capPixels: null,
+    capped: Boolean(capNative && requestedPixels > nativeCap),
+    capPixels: capNative ? nativeCap : null,
     nativeCapPixels: nativeCap,
     aspectRatio,
   };
