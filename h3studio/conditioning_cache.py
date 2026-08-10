@@ -1,15 +1,15 @@
-"""Staged H3 conditioning cache and DynamicVRAM handoff helpers.
+"""Staged H3 conditioning caches.
 
 The Studio's visible Condition node used to cache one monolithic tuple keyed by
-prompt + canvas + references.  A prompt edit therefore threw away reusable VAE
-and latent work, then asked ComfyUI to load the 32B text encoder while the H3
-transformer from the previous sample was still dynamically resident.
+prompt + canvas + references. A prompt edit therefore threw away reusable VAE
+and latent work along with the text conditioning.
 
-This module keeps those concerns independent.  It intentionally does *not*
-skip text encoding for a changed prompt; it makes room for that encode, reuses
-only genuinely prompt-independent work, and releases the encoder's device
-residency again before sampling while leaving ComfyUI's host-side staged model
-state intact.
+This module keeps those concerns independent while deliberately leaving model
+residency to ComfyUI. Native MiniMax H3 nodes tokenize and call
+``clip.encode_from_tokens_scheduled`` without manually unloading DynamicVRAM
+pages around every encode; Studio now follows the same rule. A changed prompt
+still gets a fresh native Qwen3-VL encode, while prompt-independent latent and
+reference work remains reusable.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ class _LRUCache:
             self._values.clear()
 
 
-# Keep these deliberately small.  The prompt cache holds conditioning tensors;
+# Keep these deliberately small. The prompt cache holds conditioning tensors;
 # the reference cache holds VAE latents, not duplicate full-resolution pixels.
 _PROMPT_CACHE = _LRUCache(8)
 _LATENT_CACHE = _LRUCache(4)
@@ -76,7 +76,7 @@ def _tensor_identity(image: Any, reference: Any = None) -> tuple[Any, ...]:
         return ("fingerprint", fingerprint, shape, dtype)
 
     # Never trust a filename/storage_name alone: the bytes behind a path can be
-    # replaced while the name stays unchanged.  Comfy tensors expose a storage
+    # replaced while the name stays unchanged. Comfy tensors expose a storage
     # pointer plus _version, which changes when the tensor is mutated in place.
     data_ptr = getattr(image, "data_ptr", None)
     pointer = data_ptr() if callable(data_ptr) else id(image)
@@ -118,11 +118,12 @@ class ResidencyRelease:
 
 
 def release_dynamic_device_residency(value: Any, label: str) -> ResidencyRelease:
-    """Free only DynamicVRAM device residency, preserving staged host weights.
+    """Low-level diagnostic helper; never called automatically by Studio.
 
-    ModelPatcherDynamic.partially_unload(None, ...) releases VBAR/device pages
-    without doing a full unpatch that would also discard its pinned host state.
-    Older/non-dynamic patchers are left to ComfyUI's normal model manager.
+    The first #27 implementation used this around every text encode. Real L4
+    testing showed that fighting ComfyUI's own DynamicVRAM policy can make
+    prompt iteration much worse, so the production conditioning path no longer
+    invokes it. Keeping the helper makes the behavior testable for diagnostics.
     """
 
     patcher = _patcher(value)
@@ -152,45 +153,18 @@ def release_dynamic_device_residency(value: Any, label: str) -> ResidencyRelease
         return ResidencyRelease(label, "managed")
 
 
-def _soft_empty_cache() -> None:
-    try:
-        import comfy.model_management
-
-        comfy.model_management.soft_empty_cache()
-    except Exception:
-        pass
-
-
 def prepare_text_encoder_workspace(bundle: Any) -> tuple[ResidencyRelease, ...]:
-    """Make VRAM room for Qwen without destroying warm host-side model state."""
+    """Compatibility shim: native ComfyUI owns model residency now."""
 
-    candidates = (
-        (getattr(bundle, "_model", None), "h3_transformer"),
-        (getattr(bundle, "video_vae", None), "video_vae"),
-        (getattr(bundle, "image_vae", None), "image_vae"),
-        (getattr(bundle, "analyzer_clip", None), "image_analyzer"),
-        (getattr(bundle, "prompt_writer_clip", None), "prompt_writer"),
-    )
-    seen: set[int] = set()
-    releases = []
-    for value, label in candidates:
-        patcher = _patcher(value)
-        if patcher is None or id(patcher) in seen:
-            continue
-        seen.add(id(patcher))
-        releases.append(release_dynamic_device_residency(patcher, label))
-    if releases:
-        _soft_empty_cache()
-    return tuple(releases)
+    del bundle
+    return ()
 
 
 def release_text_encoder_workspace(clip: Any) -> ResidencyRelease:
-    """Give the sampler the encoder's GPU pages back after a prompt encode."""
+    """Compatibility shim: do not evict Qwen after a prompt encode."""
 
-    result = release_dynamic_device_residency(clip, "text_encoder")
-    if result.state == "released":
-        _soft_empty_cache()
-    return result
+    del clip
+    return ResidencyRelease("text_encoder", "native-manager")
 
 
 def _selected_model_key(bundle: Any, route: str) -> str:
@@ -277,16 +251,21 @@ def _encode_prompt(bundle: Any, key: Hashable, build_tokens) -> tuple[Any, str, 
     if cached is not None:
         return cached, "HIT", 0.0, "warm-cache"
 
-    releases = prepare_text_encoder_workspace(bundle)
-    residency_before = ",".join(item.summary for item in releases) if releases else "no-competing-dynamic-model"
-    started = time.perf_counter()
+    tokenize_started = time.perf_counter()
     tokens = build_tokens()
+    tokenize_seconds = time.perf_counter() - tokenize_started
+
+    encode_started = time.perf_counter()
     conditioning = bundle.clip.encode_from_tokens_scheduled(tokens)
-    seconds = time.perf_counter() - started
-    encoder_release = release_text_encoder_workspace(bundle.clip)
+    encode_seconds = time.perf_counter() - encode_started
+
     _PROMPT_CACHE.put(key, conditioning)
-    residency = f"before={residency_before}; after={encoder_release.summary}"
-    return conditioning, "MISS", seconds, residency
+    seconds = tokenize_seconds + encode_seconds
+    runtime = (
+        f"native-comfy-manager; tokenize={tokenize_seconds:.3f}s; "
+        f"encode={encode_seconds:.3f}s"
+    )
+    return conditioning, "MISS", seconds, runtime
 
 
 def _source_stage(bundle: Any, image: Any, image_id: Hashable, width: int, height: int, source_fit: str):
@@ -372,9 +351,6 @@ def run_conditioning_pipeline(
         if not used_images:
             raise ValueError("Image to Image mode requires source_image.")
         source_id = image_ids[0]
-        # Make room before the source VAE too; on a warm run the previous H3
-        # transformer can otherwise crowd both VAE and Qwen.
-        releases = prepare_text_encoder_workspace(bundle)
         fitted_source, keyframe_latent, source_state = _source_stage(
             bundle, used_images[0], source_id, width, height, source_fit
         )
@@ -385,8 +361,6 @@ def run_conditioning_pipeline(
             prompt_key,
             lambda: bundle.clip.tokenize(prompt, images=[fitted_source]),
         )
-        if releases:
-            residency = f"pre_source={','.join(item.summary for item in releases)}; {residency}"
         conditioning = node_helpers.conditioning_set_values(
             conditioning,
             {
@@ -399,7 +373,6 @@ def run_conditioning_pipeline(
     else:
         if not used_images:
             raise ValueError("Reference Edit mode requires source_image as <Picture 1>.")
-        releases = prepare_text_encoder_workspace(bundle)
         # Fitted source is only a UI/debug preview; it is deliberately separate
         # from the REF2VA identity-size conditioning cache.
         preview_key = ("ref-preview", image_ids[0], width, height, source_fit)
@@ -421,16 +394,22 @@ def run_conditioning_pipeline(
             for image in used_images:
                 resized, _tw, _th = _reference_resize(image, width, height, reference_size)
                 resized_refs.append(resized)
-            residency_before = ",".join(item.summary for item in releases) if releases else "no-competing-dynamic-model"
-            started = time.perf_counter()
+
+            tokenize_started = time.perf_counter()
             tokens = bundle.clip.tokenize(
                 prompt,
                 minimax_ref_items=[{"type": "image", "data": image} for image in resized_refs],
             )
+            tokenize_seconds = time.perf_counter() - tokenize_started
+
+            encode_started = time.perf_counter()
             conditioning = bundle.clip.encode_from_tokens_scheduled(tokens)
-            text_seconds = time.perf_counter() - started
-            encoder_release = release_text_encoder_workspace(bundle.clip)
-            residency = f"before={residency_before}; after={encoder_release.summary}"
+            encode_seconds = time.perf_counter() - encode_started
+            text_seconds = tokenize_seconds + encode_seconds
+            residency = (
+                f"native-comfy-manager; tokenize={tokenize_seconds:.3f}s; "
+                f"encode={encode_seconds:.3f}s"
+            )
             text_state = "MISS"
             _PROMPT_CACHE.put(prompt_key, conditioning)
         else:
@@ -488,7 +467,7 @@ def run_conditioning_pipeline(
     diagnostics = (
         f"text_conditioning={text_state} ({text_seconds:.3f}s) | "
         f"reference_conditioning={reference_state} | latent_prepare={latent_state} | "
-        f"text_encoder_residency={residency}"
+        f"text_encoder_runtime={residency}"
     )
     LOGGER.info("[H3 Studio] Conditioning stages\n  %s", diagnostics)
     return ConditioningStages(
