@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from h3studio.constants import NATIVE_MAX_PIXELS
+from h3studio.constants import NATIVE_MAX_PIXELS, UHD_4K_MEGAPIXELS
 from h3studio.errors import ResolutionError
 from h3studio.resolution import (
     label_for_ratio,
@@ -48,7 +48,24 @@ def test_plan_is_aligned_and_close_to_requested_area(ratio: str) -> None:
     assert plan.actual_megapixels == pytest.approx(0.8, abs=0.05)
 
 
-def test_native_cap_is_enforced() -> None:
+def test_direct_resolution_is_the_default() -> None:
+    plan = plan_resolution("1:1", 2.0)
+    assert plan.width == 1408
+    assert plan.height == 1408
+    assert plan.actual_megapixels == pytest.approx(1.982464)
+    assert plan.pixels > NATIVE_MAX_PIXELS
+    assert not plan.capped
+
+
+def test_one_and_two_megapixel_requests_no_longer_collapse_to_same_canvas() -> None:
+    one_mp = plan_resolution("1:1", 1.0)
+    two_mp = plan_resolution("1:1", 2.0)
+    assert (one_mp.width, one_mp.height) == (992, 992)
+    assert (two_mp.width, two_mp.height) == (1408, 1408)
+    assert two_mp.pixels > one_mp.pixels * 1.9
+
+
+def test_native_cap_is_still_available_explicitly() -> None:
     plan = plan_resolution("16:9", 2.0, cap_native=True)
     assert plan.pixels <= NATIVE_MAX_PIXELS
     assert plan.capped
@@ -57,6 +74,26 @@ def test_native_cap_is_enforced() -> None:
 def test_native_cap_can_be_disabled() -> None:
     plan = plan_resolution("1:1", 2.0, cap_native=False)
     assert plan.pixels > NATIVE_MAX_PIXELS
+    assert not plan.capped
+
+
+def test_direct_4k_class_16_9_reaches_h3_canvas_without_upscale() -> None:
+    plan = plan_resolution("16:9", UHD_4K_MEGAPIXELS)
+    # 3840 is already divisible by 32; 2160 is not, so H3 alignment yields
+    # 2176. This is a genuine ~8.36 MP model canvas, not a post-upscale.
+    assert plan.width == 3840
+    assert plan.height == 2176
+    assert plan.width % 32 == 0
+    assert plan.height % 32 == 0
+    assert plan.actual_megapixels == pytest.approx(8.35584)
+    assert plan.actual_megapixels > 8.0
+    assert not plan.capped
+
+
+def test_direct_four_megapixel_square_is_not_native_capped() -> None:
+    plan = plan_resolution("1:1", 4.0)
+    assert (plan.width, plan.height) == (1984, 1984)
+    assert plan.actual_megapixels == pytest.approx(3.936256)
     assert not plan.capped
 
 
