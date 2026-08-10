@@ -27,6 +27,8 @@ AUTO_ANALYZER = "Auto · Qwen3-VL 4B"
 DISABLED_ANALYZER = "Disabled"
 SAME_AS_ANALYZER = "Same as image analyzer"
 DISABLED_IMAGE_VAE = "Disabled - original H3 video VAE only"
+OFFICIAL_H3_TEXT_ENCODER = "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+LEGACY_H3_INT8_TEXT_ENCODER = "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
 _WEIGHT_SUFFIXES = (".safetensors", ".gguf", ".ckpt", ".pt", ".pth", ".bin")
 _H3_TOKENS = ("minimax", "h3", "fl2va", "ref2va")
 LOGGER = logging.getLogger(__name__)
@@ -88,13 +90,35 @@ def ref2va_choices() -> list[str]:
     )
 
 
+def _clip_preference(name: str) -> tuple[int, str]:
+    """Prefer the compact official H3 encoder used by ComfyUI's H3 template.
+
+    The INT8 ConvRot build is valid, but its ~25.9 GB staged representation can
+    be painfully slow on 20-24 GB GPUs and especially on ~32 GB host-RAM systems
+    when DynamicVRAM has to stream it. NVFP4 AWQ is therefore the safer default;
+    explicit user selections remain respected.
+    """
+
+    compact = _compact(name)
+    if "nvfp4awq" in compact:
+        rank = 0
+    elif "nvfp4" in compact:
+        rank = 1
+    elif "int8convrot" in compact:
+        rank = 2
+    else:
+        rank = 3
+    return rank, _normalize(name).lower()
+
+
 def clip_choices() -> list[str]:
     values = _filenames("text_encoders", "clip")
-    return _filtered(
+    selected = _filtered(
         values,
         lambda value: "qwen3vl" in _compact(value) and ("minimax" in _compact(value) or "h3" in _compact(value)),
-        "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+        OFFICIAL_H3_TEXT_ENCODER,
     )
+    return sorted(selected, key=_clip_preference)
 
 
 def analyzer_choices() -> list[str]:
@@ -290,7 +314,8 @@ class H3StudioLoader:
     RETURN_NAMES = ("h3_bundle", "clip", "video_vae", "model_info")
     DESCRIPTION = (
         "Load H3's conditioning encoder and VAE, plus optional full Qwen3-VL models for cached pixel analysis "
-        "and the text-only detailed prompt-director pass. The prompt writer defaults to reusing the analyzer."
+        "and the text-only detailed prompt-director pass. The prompt writer defaults to reusing the analyzer. "
+        "For the native H3 32B encoder, NVFP4 AWQ is preferred on memory-constrained NVIDIA systems."
     )
 
     @classmethod
@@ -305,7 +330,13 @@ class H3StudioLoader:
                     ref2va_choices(),
                     {"default": next((v for v in ref2va_choices() if v != NONE_MODEL), NONE_MODEL)},
                 ),
-                "text_encoder": (clip_choices(),),
+                "text_encoder": (
+                    clip_choices(),
+                    {
+                        "default": clip_choices()[0],
+                        "tooltip": "NVFP4 AWQ is the preferred native H3 32B encoder. INT8 ConvRot remains selectable but can stream very slowly when its ~25.9 GB staged representation exceeds available VRAM/RAM headroom.",
+                    },
+                ),
                 "video_vae": (vae_choices(),),
                 "image_vae": (
                     image_vae_choices(),
@@ -352,6 +383,21 @@ class H3StudioLoader:
     ):
         if _is_none(fl2va_model) and _is_none(ref2va_model):
             raise ValueError("Select at least one MiniMax H3 transformer: FL2VA or REF2VA.")
+        if "int8convrot" in _compact(text_encoder):
+            preferred = next((value for value in clip_choices() if "nvfp4awq" in _compact(value)), None)
+            if preferred and preferred != text_encoder:
+                LOGGER.warning(
+                    "[H3 Studio] Selected H3 text encoder %s uses the ~25.9 GB INT8 ConvRot staged path. "
+                    "For 20-24 GB GPUs / ~32 GB RAM, prefer %s to avoid severe DynamicVRAM host streaming stalls.",
+                    text_encoder,
+                    preferred,
+                )
+            else:
+                LOGGER.warning(
+                    "[H3 Studio] Selected H3 text encoder %s uses the ~25.9 GB INT8 ConvRot staged path. "
+                    "On memory-constrained systems this can be much slower than the official NVFP4 AWQ encoder.",
+                    text_encoder,
+                )
         clip = _load_clip(text_encoder)
         vae = _load_vae(video_vae)
         analyzer_name = _resolve_analyzer(image_analyzer)
