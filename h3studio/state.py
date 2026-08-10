@@ -14,6 +14,8 @@ from .constants import (
     DEFAULT_WIDTH,
     ENHANCE_COMPILE,
     ENHANCE_MODES,
+    MAX_MEGAPIXELS,
+    MIN_MEGAPIXELS,
     MODE_AUTO,
     MODES,
     ROUTE_AUTO,
@@ -117,7 +119,9 @@ class GenerationOptions:
     megapixels: float = DEFAULT_MEGAPIXELS
     custom_width: int = DEFAULT_WIDTH
     custom_height: int = DEFAULT_HEIGHT
-    cap_native_resolution: bool = True
+    # Direct generation is the default. The legacy ~1 MP native-area clamp is
+    # retained by the planner as an explicit compatibility/conservative option.
+    cap_native_resolution: bool = False
     sampling_profile: str = "base_quality_20"
     frame_profile: str = "recommended_5"
     frame_selection: str = "decode_recommended"
@@ -171,10 +175,10 @@ class GenerationOptions:
             route=_choice(value.get("route"), ROUTES, ROUTE_AUTO),
             seed=_int(value.get("seed"), DEFAULT_SEED, 0, 2**63 - 1),
             aspect_ratio=str(value.get("aspect_ratio") or "1:1"),
-            megapixels=_float(value.get("megapixels"), DEFAULT_MEGAPIXELS, 0.20, 2.00),
+            megapixels=_float(value.get("megapixels"), DEFAULT_MEGAPIXELS, MIN_MEGAPIXELS, MAX_MEGAPIXELS),
             custom_width=_int(value.get("custom_width"), DEFAULT_WIDTH, 32, 16384),
             custom_height=_int(value.get("custom_height"), DEFAULT_HEIGHT, 32, 16384),
-            cap_native_resolution=bool(value.get("cap_native_resolution", True)),
+            cap_native_resolution=bool(value.get("cap_native_resolution", False)),
             sampling_profile=sampling,
             frame_profile=frame_profile,
             frame_selection=frame_selection,
@@ -341,4 +345,13 @@ def migrate_state_dict(value: Mapping[str, Any]) -> dict[str, Any]:
         prompt_options.setdefault("deep_enhancement", False)
         migrated["prompt_options"] = prompt_options
         migrated["schema_version"] = 8
+        version = 8
+    if version == 8:
+        # Schema 9 fixes the old hidden native-area cap. It was never exposed as
+        # an intentional user choice, so legacy workflows migrate to true direct
+        # resolution instead of silently collapsing 2 MP back to ~1 MP.
+        generation = dict(_mapping(migrated.get("generation")))
+        generation["cap_native_resolution"] = False
+        migrated["generation"] = generation
+        migrated["schema_version"] = 9
     return migrated
