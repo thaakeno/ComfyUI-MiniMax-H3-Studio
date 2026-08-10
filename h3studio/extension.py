@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .constants import DEFAULT_MEGAPIXELS, MAX_MEGAPIXELS, MIN_MEGAPIXELS
 from .nodes.benchmark import NODE_CLASS_MAPPINGS as BENCHMARK_NODE_CLASS_MAPPINGS
 from .nodes.benchmark import NODE_DISPLAY_NAME_MAPPINGS as BENCHMARK_NODE_DISPLAY_NAME_MAPPINGS
 from .nodes.director import (
@@ -19,9 +20,33 @@ from .web_routes import register_routes
 
 register_routes()
 
+
+class H3StudioDirectResolutionDirector(H3StudioDirector):
+    """Director registration with the corrected direct-resolution input range.
+
+    The implementation stays in ``H3StudioDirector``; this small registration
+    shim prevents ComfyUI's server-side input validation from rejecting values
+    above the legacy 2 MP ceiling while Issue #1 is being verified.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        inputs = super().INPUT_TYPES()
+        inputs["required"]["megapixels"] = (
+            "FLOAT",
+            {
+                "default": DEFAULT_MEGAPIXELS,
+                "min": MIN_MEGAPIXELS,
+                "max": MAX_MEGAPIXELS,
+                "step": 0.05,
+            },
+        )
+        return inputs
+
+
 NODE_CLASS_MAPPINGS = {
     "H3StudioLoader": H3StudioLoader,
-    "H3StudioDirector": H3StudioDirector,
+    "H3StudioDirector": H3StudioDirectResolutionDirector,
     "H3StudioCondition": H3StudioCondition,
     "H3StudioOutput": H3StudioOutput,
     "H3StudioContextInspector": H3StudioContextInspector,
