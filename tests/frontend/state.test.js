@@ -6,6 +6,7 @@ import {
   MAX_MEGAPIXELS,
   MAX_REFERENCES,
   MIN_MEGAPIXELS,
+  UHD_4K_MEGAPIXELS,
   backendResolutionValue,
   defaultState,
   formatMegapixels,
@@ -23,10 +24,11 @@ import {
 } from "../../web/js/core/layout.js";
 import { parseStorageName, previewUrlForStorage, storageNameFromUpload } from "../../web/js/features/image_upload.js";
 
-test("default state is an immediately usable text-to-image request", () => {
+test("default state is an immediately usable direct text-to-image request", () => {
   const state = defaultState();
-  assert.equal(state.schema_version, 8);
+  assert.equal(state.schema_version, 9);
   assert.equal(state.generation.mode, "auto");
+  assert.equal(state.generation.cap_native_resolution, false);
   assert.equal(state.prompt_options.analyzer_resolution, 512);
   assert.deepEqual(state.references, []);
 });
@@ -60,14 +62,15 @@ test("state round-trips without losing reference metadata", () => {
   assert.equal(restored.references[0].retention, "fully_preserved");
 });
 
-test("schema one settings migrate into their typed sections", () => {
+test("schema one settings migrate into their typed sections and direct mode", () => {
   const state = normalizeState({
     schema_version: 1,
     settings: { mode: "reference_edit", megapixels: 1.4, enhance_mode: "vlm", adherence: 0.7 },
   });
-  assert.equal(state.schema_version, 8);
+  assert.equal(state.schema_version, 9);
   assert.equal(state.generation.mode, "reference_edit");
   assert.equal(state.generation.megapixels, 1.4);
+  assert.equal(state.generation.cap_native_resolution, false);
   assert.equal(state.prompt_options.enhance_mode, "compile_only");
   assert.equal(state.prompt_options.analyze_images, true);
   assert.equal(state.prompt_options.adherence, 0.7);
@@ -80,7 +83,7 @@ test("normalization clamps fields and limits references", () => {
     prompt_options: { adherence: -2 },
     references: Array.from({ length: 20 }, (_, index) => ({ filename: `${index}.png` })),
   });
-  assert.equal(state.generation.megapixels, 2);
+  assert.equal(state.generation.megapixels, MAX_MEGAPIXELS);
   assert.equal(state.generation.seed, 0);
   assert.equal(state.prompt_options.adherence, 0);
   assert.equal(state.references.length, MAX_REFERENCES);
@@ -116,20 +119,26 @@ test("mention rewriting changes only actual friendly image references", () => {
   assert.equal(result, "Use @Image 3, @Image 1, email x@Image3.test, and @@Image 4");
 });
 
-test("resolution planner aligns dimensions and respects the native cap", () => {
-  for (const ratio of ["1:1", "4:5", "9:16", "16:9", "21:9"]) {
-    const plan = planResolution(ratio, 2);
-    assert.equal(plan.width % 32, 0);
-    assert.equal(plan.height % 32, 0);
-    assert.ok(plan.width * plan.height <= 768 * 1344);
-    assert.equal(plan.capped, true);
-  }
+test("resolution planner is direct and keeps 1 MP distinct from 2 MP", () => {
+  const one = planResolution("1:1", 1);
+  const two = planResolution("1:1", 2);
+  assert.deepEqual([one.width, one.height], [992, 992]);
+  assert.deepEqual([two.width, two.height], [1408, 1408]);
+  assert.ok(two.actualMegapixels > 1.9);
+  assert.equal(two.capped, false);
 });
 
-test("megapixel display exposes stable minimum and maximum limits", () => {
+test("resolution planner reaches an aligned 4K-class H3 canvas", () => {
+  const plan = planResolution("16:9", UHD_4K_MEGAPIXELS);
+  assert.deepEqual([plan.width, plan.height], [3840, 2176]);
+  assert.ok(plan.actualMegapixels > 8);
+  assert.equal(plan.capped, false);
+});
+
+test("megapixel display exposes stable minimum and 4K-capable maximum limits", () => {
   assert.equal(formatMegapixels(MIN_MEGAPIXELS), "0.20 MP");
   assert.equal(formatMegapixels(1), "1.00 MP");
-  assert.equal(formatMegapixels(MAX_MEGAPIXELS), "2.00 MP");
+  assert.equal(formatMegapixels(MAX_MEGAPIXELS), "8.50 MP");
 });
 
 test("studio layout cannot feed total node height back into panel height", () => {
