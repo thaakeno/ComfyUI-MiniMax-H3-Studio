@@ -362,10 +362,16 @@ function generationSection(node, state, refresh) {
   const seed = numberControl(generation.seed, { min: 0, max: Number.MAX_SAFE_INTEGER, step: 1 }, "Seed", (value) => update({ seed: Math.max(0, Math.trunc(value)) }));
   const random = iconButton("Randomize seed", "↻", () => update({ seed: randomSeed() }));
   const seedWrap = element("div", { className: "h3s-seed-row" }, [seed, random]);
-  const plan = planResolution(generation.aspect_ratio, generation.megapixels, generation.custom_width, generation.custom_height, true);
+  const plan = planResolution(
+    generation.aspect_ratio,
+    generation.megapixels,
+    generation.custom_width,
+    generation.custom_height,
+    generation.cap_native_resolution,
+  );
   const preview = element("div", { className: "h3s-resolution-preview" }, [
     element("span", { text: `${plan.width} × ${plan.height}` }),
-    element("span", { text: `${plan.actualMegapixels.toFixed(2)} MP${plan.capped ? " · native cap" : ""}` }),
+    element("span", { text: `${plan.actualMegapixels.toFixed(2)} MP${plan.capped ? " · conservative cap" : " · direct"}` }),
   ]);
   const megapixelValue = element("output", {
     className: "h3s-megapixel-value",
@@ -383,11 +389,11 @@ function generationSection(node, state, refresh) {
         value,
         state.generation.custom_width,
         state.generation.custom_height,
-        true,
+        state.generation.cap_native_resolution,
       );
       megapixelValue.textContent = formatMegapixels(value);
       preview.children[0].textContent = `${next.width} × ${next.height}`;
-      preview.children[1].textContent = `${next.actualMegapixels.toFixed(2)} MP${next.capped ? " · native cap" : ""}`;
+      preview.children[1].textContent = `${next.actualMegapixels.toFixed(2)} MP${next.capped ? " · conservative cap" : " · direct"}`;
       applyState(node, state);
     },
   );
@@ -405,7 +411,7 @@ function generationSection(node, state, refresh) {
   ]);
   const sizeHelp = element("p", {
     className: "h3s-context-help",
-    text: "Target size controls the requested image area from 0.20 MP (faster) to 2.00 MP (larger). H3's native safety cap can reduce the final area; the exact aligned dimensions and actual MP are shown directly below.",
+    text: `Direct mode sends the aligned target canvas to H3 from ${formatMegapixels(MIN_MEGAPIXELS)} up to ${formatMegapixels(MAX_MEGAPIXELS)}. The optional Conservative mode in Advanced keeps the older ~1 MP safety cap.`,
   });
   const help = element("p", { className: "h3s-context-help", text: samplingHelp(generation.sampling_profile) });
   const modeHelp = {
@@ -668,12 +674,19 @@ function advancedSection(node, state, refresh) {
     applyState(node, state);
     refresh();
   };
+  const resolutionMode = selectControl(
+    state.generation.cap_native_resolution ? "conservative" : "direct",
+    [["direct", "Direct · honor target"], ["conservative", "Conservative · ~1 MP cap"]],
+    "Resolution planning mode",
+    (value) => update({ cap_native_resolution: value === "conservative" }),
+  );
   content.append(element("div", { className: "h3s-grid" }, [
     controlRow("Model route", selectControl(state.generation.route, [
       ["auto", "Auto · choose for me"], ["fl2va", "Force FL2VA"], ["ref2va", "Force REF2VA"],
     ], "Conditioning route", (value) => update({ route: value }))),
+    controlRow("Resolution mode", resolutionMode),
   ]));
-  content.append(element("p", { className: "h3s-context-help", text: "Model route normally follows Mode. FL2VA handles text generation and a single first-frame anchor. REF2VA handles independently tagged reference images. Force a route only for controlled comparisons." }));
+  content.append(element("p", { className: "h3s-context-help", text: "Direct mode sends the aligned requested canvas into H3, including multi-megapixel and 4K-class targets. Conservative mode intentionally applies the older ~1 MP area cap. Model route normally follows Mode; force a route only for controlled comparisons." }));
   const toggle = element("button", {
     className: "h3s-advanced-toggle", type: "button", attrs: { "aria-expanded": String(state.ui.advanced_open) },
     on: { click: () => { state.ui.advanced_open = !state.ui.advanced_open; applyState(node, state); refresh(); } },
