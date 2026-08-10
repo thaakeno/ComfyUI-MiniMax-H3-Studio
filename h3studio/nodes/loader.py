@@ -96,7 +96,7 @@ def _clip_preference(name: str) -> tuple[int, str]:
     The INT8 ConvRot build is valid, but its ~25.9 GB staged representation can
     be painfully slow on 20-24 GB GPUs and especially on ~32 GB host-RAM systems
     when DynamicVRAM has to stream it. NVFP4 AWQ is therefore the safer default;
-    explicit user selections remain respected.
+    explicit non-legacy selections remain respected.
     """
 
     compact = _compact(name)
@@ -119,6 +119,36 @@ def clip_choices() -> list[str]:
         OFFICIAL_H3_TEXT_ENCODER,
     )
     return sorted(selected, key=_clip_preference)
+
+
+def _preferred_nvfp4_encoder() -> str | None:
+    return next((value for value in clip_choices() if "nvfp4awq" in _compact(value)), None)
+
+
+def _resolve_text_encoder(name: str) -> str:
+    """Migrate Studio's old shipped INT8 default when NVFP4 is installed.
+
+    Existing workflows persist widget strings. The maintained workflow shipped
+    the exact INT8 filename below, so merely changing combo ordering would leave
+    old workflows on the pathological 25.9 GB staged path forever. Treat only
+    that exact historical default as migratable; differently named/explicit
+    INT8 selections remain user-controlled.
+    """
+
+    normalized = _normalize(name)
+    if _compact(normalized) != _compact(LEGACY_H3_INT8_TEXT_ENCODER):
+        return normalized
+    preferred = _preferred_nvfp4_encoder()
+    if preferred and _compact(preferred) != _compact(normalized):
+        LOGGER.warning(
+            "[H3 Studio] Migrating legacy H3 text-encoder default %s -> %s. "
+            "The old INT8 ConvRot build stages ~25.9 GB and can stall badly under DynamicVRAM; "
+            "the NVFP4 AWQ build is the current preferred native H3 32B encoder.",
+            normalized,
+            preferred,
+        )
+        return preferred
+    return normalized
 
 
 def analyzer_choices() -> list[str]:
@@ -383,29 +413,32 @@ class H3StudioLoader:
     ):
         if _is_none(fl2va_model) and _is_none(ref2va_model):
             raise ValueError("Select at least one MiniMax H3 transformer: FL2VA or REF2VA.")
-        if "int8convrot" in _compact(text_encoder):
-            preferred = next((value for value in clip_choices() if "nvfp4awq" in _compact(value)), None)
-            if preferred and preferred != text_encoder:
+
+        resolved_text_encoder = _resolve_text_encoder(text_encoder)
+        if "int8convrot" in _compact(resolved_text_encoder):
+            preferred = _preferred_nvfp4_encoder()
+            if preferred and preferred != resolved_text_encoder:
                 LOGGER.warning(
                     "[H3 Studio] Selected H3 text encoder %s uses the ~25.9 GB INT8 ConvRot staged path. "
                     "For 20-24 GB GPUs / ~32 GB RAM, prefer %s to avoid severe DynamicVRAM host streaming stalls.",
-                    text_encoder,
+                    resolved_text_encoder,
                     preferred,
                 )
             else:
                 LOGGER.warning(
                     "[H3 Studio] Selected H3 text encoder %s uses the ~25.9 GB INT8 ConvRot staged path. "
                     "On memory-constrained systems this can be much slower than the official NVFP4 AWQ encoder.",
-                    text_encoder,
+                    resolved_text_encoder,
                 )
-        clip = _load_clip(text_encoder)
+
+        clip = _load_clip(resolved_text_encoder)
         vae = _load_vae(video_vae)
         analyzer_name = _resolve_analyzer(image_analyzer)
         prompt_writer_name = _resolve_prompt_writer(prompt_writer, analyzer_name)
         bundle = H3StudioBundle(
             fl2va_name=fl2va_model,
             ref2va_name=ref2va_model,
-            clip_name=text_encoder,
+            clip_name=resolved_text_encoder,
             video_vae_name=video_vae,
             image_vae_name=None if image_vae == DISABLED_IMAGE_VAE or _is_none(image_vae) else image_vae,
             analyzer_name=analyzer_name,
