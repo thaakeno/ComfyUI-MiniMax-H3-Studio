@@ -1,7 +1,8 @@
-export const STATE_SCHEMA_VERSION = 8;
+export const STATE_SCHEMA_VERSION = 9;
 export const MAX_REFERENCES = 9;
 export const MIN_MEGAPIXELS = 0.2;
-export const MAX_MEGAPIXELS = 2;
+export const MAX_MEGAPIXELS = 8.5;
+export const UHD_4K_MEGAPIXELS = 8.2944;
 export const MEGAPIXEL_STEP = 0.05;
 
 export const ASPECT_RATIOS = Object.freeze({
@@ -107,7 +108,7 @@ export function defaultState() {
       megapixels: 1,
       custom_width: 1024,
       custom_height: 1024,
-      cap_native_resolution: true,
+      cap_native_resolution: false,
       sampling_profile: "base_quality_20",
       frame_profile: "recommended_5",
       frame_selection: "decode_recommended",
@@ -165,6 +166,9 @@ export function migrateState(value) {
   for (const key of ["enhance_mode", "adherence", "detail_level", "analyzer_model"]) {
     if (key in settings && !(key in promptOptions)) promptOptions[key] = settings[key];
   }
+  // Schema 9 removes the old invisible native-area clamp. Earlier workflows
+  // never exposed this as an intentional setting, so migrate them to direct.
+  generation.cap_native_resolution = false;
   migrated.schema_version = STATE_SCHEMA_VERSION;
   migrated.generation = generation;
   migrated.prompt_options = promptOptions;
@@ -196,6 +200,7 @@ export function normalizeState(value) {
   generation.megapixels = clamp(generation.megapixels, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1);
   generation.custom_width = Math.round(clamp(generation.custom_width, 32, 16384, 1024));
   generation.custom_height = Math.round(clamp(generation.custom_height, 32, 16384, 1024));
+  generation.cap_native_resolution = generation.cap_native_resolution === true;
   generation.sampling_profile = ({
     turbo_er_sde_6: "lightx_er_sde_4",
     turbo_sa_solver_4: "lightx_sa_solver_4",
@@ -273,27 +278,32 @@ export function rewriteMentions(prompt, ordinalMap) {
   });
 }
 
-export function planResolution(aspectRatio, megapixels, customWidth = 1024, customHeight = 1024, capNative = true) {
+export function planResolution(aspectRatio, megapixels, customWidth = 1024, customHeight = 1024, capNative = false) {
   const ratioPair = ASPECT_RATIOS[aspectRatio] || ASPECT_RATIOS["1:1"];
   const ratio = aspectRatio === "custom"
     ? clamp(customWidth, 32, 16384, 1024) / clamp(customHeight, 32, 16384, 1024)
     : ratioPair[0] / ratioPair[1];
   const requested = clamp(megapixels, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1);
   const nativeCap = 768 * 1344;
-  const target = capNative ? Math.min(requested * 1_000_000, nativeCap) : requested * 1_000_000;
-  let width = roundToMultiple(Math.sqrt(target * ratio));
-  let height = roundToMultiple(Math.sqrt(target / ratio));
-  if (capNative && width * height > nativeCap) {
-    const scale = Math.sqrt(nativeCap / (width * height));
-    width = Math.max(32, Math.floor((width * scale) / 32) * 32);
-    height = Math.max(32, Math.floor((height * scale) / 32) * 32);
-  }
+
+  // The current Studio UI historically passed `true` here unconditionally,
+  // which silently collapsed 2 MP back to ~1 MP. Until the dedicated
+  // conservative/direct mode control lands, the browser planner is deliberately
+  // direct-only so displayed dimensions always match the state sent to H3.
+  // Backend `plan_resolution(..., cap_native=True)` still retains the explicit
+  // conservative planner for programmatic/compatibility use.
+  void capNative;
+  const target = requested * 1_000_000;
+  const width = roundToMultiple(Math.sqrt(target * ratio));
+  const height = roundToMultiple(Math.sqrt(target / ratio));
   return {
     width,
     height,
     requestedMegapixels: requested,
     actualMegapixels: (width * height) / 1_000_000,
-    capped: capNative && requested * 1_000_000 > nativeCap,
+    capped: false,
+    capPixels: null,
+    nativeCapPixels: nativeCap,
     aspectRatio,
   };
 }
