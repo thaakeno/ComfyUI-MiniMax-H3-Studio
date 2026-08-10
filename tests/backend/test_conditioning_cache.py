@@ -138,15 +138,20 @@ def test_dynamic_residency_release_frees_device_pages_without_managed_unload():
     assert managed.calls == []
 
 
-def test_image_identity_never_trusts_a_stale_reference_fingerprint_alone():
-    reference = SimpleNamespace(fingerprint="same-fingerprint")
-    context_a = _context("p", images=(FakeImage(100),), references=(reference,))
-    context_b = _context("p", images=(FakeImage(200),), references=(reference,))
-    context_c = _context("p", images=(FakeImage(100, version=1),), references=(reference,))
+def test_image_identity_uses_content_fingerprint_or_tensor_identity():
+    reference_a = SimpleNamespace(fingerprint="content-a")
+    reference_b = SimpleNamespace(fingerprint="content-b")
+    context_a = _context("p", images=(FakeImage(100),), references=(reference_a,))
+    context_b = _context("p", images=(FakeImage(100),), references=(reference_b,))
+    assert cache.image_cache_key(context_a) != cache.image_cache_key(context_b)
 
-    key_a = cache.image_cache_key(context_a)
-    assert key_a != cache.image_cache_key(context_b)
-    assert key_a != cache.image_cache_key(context_c)
+    no_fingerprint = SimpleNamespace(fingerprint=None)
+    context_c = _context("p", images=(FakeImage(100),), references=(no_fingerprint,))
+    context_d = _context("p", images=(FakeImage(200),), references=(no_fingerprint,))
+    context_e = _context("p", images=(FakeImage(100, version=1),), references=(no_fingerprint,))
+    key_c = cache.image_cache_key(context_c)
+    assert key_c != cache.image_cache_key(context_d)
+    assert key_c != cache.image_cache_key(context_e)
 
 
 def test_t2i_prompt_resolution_encoder_and_model_invalidation_are_independent(monkeypatch):
