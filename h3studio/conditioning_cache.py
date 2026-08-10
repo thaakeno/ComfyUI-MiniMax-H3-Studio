@@ -19,8 +19,9 @@ import math
 import threading
 import time
 from collections import OrderedDict
+from collections.abc import Hashable
 from dataclasses import dataclass
-from typing import Any, Hashable
+from typing import Any
 
 LOGGER = logging.getLogger(__name__)
 
@@ -357,7 +358,6 @@ def run_conditioning_pipeline(
     reference_state = "N/A"
 
     prompt_key_base = (model_key, route, runtime_mode, clip_key, prompt)
-    text_started = time.perf_counter()
 
     if runtime_mode == "text_to_image (FL2VA)":
         prompt_key = (*prompt_key_base, "text-only")
@@ -467,7 +467,6 @@ def run_conditioning_pipeline(
             f"{', '.join(ref_sizes)} and exposed as <Picture 1> through <Picture {len(used_images)}>。"
         )
 
-    total_text_seconds = max(text_seconds, time.perf_counter() - text_started if text_state == "MISS" else 0.0)
     if natural_frames > 362:
         trained_note = "beyond the documented 124-362-frame training range"
     elif natural_frames >= 124:
