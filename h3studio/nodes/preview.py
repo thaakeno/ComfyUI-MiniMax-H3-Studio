@@ -110,17 +110,28 @@ def _vae_choices() -> list[str]:
 
 
 def _resolve_packed_latent(torch, value, latent_shapes):
-    """Restore Comfy's packed multi-latent tensor when shape metadata is present."""
+    """Restore the first H3 latent from either supported Comfy packed layout."""
 
     if getattr(value, "ndim", 0) != 3 or not latent_shapes:
         return value
     shape = tuple(int(part) for part in latent_shapes[0])
-    required_per_channel = math.prod(shape[2:])
-    if value.shape[1] != shape[1] or value.shape[2] < required_per_channel:
+
+    # Older/channel-packed layouts keep the target channel axis and append
+    # following packed data on the final dimension. Slice every channel first
+    # so data from the next packed latent cannot leak into the H3 frame.
+    if value.shape[1] == shape[1]:
+        required_per_channel = math.prod(shape[2:])
+        if value.shape[2] < required_per_channel:
+            raise ValueError(f"Packed latent shape {tuple(value.shape)} cannot restore H3 shape {shape}.")
+        return value[:, :, :required_per_channel].reshape((value.shape[0], *shape[1:]))
+
+    # Current Comfy multi-latent sampling flattens nested latents into
+    # [batch, 1, total_values]. H3 video is first, followed by audio.
+    required = math.prod(shape[1:])
+    flat = value.reshape((value.shape[0], -1))
+    if flat.shape[1] < required:
         raise ValueError(f"Packed latent shape {tuple(value.shape)} cannot restore H3 shape {shape}.")
-    # Comfy packs nested latents along the final axis. Slice every channel
-    # before reshaping so a following packed item cannot corrupt this frame.
-    return value[:, :, :required_per_channel].reshape((value.shape[0], *shape[1:]))
+    return flat[:, :required].reshape((value.shape[0], *shape[1:]))
 
 
 def _first_h3_latent(torch, value, latent_shapes):
@@ -210,9 +221,6 @@ class _PreviewWrapper:
     def _enqueue(self, torch, step, x0, total_steps, latent_shapes, run_id, elapsed_seconds, average_step_seconds):
         if step % self.every != 0 and step + 1 < total_steps:
             return
-        # Decode while x0 and Comfy's sampler CUDA context are still alive.
-        # The old background decoder raced post-sampling cleanup/offload and
-        # could silently lose every frame on short four-step H3 runs.
         self._send(
             torch,
             step,
@@ -298,9 +306,6 @@ class _PreviewWrapper:
             if callback is not None:
                 callback(step, x0, x, total_steps)
 
-        # A Comfy wrapper must call the executor object so it advances to the
-        # next wrapper. Calling executor.execute() restarts the current index
-        # and recursively invokes this same wrapper until Python overflows.
         return executor(
             noise,
             latent_image,

@@ -6,6 +6,22 @@ import { previewViewportHeight, previewWidgetSizing } from "./core/preview_layou
 const TARGET = "H3StudioTAEH3Preview";
 const MAX_HISTORY = 40;
 
+function findNodeByQualifiedId(rootGraph, qid) {
+  if (!rootGraph || qid == null) return null;
+  const parts = String(qid).split(":");
+  let graph = rootGraph;
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const parentId = Number.parseInt(parts[index], 10);
+    if (!Number.isFinite(parentId)) return null;
+    const parentNode = graph?.getNodeById?.(parentId);
+    if (!parentNode?.subgraph) return null;
+    graph = parentNode.subgraph;
+  }
+  const leafId = Number.parseInt(parts[parts.length - 1], 10);
+  if (!Number.isFinite(leafId)) return null;
+  return graph?.getNodeById?.(leafId) || null;
+}
+
 function installPreview(node) {
   if (node.__h3studioPreviewInstalled || typeof node.addDOMWidget !== "function") return;
   node.__h3studioPreviewInstalled = true;
@@ -115,13 +131,12 @@ function installPreview(node) {
     hideOnZoom: false,
     ...previewWidgetSizing(node),
   });
-  // Legacy frontend fallback. Nodes 2.0 reads the sizing callbacks above.
   widget.computeSize = (width) => [width, previewViewportHeight(node.size?.[1])];
   node.setSize?.([Math.max(node.size?.[0] || 460, 460), Math.max(node.size?.[1] || 620, 620)]);
 }
 
 api.addEventListener("h3studio-preview", ({ detail }) => {
-  const node = app.graph?.getNodeById?.(Number(detail?.node_id));
+  const node = findNodeByQualifiedId(app.graph, detail?.node_id);
   const elements = node?.__h3studioPreviewElements;
   if (!elements) return;
   const runId = String(detail.run_id || "");
@@ -129,7 +144,7 @@ api.addEventListener("h3studio-preview", ({ detail }) => {
     elements.state.activeRunId = runId;
     elements.state.history = [];
     elements.state.index = -1;
-    elements.state.render();
+    elements.render();
     elements.empty.textContent = `Preview unavailable: ${detail.error}`;
     return;
   }
@@ -139,7 +154,7 @@ api.addEventListener("h3studio-preview", ({ detail }) => {
     elements.state.runId = runId;
     elements.state.activeRunId = runId;
     elements.state.total = Number(detail.total) || 0;
-    elements.state.render();
+    elements.render();
     return;
   }
   if (!detail?.image || (elements.state.activeRunId && elements.state.activeRunId !== runId)) return;
@@ -150,7 +165,7 @@ api.addEventListener("h3studio-preview", ({ detail }) => {
   elements.state.history.push(detail);
   if (elements.state.history.length > MAX_HISTORY) elements.state.history.shift();
   elements.state.index = elements.state.history.length - 1;
-  elements.state.render();
+  elements.render();
 });
 
 app.registerExtension({
