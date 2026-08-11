@@ -9,13 +9,16 @@ from .nodes.comparison import NODE_DISPLAY_NAME_MAPPINGS as COMPARISON_NODE_DISP
 from .nodes.director import (
     H3StudioCondition,
     H3StudioContextInspector,
-    H3StudioContextSamplingPreset,
     H3StudioDirector,
     H3StudioOutput,
 )
 from .nodes.image_runtime import NODE_CLASS_MAPPINGS as IMAGE_NODE_CLASS_MAPPINGS
 from .nodes.image_runtime import NODE_DISPLAY_NAME_MAPPINGS as IMAGE_NODE_DISPLAY_NAME_MAPPINGS
-from .nodes.loader import H3StudioLoader
+from .nodes.performance import (
+    H3StudioFastDecode,
+    H3StudioOptimizedContextSamplingPreset,
+    H3StudioOptimizedLoader,
+)
 from .nodes.preview import H3StudioTAEH3Preview
 from .nodes.save import NODE_CLASS_MAPPINGS as SAVE_NODE_CLASS_MAPPINGS
 from .nodes.save import NODE_DISPLAY_NAME_MAPPINGS as SAVE_NODE_DISPLAY_NAME_MAPPINGS
@@ -26,17 +29,20 @@ install_runtime_guards()
 register_routes()
 
 NODE_CLASS_MAPPINGS = {
-    "H3StudioLoader": H3StudioLoader,
     "H3StudioDirector": H3StudioDirector,
     "H3StudioCondition": H3StudioCondition,
     "H3StudioOutput": H3StudioOutput,
     "H3StudioContextInspector": H3StudioContextInspector,
-    "H3StudioContextSamplingPreset": H3StudioContextSamplingPreset,
     "H3StudioTAEH3Preview": H3StudioTAEH3Preview,
     **BENCHMARK_NODE_CLASS_MAPPINGS,
     **COMPARISON_NODE_CLASS_MAPPINGS,
     **IMAGE_NODE_CLASS_MAPPINGS,
     **SAVE_NODE_CLASS_MAPPINGS,
+    # Keep the public node ids stable while routing the expensive stages through
+    # H3-specific residency/caching policies.
+    "H3StudioLoader": H3StudioOptimizedLoader,
+    "H3StudioContextSamplingPreset": H3StudioOptimizedContextSamplingPreset,
+    "H3StudioDecode": H3StudioFastDecode,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
