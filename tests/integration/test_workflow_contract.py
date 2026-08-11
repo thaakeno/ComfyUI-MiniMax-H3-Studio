@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / "example_workflows" / "H3_Studio_Unified_Image.json"
+BLUEPRINT = ROOT / "subgraphs" / "H3_Studio_Sampling_and_Decode.json"
 STUDIO_FRONTEND = ROOT / "web" / "js" / "studio_extension.js"
 
 
@@ -21,6 +22,15 @@ def test_director_is_top_level_and_sampling_is_subgraphed():
         node["type"] for node in subgraphs[0]["nodes"]
     }
     assert "H3StudioTAEH3Preview" in top_types
+
+
+def test_discoverable_subgraph_is_a_workflow_blueprint_envelope():
+    blueprint = json.loads(BLUEPRINT.read_text(encoding="utf-8"))
+    assert blueprint["version"] == 0.4
+    assert len(blueprint["definitions"]["subgraphs"]) == 1
+    definition = blueprint["definitions"]["subgraphs"][0]
+    assert definition["state"]["lastGroupId"] == 0
+    assert blueprint["nodes"][0]["type"] == definition["id"]
 
 
 def test_workflow_opens_without_placeholder_images():

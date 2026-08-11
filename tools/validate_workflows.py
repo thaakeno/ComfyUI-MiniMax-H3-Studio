@@ -44,10 +44,41 @@ def validate_graph(graph, label: str, *, subgraph=False):
     return errors
 
 
+def validate_blueprint(blueprint, label: str):
+    errors = validate_graph(blueprint, f"{label}:envelope")
+    required = {"id", "revision", "last_node_id", "last_link_id", "nodes", "links", "groups", "definitions", "version"}
+    missing = required - blueprint.keys()
+    if missing:
+        errors.append(f"{label}: blueprint workflow envelope is missing {sorted(missing)}")
+    definitions = blueprint.get("definitions", {}).get("subgraphs", [])
+    if len(definitions) != 1:
+        errors.append(f"{label}: blueprint must contain exactly one definitions.subgraphs entry")
+        return errors
+    subgraph = definitions[0]
+    if subgraph.get("state", {}).get("lastGroupId") is None:
+        errors.append(f"{label}: subgraph state is missing correctly-cased lastGroupId")
+    instances = [node for node in blueprint.get("nodes", []) if node.get("type") == subgraph.get("id")]
+    if not instances:
+        errors.append(f"{label}: workflow envelope does not instantiate its subgraph definition")
+    else:
+        instance = instances[0]
+        expected_inputs = [(item.get("name"), item.get("type")) for item in subgraph.get("inputs", [])]
+        actual_inputs = [(item.get("name"), item.get("type")) for item in instance.get("inputs", [])]
+        expected_outputs = [(item.get("name"), item.get("type")) for item in subgraph.get("outputs", [])]
+        actual_outputs = [(item.get("name"), item.get("type")) for item in instance.get("outputs", [])]
+        if actual_inputs != expected_inputs or actual_outputs != expected_outputs:
+            errors.append(f"{label}: wrapper sockets do not match the embedded subgraph interface")
+    errors.extend(validate_graph(subgraph, f"{label}:definition", subgraph=True))
+    return errors
+
+
 def main():
     path = ROOT / "example_workflows" / "H3_Studio_Unified_Image.json"
     workflow = json.loads(path.read_text(encoding="utf-8"))
     errors = validate_graph(workflow, path.name)
+    blueprint_path = ROOT / "subgraphs" / "H3_Studio_Sampling_and_Decode.json"
+    blueprint = json.loads(blueprint_path.read_text(encoding="utf-8"))
+    errors.extend(validate_blueprint(blueprint, blueprint_path.name))
     subgraphs = workflow.get("definitions", {}).get("subgraphs", [])
     if len(subgraphs) != 1:
         errors.append(f"{path.name}: expected exactly one maintained subgraph")

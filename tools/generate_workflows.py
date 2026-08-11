@@ -15,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT / "example_workflows" / "H3_Studio_Unified_Image.json"
 SUBGRAPH_PATH = ROOT / "subgraphs" / "H3_Studio_Sampling_and_Decode.json"
+BLUEPRINT_ID = "8345c465-1de3-58e2-84dd-7bfbe9263ab2"
 SUBGRAPH_ID = "5930b00d-9f8e-4b87-9cb5-ff5f7cf3b30a"
 WORKFLOW_ID = "51ffc0bb-1b7a-4a1c-a183-1ce99edb4e5e"
 
@@ -302,7 +303,7 @@ def build_subgraph():
     return {
         "id": SUBGRAPH_ID,
         "version": 1,
-        "state": {"lastGroupid": 0, "lastNodeId": 106, "lastLinkId": 17, "lastRerouteId": 0},
+        "state": {"lastGroupId": 0, "lastNodeId": 106, "lastLinkId": 17, "lastRerouteId": 0},
         "revision": 0,
         "config": {},
         "name": "H3 Studio · Sampling and Exact Still Decode",
@@ -342,6 +343,37 @@ def build_subgraph():
         "extra": {
             "documentation": "The Director stays outside this subgraph because ComfyUI does not reliably promote custom DOM widgets."
         },
+        "category": "H3 Studio",
+        "description": "Director-selected H3 sampling, exact temporal decode, and stable still selection.",
+    }
+
+
+def build_subgraph_blueprint():
+    subgraph = build_subgraph()
+    wrapper = node(
+        1,
+        SUBGRAPH_ID,
+        subgraph["name"],
+        [120, 120],
+        [620, 420],
+        order=0,
+        inputs=[socket(item["name"], item["type"]) for item in subgraph["inputs"]],
+        outputs=[output(item["name"], item["type"], []) for item in subgraph["outputs"]],
+        widgets=[],
+        properties={"cnr_id": "comfy-core", "ver": "0.30.0"},
+    )
+    return {
+        "id": BLUEPRINT_ID,
+        "revision": 0,
+        "last_node_id": 1,
+        "last_link_id": 0,
+        "nodes": [wrapper],
+        "links": [],
+        "groups": [],
+        "definitions": {"subgraphs": [subgraph]},
+        "config": {},
+        "extra": {"workflowRendererVersion": "LG"},
+        "version": 0.4,
     }
 
 
@@ -831,7 +863,7 @@ def main():
     parser.add_argument("--check", action="store_true", help="Fail when committed outputs differ from generated data.")
     args = parser.parse_args()
     workflow_text = encoded(build_workflow())
-    subgraph_text = encoded(build_subgraph())
+    subgraph_text = encoded(build_subgraph_blueprint())
     expected = [(WORKFLOW_PATH, workflow_text), (SUBGRAPH_PATH, subgraph_text)]
     if args.check:
         stale = [

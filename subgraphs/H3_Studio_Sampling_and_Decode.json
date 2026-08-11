@@ -1,157 +1,19 @@
 {
-  "id": "5930b00d-9f8e-4b87-9cb5-ff5f7cf3b30a",
-  "version": 1,
-  "state": {
-    "lastGroupid": 0,
-    "lastNodeId": 106,
-    "lastLinkId": 17,
-    "lastRerouteId": 0
-  },
+  "id": "8345c465-1de3-58e2-84dd-7bfbe9263ab2",
   "revision": 0,
-  "config": {},
-  "name": "H3 Studio · Sampling and Exact Still Decode",
-  "inputNode": {
-    "id": -10,
-    "bounding": [
-      -190,
-      40,
-      120,
-      360
-    ]
-  },
-  "outputNode": {
-    "id": -20,
-    "bounding": [
-      2130,
-      120,
-      140,
-      240
-    ]
-  },
-  "inputs": [
-    {
-      "id": "352b5c74-4db0-568b-9cb7-525414c5c991",
-      "name": "model",
-      "type": "MODEL",
-      "linkIds": [
-        1
-      ],
-      "pos": [
-        -160,
-        132
-      ]
-    },
-    {
-      "id": "337c26a9-6c85-5f64-9703-96e57ac16b8b",
-      "name": "positive",
-      "type": "CONDITIONING",
-      "linkIds": [
-        2
-      ],
-      "pos": [
-        -160,
-        184
-      ]
-    },
-    {
-      "id": "bcdb6c4e-a2cf-5492-89e0-5c021e653eb2",
-      "name": "h3_latent",
-      "type": "LATENT",
-      "linkIds": [
-        3
-      ],
-      "pos": [
-        -160,
-        236
-      ]
-    },
-    {
-      "id": "2ae2561c-b17e-5e42-810f-e4200b23d0aa",
-      "name": "video_vae",
-      "type": "VAE",
-      "linkIds": [
-        4
-      ],
-      "pos": [
-        -160,
-        288
-      ]
-    },
-    {
-      "id": "47028fc0-cd59-5d9f-bbdf-0284843c0dd8",
-      "name": "seed",
-      "type": "INT",
-      "linkIds": [
-        5
-      ],
-      "pos": [
-        -160,
-        340
-      ]
-    },
-    {
-      "id": "61cd865a-970b-507d-b878-275416e10d15",
-      "name": "studio_context",
-      "type": "H3_STUDIO_CONTEXT",
-      "linkIds": [
-        17
-      ],
-      "pos": [
-        -160,
-        392
-      ]
-    }
-  ],
-  "outputs": [
-    {
-      "id": "fdf09fcf-6bbb-500e-ba22-ba94ef0f2587",
-      "name": "image",
-      "type": "IMAGE",
-      "linkIds": [
-        14
-      ],
-      "pos": [
-        2160,
-        180
-      ]
-    },
-    {
-      "id": "ff20728a-2f06-5d32-9b35-2a1a2934c2c3",
-      "name": "decode_info",
-      "type": "STRING",
-      "linkIds": [
-        15
-      ],
-      "pos": [
-        2160,
-        232
-      ]
-    },
-    {
-      "id": "6ad2c196-e415-5a30-9f8a-d8d29884da0a",
-      "name": "selection_report",
-      "type": "STRING",
-      "linkIds": [
-        16
-      ],
-      "pos": [
-        2160,
-        284
-      ]
-    }
-  ],
-  "widgets": [],
+  "last_node_id": 1,
+  "last_link_id": 0,
   "nodes": [
     {
-      "id": 101,
-      "type": "H3StudioContextSamplingPreset",
+      "id": 1,
+      "type": "5930b00d-9f8e-4b87-9cb5-ff5f7cf3b30a",
       "pos": [
-        40,
-        40
+        120,
+        120
       ],
       "size": [
-        340,
-        100
+        620,
+        420
       ],
       "flags": {},
       "order": 0,
@@ -160,574 +22,803 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 1
+          "link": null
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": null
+        },
+        {
+          "name": "h3_latent",
+          "type": "LATENT",
+          "link": null
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": null
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "link": null
         },
         {
           "name": "studio_context",
           "type": "H3_STUDIO_CONTEXT",
-          "link": 17
+          "link": null
         }
       ],
       "outputs": [
         {
-          "name": "model",
-          "type": "MODEL",
-          "links": [
-            6
-          ]
-        },
-        {
-          "name": "sampler",
-          "type": "SAMPLER",
-          "links": [
-            7
-          ]
-        },
-        {
-          "name": "sigmas",
-          "type": "SIGMAS",
-          "links": [
-            8
-          ]
-        },
-        {
-          "name": "sampling_info",
-          "type": "STRING",
-          "links": null
-        }
-      ],
-      "title": "Director-selected sampling profile",
-      "properties": {
-        "Node name for S&R": "H3StudioContextSamplingPreset"
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 102,
-      "type": "BasicGuider",
-      "pos": [
-        450,
-        60
-      ],
-      "size": [
-        270,
-        72
-      ],
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "model",
-          "type": "MODEL",
-          "link": 6
-        },
-        {
-          "name": "conditioning",
-          "type": "CONDITIONING",
-          "link": 2
-        }
-      ],
-      "outputs": [
-        {
-          "name": "GUIDER",
-          "type": "GUIDER",
-          "links": [
-            9
-          ]
-        }
-      ],
-      "title": "Positive guider",
-      "properties": {
-        "Node name for S&R": "BasicGuider"
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 103,
-      "type": "RandomNoise",
-      "pos": [
-        50,
-        220
-      ],
-      "size": [
-        280,
-        82
-      ],
-      "flags": {},
-      "order": 2,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "noise_seed",
-          "type": "INT",
-          "link": 5,
-          "widget": {
-            "name": "noise_seed"
-          }
-        }
-      ],
-      "outputs": [
-        {
-          "name": "NOISE",
-          "type": "NOISE",
-          "links": [
-            10
-          ]
-        }
-      ],
-      "title": "Studio seed",
-      "properties": {
-        "Node name for S&R": "RandomNoise"
-      },
-      "widgets_values": [
-        42,
-        "fixed"
-      ]
-    },
-    {
-      "id": 104,
-      "type": "SamplerCustomAdvanced",
-      "pos": [
-        790,
-        150
-      ],
-      "size": [
-        330,
-        150
-      ],
-      "flags": {},
-      "order": 3,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "noise",
-          "type": "NOISE",
-          "link": 10
-        },
-        {
-          "name": "guider",
-          "type": "GUIDER",
-          "link": 9
-        },
-        {
-          "name": "sampler",
-          "type": "SAMPLER",
-          "link": 7
-        },
-        {
-          "name": "sigmas",
-          "type": "SIGMAS",
-          "link": 8
-        },
-        {
-          "name": "latent_image",
-          "type": "LATENT",
-          "link": 3
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "LATENT",
-          "links": [
-            11
-          ]
-        },
-        {
-          "name": "denoised_output",
-          "type": "LATENT",
-          "links": null
-        }
-      ],
-      "title": "Sample H3 still packet",
-      "properties": {
-        "Node name for S&R": "SamplerCustomAdvanced"
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 105,
-      "type": "H3StudioDecode",
-      "pos": [
-        1190,
-        150
-      ],
-      "size": [
-        310,
-        104
-      ],
-      "flags": {},
-      "order": 4,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "samples",
-          "type": "LATENT",
-          "link": 11
-        },
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": 4
-        }
-      ],
-      "outputs": [
-        {
-          "name": "frames",
+          "name": "image",
           "type": "IMAGE",
-          "links": [
-            12
-          ]
-        },
-        {
-          "name": "decoded_frames",
-          "type": "INT",
-          "links": null
+          "links": []
         },
         {
           "name": "decode_info",
           "type": "STRING",
-          "links": [
-            15
-          ]
-        },
-        {
-          "name": "recommended_index",
-          "type": "INT",
-          "links": [
-            13
-          ]
-        }
-      ],
-      "title": "Exact frame decode",
-      "properties": {
-        "Node name for S&R": "H3StudioDecode"
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 106,
-      "type": "H3StudioFrameSelector",
-      "pos": [
-        1570,
-        100
-      ],
-      "size": [
-        430,
-        360
-      ],
-      "flags": {},
-      "order": 5,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "frames",
-          "type": "IMAGE",
-          "link": 12
-        },
-        {
-          "name": "strategy",
-          "type": "COMBO",
-          "link": null,
-          "widget": {
-            "name": "strategy"
-          }
-        },
-        {
-          "name": "manual_index",
-          "type": "INT",
-          "link": null,
-          "widget": {
-            "name": "manual_index"
-          }
-        },
-        {
-          "name": "skip_first_frames",
-          "type": "INT",
-          "link": null,
-          "widget": {
-            "name": "skip_first_frames"
-          }
-        },
-        {
-          "name": "candidate_start",
-          "type": "FLOAT",
-          "link": null,
-          "widget": {
-            "name": "candidate_start"
-          }
-        },
-        {
-          "name": "candidate_end",
-          "type": "FLOAT",
-          "link": null,
-          "widget": {
-            "name": "candidate_end"
-          }
-        },
-        {
-          "name": "similarity_weight",
-          "type": "FLOAT",
-          "link": null,
-          "widget": {
-            "name": "similarity_weight"
-          }
-        },
-        {
-          "name": "top_k",
-          "type": "INT",
-          "link": null,
-          "widget": {
-            "name": "top_k"
-          }
-        },
-        {
-          "name": "source_image",
-          "type": "IMAGE",
-          "link": null
-        },
-        {
-          "name": "emit_candidate_batch",
-          "type": "BOOLEAN",
-          "link": null,
-          "widget": {
-            "name": "emit_candidate_batch"
-          }
-        },
-        {
-          "name": "recommended_index",
-          "type": "INT",
-          "link": 13
-        }
-      ],
-      "outputs": [
-        {
-          "name": "selected_image",
-          "type": "IMAGE",
-          "links": [
-            14
-          ]
-        },
-        {
-          "name": "candidate_batch_debug",
-          "type": "IMAGE",
-          "links": null
-        },
-        {
-          "name": "selected_index",
-          "type": "INT",
-          "links": null
-        },
-        {
-          "name": "selected_score",
-          "type": "FLOAT",
-          "links": null
+          "links": []
         },
         {
           "name": "selection_report",
           "type": "STRING",
-          "links": [
-            16
-          ]
+          "links": []
         }
       ],
-      "title": "Select final still",
+      "title": "H3 Studio · Sampling and Exact Still Decode",
       "properties": {
-        "Node name for S&R": "H3StudioFrameSelector"
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0"
       },
-      "widgets_values": [
-        "decode_recommended",
-        0,
-        0,
-        0.0,
-        1.0,
-        0.6,
-        4,
-        false
-      ]
+      "widgets_values": []
     }
   ],
-  "groups": [
-    {
-      "id": 1,
-      "title": "01 · H3 sampling",
-      "bounding": [
-        10,
-        0,
-        740,
-        350
-      ],
-      "color": "#355b54",
-      "font_size": 22,
-      "flags": {}
-    },
-    {
-      "id": 2,
-      "title": "02 · Decode the temporal packet",
-      "bounding": [
-        760,
-        20,
-        760,
-        330
-      ],
-      "color": "#3f536b",
-      "font_size": 22,
-      "flags": {}
-    },
-    {
-      "id": 3,
-      "title": "03 · Choose one still",
-      "bounding": [
-        1530,
-        20,
-        520,
-        490
-      ],
-      "color": "#66553d",
-      "font_size": 22,
-      "flags": {}
-    }
-  ],
-  "links": [
-    {
-      "id": 1,
-      "origin_id": -10,
-      "origin_slot": 0,
-      "target_id": 101,
-      "target_slot": 0,
-      "type": "MODEL"
-    },
-    {
-      "id": 2,
-      "origin_id": -10,
-      "origin_slot": 1,
-      "target_id": 102,
-      "target_slot": 1,
-      "type": "CONDITIONING"
-    },
-    {
-      "id": 3,
-      "origin_id": -10,
-      "origin_slot": 2,
-      "target_id": 104,
-      "target_slot": 4,
-      "type": "LATENT"
-    },
-    {
-      "id": 4,
-      "origin_id": -10,
-      "origin_slot": 3,
-      "target_id": 105,
-      "target_slot": 1,
-      "type": "VAE"
-    },
-    {
-      "id": 5,
-      "origin_id": -10,
-      "origin_slot": 4,
-      "target_id": 103,
-      "target_slot": 0,
-      "type": "INT"
-    },
-    {
-      "id": 6,
-      "origin_id": 101,
-      "origin_slot": 0,
-      "target_id": 102,
-      "target_slot": 0,
-      "type": "MODEL"
-    },
-    {
-      "id": 7,
-      "origin_id": 101,
-      "origin_slot": 1,
-      "target_id": 104,
-      "target_slot": 2,
-      "type": "SAMPLER"
-    },
-    {
-      "id": 8,
-      "origin_id": 101,
-      "origin_slot": 2,
-      "target_id": 104,
-      "target_slot": 3,
-      "type": "SIGMAS"
-    },
-    {
-      "id": 9,
-      "origin_id": 102,
-      "origin_slot": 0,
-      "target_id": 104,
-      "target_slot": 1,
-      "type": "GUIDER"
-    },
-    {
-      "id": 10,
-      "origin_id": 103,
-      "origin_slot": 0,
-      "target_id": 104,
-      "target_slot": 0,
-      "type": "NOISE"
-    },
-    {
-      "id": 11,
-      "origin_id": 104,
-      "origin_slot": 0,
-      "target_id": 105,
-      "target_slot": 0,
-      "type": "LATENT"
-    },
-    {
-      "id": 12,
-      "origin_id": 105,
-      "origin_slot": 0,
-      "target_id": 106,
-      "target_slot": 0,
-      "type": "IMAGE"
-    },
-    {
-      "id": 13,
-      "origin_id": 105,
-      "origin_slot": 3,
-      "target_id": 106,
-      "target_slot": 10,
-      "type": "INT"
-    },
-    {
-      "id": 14,
-      "origin_id": 106,
-      "origin_slot": 0,
-      "target_id": -20,
-      "target_slot": 0,
-      "type": "IMAGE"
-    },
-    {
-      "id": 15,
-      "origin_id": 105,
-      "origin_slot": 2,
-      "target_id": -20,
-      "target_slot": 1,
-      "type": "STRING"
-    },
-    {
-      "id": 16,
-      "origin_id": 106,
-      "origin_slot": 4,
-      "target_id": -20,
-      "target_slot": 2,
-      "type": "STRING"
-    },
-    {
-      "id": 17,
-      "origin_id": -10,
-      "origin_slot": 5,
-      "target_id": 101,
-      "target_slot": 1,
-      "type": "H3_STUDIO_CONTEXT"
-    }
-  ],
+  "links": [],
+  "groups": [],
+  "definitions": {
+    "subgraphs": [
+      {
+        "id": "5930b00d-9f8e-4b87-9cb5-ff5f7cf3b30a",
+        "version": 1,
+        "state": {
+          "lastGroupId": 0,
+          "lastNodeId": 106,
+          "lastLinkId": 17,
+          "lastRerouteId": 0
+        },
+        "revision": 0,
+        "config": {},
+        "name": "H3 Studio · Sampling and Exact Still Decode",
+        "inputNode": {
+          "id": -10,
+          "bounding": [
+            -190,
+            40,
+            120,
+            360
+          ]
+        },
+        "outputNode": {
+          "id": -20,
+          "bounding": [
+            2130,
+            120,
+            140,
+            240
+          ]
+        },
+        "inputs": [
+          {
+            "id": "352b5c74-4db0-568b-9cb7-525414c5c991",
+            "name": "model",
+            "type": "MODEL",
+            "linkIds": [
+              1
+            ],
+            "pos": [
+              -160,
+              132
+            ]
+          },
+          {
+            "id": "337c26a9-6c85-5f64-9703-96e57ac16b8b",
+            "name": "positive",
+            "type": "CONDITIONING",
+            "linkIds": [
+              2
+            ],
+            "pos": [
+              -160,
+              184
+            ]
+          },
+          {
+            "id": "bcdb6c4e-a2cf-5492-89e0-5c021e653eb2",
+            "name": "h3_latent",
+            "type": "LATENT",
+            "linkIds": [
+              3
+            ],
+            "pos": [
+              -160,
+              236
+            ]
+          },
+          {
+            "id": "2ae2561c-b17e-5e42-810f-e4200b23d0aa",
+            "name": "video_vae",
+            "type": "VAE",
+            "linkIds": [
+              4
+            ],
+            "pos": [
+              -160,
+              288
+            ]
+          },
+          {
+            "id": "47028fc0-cd59-5d9f-bbdf-0284843c0dd8",
+            "name": "seed",
+            "type": "INT",
+            "linkIds": [
+              5
+            ],
+            "pos": [
+              -160,
+              340
+            ]
+          },
+          {
+            "id": "61cd865a-970b-507d-b878-275416e10d15",
+            "name": "studio_context",
+            "type": "H3_STUDIO_CONTEXT",
+            "linkIds": [
+              17
+            ],
+            "pos": [
+              -160,
+              392
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "fdf09fcf-6bbb-500e-ba22-ba94ef0f2587",
+            "name": "image",
+            "type": "IMAGE",
+            "linkIds": [
+              14
+            ],
+            "pos": [
+              2160,
+              180
+            ]
+          },
+          {
+            "id": "ff20728a-2f06-5d32-9b35-2a1a2934c2c3",
+            "name": "decode_info",
+            "type": "STRING",
+            "linkIds": [
+              15
+            ],
+            "pos": [
+              2160,
+              232
+            ]
+          },
+          {
+            "id": "6ad2c196-e415-5a30-9f8a-d8d29884da0a",
+            "name": "selection_report",
+            "type": "STRING",
+            "linkIds": [
+              16
+            ],
+            "pos": [
+              2160,
+              284
+            ]
+          }
+        ],
+        "widgets": [],
+        "nodes": [
+          {
+            "id": 101,
+            "type": "H3StudioContextSamplingPreset",
+            "pos": [
+              40,
+              40
+            ],
+            "size": [
+              340,
+              100
+            ],
+            "flags": {},
+            "order": 0,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "model",
+                "type": "MODEL",
+                "link": 1
+              },
+              {
+                "name": "studio_context",
+                "type": "H3_STUDIO_CONTEXT",
+                "link": 17
+              }
+            ],
+            "outputs": [
+              {
+                "name": "model",
+                "type": "MODEL",
+                "links": [
+                  6
+                ]
+              },
+              {
+                "name": "sampler",
+                "type": "SAMPLER",
+                "links": [
+                  7
+                ]
+              },
+              {
+                "name": "sigmas",
+                "type": "SIGMAS",
+                "links": [
+                  8
+                ]
+              },
+              {
+                "name": "sampling_info",
+                "type": "STRING",
+                "links": null
+              }
+            ],
+            "title": "Director-selected sampling profile",
+            "properties": {
+              "Node name for S&R": "H3StudioContextSamplingPreset"
+            },
+            "widgets_values": []
+          },
+          {
+            "id": 102,
+            "type": "BasicGuider",
+            "pos": [
+              450,
+              60
+            ],
+            "size": [
+              270,
+              72
+            ],
+            "flags": {},
+            "order": 1,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "model",
+                "type": "MODEL",
+                "link": 6
+              },
+              {
+                "name": "conditioning",
+                "type": "CONDITIONING",
+                "link": 2
+              }
+            ],
+            "outputs": [
+              {
+                "name": "GUIDER",
+                "type": "GUIDER",
+                "links": [
+                  9
+                ]
+              }
+            ],
+            "title": "Positive guider",
+            "properties": {
+              "Node name for S&R": "BasicGuider"
+            },
+            "widgets_values": []
+          },
+          {
+            "id": 103,
+            "type": "RandomNoise",
+            "pos": [
+              50,
+              220
+            ],
+            "size": [
+              280,
+              82
+            ],
+            "flags": {},
+            "order": 2,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "noise_seed",
+                "type": "INT",
+                "link": 5,
+                "widget": {
+                  "name": "noise_seed"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "name": "NOISE",
+                "type": "NOISE",
+                "links": [
+                  10
+                ]
+              }
+            ],
+            "title": "Studio seed",
+            "properties": {
+              "Node name for S&R": "RandomNoise"
+            },
+            "widgets_values": [
+              42,
+              "fixed"
+            ]
+          },
+          {
+            "id": 104,
+            "type": "SamplerCustomAdvanced",
+            "pos": [
+              790,
+              150
+            ],
+            "size": [
+              330,
+              150
+            ],
+            "flags": {},
+            "order": 3,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "noise",
+                "type": "NOISE",
+                "link": 10
+              },
+              {
+                "name": "guider",
+                "type": "GUIDER",
+                "link": 9
+              },
+              {
+                "name": "sampler",
+                "type": "SAMPLER",
+                "link": 7
+              },
+              {
+                "name": "sigmas",
+                "type": "SIGMAS",
+                "link": 8
+              },
+              {
+                "name": "latent_image",
+                "type": "LATENT",
+                "link": 3
+              }
+            ],
+            "outputs": [
+              {
+                "name": "output",
+                "type": "LATENT",
+                "links": [
+                  11
+                ]
+              },
+              {
+                "name": "denoised_output",
+                "type": "LATENT",
+                "links": null
+              }
+            ],
+            "title": "Sample H3 still packet",
+            "properties": {
+              "Node name for S&R": "SamplerCustomAdvanced"
+            },
+            "widgets_values": []
+          },
+          {
+            "id": 105,
+            "type": "H3StudioDecode",
+            "pos": [
+              1190,
+              150
+            ],
+            "size": [
+              310,
+              104
+            ],
+            "flags": {},
+            "order": 4,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "samples",
+                "type": "LATENT",
+                "link": 11
+              },
+              {
+                "name": "vae",
+                "type": "VAE",
+                "link": 4
+              }
+            ],
+            "outputs": [
+              {
+                "name": "frames",
+                "type": "IMAGE",
+                "links": [
+                  12
+                ]
+              },
+              {
+                "name": "decoded_frames",
+                "type": "INT",
+                "links": null
+              },
+              {
+                "name": "decode_info",
+                "type": "STRING",
+                "links": [
+                  15
+                ]
+              },
+              {
+                "name": "recommended_index",
+                "type": "INT",
+                "links": [
+                  13
+                ]
+              }
+            ],
+            "title": "Exact frame decode",
+            "properties": {
+              "Node name for S&R": "H3StudioDecode"
+            },
+            "widgets_values": []
+          },
+          {
+            "id": 106,
+            "type": "H3StudioFrameSelector",
+            "pos": [
+              1570,
+              100
+            ],
+            "size": [
+              430,
+              360
+            ],
+            "flags": {},
+            "order": 5,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "frames",
+                "type": "IMAGE",
+                "link": 12
+              },
+              {
+                "name": "strategy",
+                "type": "COMBO",
+                "link": null,
+                "widget": {
+                  "name": "strategy"
+                }
+              },
+              {
+                "name": "manual_index",
+                "type": "INT",
+                "link": null,
+                "widget": {
+                  "name": "manual_index"
+                }
+              },
+              {
+                "name": "skip_first_frames",
+                "type": "INT",
+                "link": null,
+                "widget": {
+                  "name": "skip_first_frames"
+                }
+              },
+              {
+                "name": "candidate_start",
+                "type": "FLOAT",
+                "link": null,
+                "widget": {
+                  "name": "candidate_start"
+                }
+              },
+              {
+                "name": "candidate_end",
+                "type": "FLOAT",
+                "link": null,
+                "widget": {
+                  "name": "candidate_end"
+                }
+              },
+              {
+                "name": "similarity_weight",
+                "type": "FLOAT",
+                "link": null,
+                "widget": {
+                  "name": "similarity_weight"
+                }
+              },
+              {
+                "name": "top_k",
+                "type": "INT",
+                "link": null,
+                "widget": {
+                  "name": "top_k"
+                }
+              },
+              {
+                "name": "source_image",
+                "type": "IMAGE",
+                "link": null
+              },
+              {
+                "name": "emit_candidate_batch",
+                "type": "BOOLEAN",
+                "link": null,
+                "widget": {
+                  "name": "emit_candidate_batch"
+                }
+              },
+              {
+                "name": "recommended_index",
+                "type": "INT",
+                "link": 13
+              }
+            ],
+            "outputs": [
+              {
+                "name": "selected_image",
+                "type": "IMAGE",
+                "links": [
+                  14
+                ]
+              },
+              {
+                "name": "candidate_batch_debug",
+                "type": "IMAGE",
+                "links": null
+              },
+              {
+                "name": "selected_index",
+                "type": "INT",
+                "links": null
+              },
+              {
+                "name": "selected_score",
+                "type": "FLOAT",
+                "links": null
+              },
+              {
+                "name": "selection_report",
+                "type": "STRING",
+                "links": [
+                  16
+                ]
+              }
+            ],
+            "title": "Select final still",
+            "properties": {
+              "Node name for S&R": "H3StudioFrameSelector"
+            },
+            "widgets_values": [
+              "decode_recommended",
+              0,
+              0,
+              0.0,
+              1.0,
+              0.6,
+              4,
+              false
+            ]
+          }
+        ],
+        "groups": [
+          {
+            "id": 1,
+            "title": "01 · H3 sampling",
+            "bounding": [
+              10,
+              0,
+              740,
+              350
+            ],
+            "color": "#355b54",
+            "font_size": 22,
+            "flags": {}
+          },
+          {
+            "id": 2,
+            "title": "02 · Decode the temporal packet",
+            "bounding": [
+              760,
+              20,
+              760,
+              330
+            ],
+            "color": "#3f536b",
+            "font_size": 22,
+            "flags": {}
+          },
+          {
+            "id": 3,
+            "title": "03 · Choose one still",
+            "bounding": [
+              1530,
+              20,
+              520,
+              490
+            ],
+            "color": "#66553d",
+            "font_size": 22,
+            "flags": {}
+          }
+        ],
+        "links": [
+          {
+            "id": 1,
+            "origin_id": -10,
+            "origin_slot": 0,
+            "target_id": 101,
+            "target_slot": 0,
+            "type": "MODEL"
+          },
+          {
+            "id": 2,
+            "origin_id": -10,
+            "origin_slot": 1,
+            "target_id": 102,
+            "target_slot": 1,
+            "type": "CONDITIONING"
+          },
+          {
+            "id": 3,
+            "origin_id": -10,
+            "origin_slot": 2,
+            "target_id": 104,
+            "target_slot": 4,
+            "type": "LATENT"
+          },
+          {
+            "id": 4,
+            "origin_id": -10,
+            "origin_slot": 3,
+            "target_id": 105,
+            "target_slot": 1,
+            "type": "VAE"
+          },
+          {
+            "id": 5,
+            "origin_id": -10,
+            "origin_slot": 4,
+            "target_id": 103,
+            "target_slot": 0,
+            "type": "INT"
+          },
+          {
+            "id": 6,
+            "origin_id": 101,
+            "origin_slot": 0,
+            "target_id": 102,
+            "target_slot": 0,
+            "type": "MODEL"
+          },
+          {
+            "id": 7,
+            "origin_id": 101,
+            "origin_slot": 1,
+            "target_id": 104,
+            "target_slot": 2,
+            "type": "SAMPLER"
+          },
+          {
+            "id": 8,
+            "origin_id": 101,
+            "origin_slot": 2,
+            "target_id": 104,
+            "target_slot": 3,
+            "type": "SIGMAS"
+          },
+          {
+            "id": 9,
+            "origin_id": 102,
+            "origin_slot": 0,
+            "target_id": 104,
+            "target_slot": 1,
+            "type": "GUIDER"
+          },
+          {
+            "id": 10,
+            "origin_id": 103,
+            "origin_slot": 0,
+            "target_id": 104,
+            "target_slot": 0,
+            "type": "NOISE"
+          },
+          {
+            "id": 11,
+            "origin_id": 104,
+            "origin_slot": 0,
+            "target_id": 105,
+            "target_slot": 0,
+            "type": "LATENT"
+          },
+          {
+            "id": 12,
+            "origin_id": 105,
+            "origin_slot": 0,
+            "target_id": 106,
+            "target_slot": 0,
+            "type": "IMAGE"
+          },
+          {
+            "id": 13,
+            "origin_id": 105,
+            "origin_slot": 3,
+            "target_id": 106,
+            "target_slot": 10,
+            "type": "INT"
+          },
+          {
+            "id": 14,
+            "origin_id": 106,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 0,
+            "type": "IMAGE"
+          },
+          {
+            "id": 15,
+            "origin_id": 105,
+            "origin_slot": 2,
+            "target_id": -20,
+            "target_slot": 1,
+            "type": "STRING"
+          },
+          {
+            "id": 16,
+            "origin_id": 106,
+            "origin_slot": 4,
+            "target_id": -20,
+            "target_slot": 2,
+            "type": "STRING"
+          },
+          {
+            "id": 17,
+            "origin_id": -10,
+            "origin_slot": 5,
+            "target_id": 101,
+            "target_slot": 1,
+            "type": "H3_STUDIO_CONTEXT"
+          }
+        ],
+        "extra": {
+          "documentation": "The Director stays outside this subgraph because ComfyUI does not reliably promote custom DOM widgets."
+        },
+        "category": "H3 Studio",
+        "description": "Director-selected H3 sampling, exact temporal decode, and stable still selection."
+      }
+    ]
+  },
+  "config": {},
   "extra": {
-    "documentation": "The Director stays outside this subgraph because ComfyUI does not reliably promote custom DOM widgets."
-  }
+    "workflowRendererVersion": "LG"
+  },
+  "version": 0.4
 }

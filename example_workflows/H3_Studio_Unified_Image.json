@@ -1615,7 +1615,7 @@
         "id": "5930b00d-9f8e-4b87-9cb5-ff5f7cf3b30a",
         "version": 1,
         "state": {
-          "lastGroupid": 0,
+          "lastGroupId": 0,
           "lastNodeId": 106,
           "lastLinkId": 17,
           "lastRerouteId": 0
@@ -2342,7 +2342,9 @@
         ],
         "extra": {
           "documentation": "The Director stays outside this subgraph because ComfyUI does not reliably promote custom DOM widgets."
-        }
+        },
+        "category": "H3 Studio",
+        "description": "Director-selected H3 sampling, exact temporal decode, and stable still selection."
       }
     ]
   },
