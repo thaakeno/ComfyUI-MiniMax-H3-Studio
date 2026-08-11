@@ -9,6 +9,8 @@ from h3studio.acceleration import (
     LIGHTX_LORA_FILENAME,
     LIGHTX_MODEL_REPOSITORY,
     LIGHTX_PROFILES,
+    LIGHTX_V1_LORA_FILENAME,
+    LIGHTX_V1_MODEL_REPOSITORY,
     PDD_PROFILES,
     PDDBackendError,
     build_pdd_backend,
@@ -18,12 +20,26 @@ from h3studio.acceleration import (
 )
 
 
-def test_lightx_profiles_pin_kijai_resized_artifact_and_empirical_strength() -> None:
-    assert set(LIGHTX_PROFILES) == {"lightx_er_sde_4", "lightx_sa_solver_4"}
-    assert {profile.sampler for profile in LIGHTX_PROFILES.values()} == {"er_sde", "sa_solver"}
-    for profile in LIGHTX_PROFILES.values():
+def test_lightx_v01_profiles_pin_kijai_resized_artifact_and_empirical_strength() -> None:
+    legacy = {key: LIGHTX_PROFILES[key] for key in ("lightx_er_sde_4", "lightx_sa_solver_4")}
+    assert {profile.sampler for profile in legacy.values()} == {"er_sde", "sa_solver"}
+    for profile in legacy.values():
         assert profile.lora_filename == LIGHTX_LORA_FILENAME
+        assert profile.repository == LIGHTX_MODEL_REPOSITORY
         assert profile.lora_strength == 0.75
+
+
+def test_lightx_v1_profile_pins_official_comfyui_8step_artifact() -> None:
+    profile = LIGHTX_PROFILES["lightx_v1_fl2v_8"]
+    assert profile.lora_filename == LIGHTX_V1_LORA_FILENAME
+    assert profile.repository == LIGHTX_V1_MODEL_REPOSITORY
+    assert profile.lora_strength == 1.0
+    assert profile.sampler == "euler"
+    assert profile.scheduler == "simple"
+    assert profile.steps == 8
+    assert profile.shift_video == 6.0
+    assert profile.shift_audio == 3.0
+    assert profile.runtime_profile is None
 
 
 def test_lightx_resized_profile_never_falls_back_to_original_adapter() -> None:
