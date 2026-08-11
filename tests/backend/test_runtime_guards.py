@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from h3studio.prompting import comfy_analyzer
 from h3studio import runtime_guards
+from h3studio.prompting import comfy_analyzer
 
 
 def test_zero_image_t2i_runs_selected_writer_then_releases_helper(monkeypatch) -> None:
