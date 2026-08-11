@@ -7,6 +7,7 @@ import threading
 from dataclasses import replace
 from typing import Any
 
+from ..conditioning_cache import run_conditioning_pipeline
 from ..console_report import format_execution_report
 from ..constants import (
     ASPECT_RATIOS,
@@ -32,11 +33,6 @@ from .loader import H3StudioBundle
 
 LOGGER = logging.getLogger(__name__)
 
-# One-entry process caches survive ComfyUI recreating a Python node instance
-# between queues, while remaining bounded when the user changes model/route.
-_CONDITIONING_CACHE_LOCK = threading.RLock()
-_CONDITIONING_CACHE_KEY = None
-_CONDITIONING_CACHE_VALUE = None
 _PDD_PATCH_CACHE_LOCK = threading.RLock()
 _PDD_PATCH_CACHE_KEY = None
 _PDD_PATCH_CACHE_VALUE = None
@@ -393,7 +389,10 @@ class H3StudioCondition:
     FUNCTION = "condition"
     RETURN_TYPES = ("MODEL", "H3_STUDIO_GENERATION", "CONDITIONING", "LATENT", "VAE", "INT", "STRING")
     RETURN_NAMES = ("model", "generation", "positive", "h3_latent", "video_vae", "requested_frames", "run_info")
-    DESCRIPTION = "Apply the selected FL2VA/REF2VA route without re-encoding the prompt twice."
+    DESCRIPTION = (
+        "Apply FL2VA/REF2VA with independent prompt, reference-VAE, source-VAE and latent caches. "
+        "ComfyUI alone owns model residency and offloading."
+    )
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -404,30 +403,13 @@ class H3StudioCondition:
             }
         }
 
-    @staticmethod
-    def _image_cache_key(studio_context):
-        values = []
-        for index, image in enumerate(studio_context.images):
-            reference = studio_context.state.references[index] if index < len(studio_context.state.references) else None
-            storage_name = reference.storage_name if reference is not None else None
-            if storage_name:
-                values.append(("stored", storage_name, tuple(getattr(image, "shape", ()))))
-                continue
-            data_ptr = getattr(image, "data_ptr", None)
-            pointer = data_ptr() if callable(data_ptr) else id(image)
-            values.append(("tensor", pointer, getattr(image, "_version", 0), tuple(getattr(image, "shape", ()))))
-        return tuple(values)
-
     def condition(self, h3_bundle, studio_context):
-        global _CONDITIONING_CACHE_KEY, _CONDITIONING_CACHE_VALUE
-        from .image_runtime import H3StudioPrepare
-
         if not isinstance(h3_bundle, H3StudioBundle):
             raise ValueError("Connect H3 Studio Loader's h3_bundle output.")
         if not isinstance(studio_context, H3StudioContext):
             raise ValueError("Connect H3 Studio Director's studio_context output.")
         route = studio_context.route.selected
-        images = studio_context.images
+        images = tuple(studio_context.images)
         runtime_mode = "text_to_image (FL2VA)"
         used_images = images
         route_note = ""
@@ -443,54 +425,21 @@ class H3StudioCondition:
             route_note = " Experimental REF2VA-without-images model route uses text-only conditioning."
 
         frame_preset = FRAME_PROFILE_TO_RUNTIME[studio_context.state.generation.frame_profile]
-        references = list(used_images) + [None] * (9 - len(used_images))
-        cache_key = (
-            h3_bundle.fl2va_name,
-            h3_bundle.ref2va_name,
-            h3_bundle.clip_name,
-            h3_bundle.video_vae_name,
-            h3_bundle.image_vae_name,
-            route,
-            runtime_mode,
-            studio_context.prompt,
-            studio_context.width,
-            studio_context.height,
-            frame_preset,
-            self._image_cache_key(studio_context),
+        stages = run_conditioning_pipeline(
+            h3_bundle,
+            studio_context,
+            route=route,
+            runtime_mode=runtime_mode,
+            used_images=used_images,
+            frame_preset=frame_preset,
+            source_fit="crop_center",
+            reference_size="max_identity_2048",
         )
-        with _CONDITIONING_CACHE_LOCK:
-            if cache_key == _CONDITIONING_CACHE_KEY and _CONDITIONING_CACHE_VALUE is not None:
-                conditioning, latent, fitted, requested_frames, runtime_info = _CONDITIONING_CACHE_VALUE
-                runtime_info = f"{runtime_info} Conditioning cache: HIT; Qwen3-VL/VAE reference encoding reused."
-                LOGGER.info("[H3 Studio] Conditioning cache hit; skipped Qwen3-VL and reference VAE encoding")
-            else:
-                result = H3StudioPrepare().prepare(
-                    clip=h3_bundle.clip,
-                    mode=runtime_mode,
-                    prompt=studio_context.prompt,
-                    width=studio_context.width,
-                    height=studio_context.height,
-                    frame_preset=frame_preset,
-                    optimize_prompt=False,
-                    preserve_strength=studio_context.state.prompt_options.adherence,
-                    source_fit="crop_center",
-                    reference_size="max_identity_2048",
-                    vae=h3_bundle.video_vae,
-                    source_image=references[0],
-                    reference_image_2=references[1],
-                    reference_image_3=references[2],
-                    reference_image_4=references[3],
-                    reference_image_5=references[4],
-                    reference_image_6=references[5],
-                    reference_image_7=references[6],
-                    reference_image_8=references[7],
-                    reference_image_9=references[8],
-                )
-                conditioning, latent, fitted, requested_frames, _prompt, runtime_info = result
-                _CONDITIONING_CACHE_KEY = cache_key
-                _CONDITIONING_CACHE_VALUE = (conditioning, latent, fitted, requested_frames, runtime_info)
         model = h3_bundle.model_for(route)
-        run_info = f"{studio_context.summary()}\n\nRuntime: {runtime_info}{route_note}"
+        run_info = (
+            f"{studio_context.summary()}\n\nRuntime: {stages.runtime_info} "
+            f"Conditioning stages: {stages.diagnostics}.{route_note}"
+        )
         final_vae = (
             h3_bundle.image_vae_for_decode()
             if studio_context.state.generation.frame_profile == "image_vae_1"
@@ -498,15 +447,23 @@ class H3StudioCondition:
         )
         generation = H3StudioGeneration(
             model=model,
-            conditioning=conditioning,
-            latent=latent,
+            conditioning=stages.conditioning,
+            latent=stages.latent,
             video_vae=final_vae,
-            requested_frames=requested_frames,
+            requested_frames=stages.requested_frames,
             context=studio_context,
-            fitted_source=fitted,
+            fitted_source=stages.fitted_source,
             run_info=run_info,
         )
-        return model, generation, conditioning, latent, final_vae, requested_frames, run_info
+        return (
+            model,
+            generation,
+            stages.conditioning,
+            stages.latent,
+            final_vae,
+            stages.requested_frames,
+            run_info,
+        )
 
 
 class H3StudioOutput:

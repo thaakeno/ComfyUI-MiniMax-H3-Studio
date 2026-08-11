@@ -443,7 +443,7 @@
       "widgets_values": [
         "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
         "minimax_h3_ref2va_pruned_w4a8_mixed.safetensors",
-        "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+        "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
         "minimax_h3_video_vae_int8_convrot.safetensors",
         "Disabled - original H3 video VAE only",
         "Auto · Qwen3-VL 4B",

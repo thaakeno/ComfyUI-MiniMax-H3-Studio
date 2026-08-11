@@ -29,6 +29,8 @@ AUTO_ANALYZER = "Auto · Qwen3-VL 4B"
 DISABLED_ANALYZER = "Disabled"
 SAME_AS_ANALYZER = "Same as image analyzer"
 DISABLED_IMAGE_VAE = "Disabled - original H3 video VAE only"
+OFFICIAL_H3_TEXT_ENCODER = "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+LEGACY_H3_INT8_TEXT_ENCODER = "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
 _WEIGHT_SUFFIXES = (".safetensors", ".gguf", ".ckpt", ".pt", ".pth", ".bin")
 _H3_TOKENS = ("minimax", "h3", "fl2va", "ref2va")
 LOGGER = logging.getLogger(__name__)
@@ -90,13 +92,49 @@ def ref2va_choices() -> list[str]:
     )
 
 
+def _clip_preference(name: str) -> tuple[int, str]:
+    compact = _compact(name)
+    if "nvfp4awq" in compact:
+        rank = 0
+    elif "nvfp4" in compact:
+        rank = 1
+    elif "int8convrot" in compact:
+        rank = 2
+    else:
+        rank = 3
+    return rank, _normalize(name).lower()
+
+
 def clip_choices() -> list[str]:
     values = _filenames("text_encoders", "clip")
-    return _filtered(
+    selected = _filtered(
         values,
         lambda value: "qwen3vl" in _compact(value) and ("minimax" in _compact(value) or "h3" in _compact(value)),
-        "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+        OFFICIAL_H3_TEXT_ENCODER,
     )
+    return sorted(selected, key=_clip_preference)
+
+
+def _preferred_nvfp4_encoder() -> str | None:
+    return next((value for value in clip_choices() if "nvfp4awq" in _compact(value)), None)
+
+
+def _resolve_text_encoder(name: str) -> str:
+    """Migrate only the exact historical Studio default when NVFP4 exists."""
+
+    normalized = _normalize(name)
+    if _compact(normalized) != _compact(LEGACY_H3_INT8_TEXT_ENCODER):
+        return normalized
+    preferred = _preferred_nvfp4_encoder()
+    if preferred and _compact(preferred) != _compact(normalized):
+        LOGGER.warning(
+            "[H3 Studio] Migrating legacy H3 text encoder %s -> %s. "
+            "The official ComfyUI H3 templates use the smaller NVFP4 AWQ encoder.",
+            normalized,
+            preferred,
+        )
+        return preferred
+    return normalized
 
 
 def analyzer_choices() -> list[str]:
@@ -293,7 +331,8 @@ class H3StudioLoader:
     RETURN_NAMES = ("h3_bundle", "clip", "video_vae", "model_info")
     DESCRIPTION = (
         "Load H3's conditioning encoder and VAE, plus optional full Qwen3-VL models for cached pixel analysis "
-        "and the text-only detailed prompt-director pass. The prompt writer defaults to reusing the analyzer."
+        "and the text-only detailed prompt-director pass. The prompt writer defaults to reusing the analyzer. "
+        "NVFP4 AWQ is preferred for H3's native 32B conditioning encoder."
     )
 
     @classmethod
@@ -308,7 +347,16 @@ class H3StudioLoader:
                     ref2va_choices(),
                     {"default": next((v for v in ref2va_choices() if v != NONE_MODEL), NONE_MODEL)},
                 ),
-                "text_encoder": (clip_choices(),),
+                "text_encoder": (
+                    clip_choices(),
+                    {
+                        "default": clip_choices()[0],
+                        "tooltip": (
+                            "NVFP4 AWQ is the official ComfyUI H3 template choice. INT8 ConvRot remains selectable "
+                            "but can stream very slowly when its staged representation exceeds available memory."
+                        ),
+                    },
+                ),
                 "video_vae": (vae_choices(),),
                 "image_vae": (
                     image_vae_choices(),
@@ -355,14 +403,21 @@ class H3StudioLoader:
     ):
         if _is_none(fl2va_model) and _is_none(ref2va_model):
             raise ValueError("Select at least one MiniMax H3 transformer: FL2VA or REF2VA.")
-        clip = _load_clip(text_encoder)
+        resolved_text_encoder = _resolve_text_encoder(text_encoder)
+        if "int8convrot" in _compact(resolved_text_encoder):
+            LOGGER.warning(
+                "[H3 Studio] H3 text encoder %s uses the large INT8 ConvRot path; prefer %s on an L4 when installed.",
+                resolved_text_encoder,
+                _preferred_nvfp4_encoder() or OFFICIAL_H3_TEXT_ENCODER,
+            )
+        clip = _load_clip(resolved_text_encoder)
         vae = _load_vae(video_vae)
         analyzer_name = _resolve_analyzer(image_analyzer)
         prompt_writer_name = _resolve_prompt_writer(prompt_writer, analyzer_name)
         bundle = H3StudioBundle(
             fl2va_name=fl2va_model,
             ref2va_name=ref2va_model,
-            clip_name=text_encoder,
+            clip_name=resolved_text_encoder,
             video_vae_name=video_vae,
             image_vae_name=None if image_vae == DISABLED_IMAGE_VAE or _is_none(image_vae) else image_vae,
             analyzer_name=analyzer_name,
