@@ -1,7 +1,7 @@
 import { app } from "../../../scripts/app.js";
 
 import { parseInlineMarkdown, parseMarkdown } from "./core/markdown.js";
-import { noteViewportHeight } from "./core/note_layout.js";
+import { noteViewportHeight, noteWidgetSizing } from "./core/note_layout.js";
 
 const TARGET = "H3StudioWorkflowNote";
 
@@ -152,10 +152,10 @@ function installNote(node) {
   const display = node.addDOMWidget("h3studio_markdown_note", "h3studio_markdown_note", panel, {
     serialize: false,
     hideOnZoom: false,
+    ...noteWidgetSizing(node),
   });
-  // nodeCreated runs before a workflow's serialized node size is restored.
-  // Read the live height whenever ComfyUI lays out the widget instead of
-  // freezing the temporary constructor height and leaving most of the node blank.
+  // Legacy frontend fallback. Nodes 2.0 uses the sizing callbacks passed to
+  // addDOMWidget above and ignores this post-creation computeSize override.
   display.computeSize = (width) => [width, noteViewportHeight(node.size?.[1])];
   render();
   setMode(false);

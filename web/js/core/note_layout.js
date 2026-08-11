@@ -7,3 +7,12 @@ export function noteViewportHeight(nodeHeight) {
   const resolved = Number.isFinite(height) && height > 0 ? height : NOTE_DEFAULT_NODE_HEIGHT;
   return Math.max(NOTE_MIN_VIEWPORT, Math.round(resolved) - NOTE_NODE_CHROME);
 }
+
+export function noteWidgetSizing(node) {
+  const height = () => noteViewportHeight(node?.size?.[1]);
+  return {
+    getMinHeight: height,
+    getMaxHeight: height,
+    getHeight: height,
+  };
+}
