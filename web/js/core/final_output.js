@@ -28,3 +28,9 @@ export function executedImageUrl(item) {
   query.set("rand", String(Date.now()));
   return `/view?${query.toString()}`;
 }
+
+export function selectOutputView(requested, hasResult, hasComparison) {
+  if (requested === "comparison" && hasComparison) return "comparison";
+  if (hasResult) return "result";
+  return hasComparison ? "comparison" : "result";
+}

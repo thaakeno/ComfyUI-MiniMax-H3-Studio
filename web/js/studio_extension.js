@@ -25,7 +25,7 @@ import {
   validateGenerationContract,
 } from "./core/state.js";
 import { element, field, iconButton, numberControl, rangeControl, selectControl } from "./core/dom.js";
-import { executedImageUrl, isNodeDownstream } from "./core/final_output.js";
+import { executedImageUrl, isNodeDownstream, selectOutputView } from "./core/final_output.js";
 import { STUDIO_PANEL_HEIGHT, initialStudioNodeSize, studioPanelSize } from "./core/layout.js";
 import { openImageLightbox } from "./core/lightbox.js";
 import { splitReferenceMentions } from "./core/result_text.js";
@@ -478,27 +478,43 @@ async function queueDirectorWithSeed(node, seed) {
   }
 }
 
-function finalImageSection(node) {
+function generatedOutputSection(node, state) {
   const result = node.__h3studioFinalImage;
-  if (!result?.url) return null;
+  const comparison = node.__h3studioComparisonImage;
+  if (!result?.url && !comparison?.url) return null;
+  const views = [
+    result?.url ? ["result", "Generated image", result] : null,
+    comparison?.url ? ["comparison", "Reference comparison", comparison] : null,
+  ].filter(Boolean);
+  const active = selectOutputView(node.__h3studioOutputView, Boolean(result?.url), Boolean(comparison?.url));
+  node.__h3studioOutputView = active;
+  const selected = active === "comparison" ? comparison : result;
   const metadata = element("div", {
     className: "h3s-final-metadata",
-    text: `Seed ${result.seed} · ${result.profile}`,
+    text: active === "comparison"
+      ? "@Image references on the left · generated result on the right"
+      : `Seed ${result.seed} · ${result.profile}`,
   });
   const image = element("img", {
-    className: "h3s-final-image",
-    src: result.url,
-    alt: "Finished H3 Studio image",
+    className: `h3s-final-image${active === "comparison" ? " h3s-comparison-image" : ""}`,
+    src: selected.url,
+    alt: active === "comparison" ? "Reference inputs beside the generated H3 Studio image" : "Finished H3 Studio image",
     title: "Click to expand",
     on: {
       load: (event) => {
-        result.width = event.target.naturalWidth;
-        result.height = event.target.naturalHeight;
-        metadata.textContent = `Seed ${result.seed} · ${result.width} × ${result.height} · ${result.profile}`;
+        selected.width = event.target.naturalWidth;
+        selected.height = event.target.naturalHeight;
+        if (active === "comparison") {
+          metadata.textContent = `Comparison sheet · ${selected.width} × ${selected.height} · click to inspect`;
+        } else {
+          result.width = selected.width;
+          result.height = selected.height;
+          metadata.textContent = `Seed ${result.seed} · ${result.width} × ${result.height} · ${result.profile}`;
+        }
       },
       click: (event) => {
         event.stopPropagation();
-        openImageLightbox(result.url, metadata.textContent);
+        openImageLightbox(selected.url, metadata.textContent);
       },
     },
   });
@@ -522,30 +538,22 @@ function finalImageSection(node) {
       className: "h3s-final-action", type: "button", text: "Edit prompt · lock seed", on: { click: edit },
     }),
   ]);
-  return section("Finished image", element("div", { className: "h3s-final-result" }, [image, metadata, actions]));
-}
-
-function comparisonImageSection(node) {
-  const result = node.__h3studioComparisonImage;
-  if (!result?.url) return null;
-  const image = element("img", {
-    className: "h3s-final-image h3s-comparison-image",
-    src: result.url,
-    alt: "H3 Studio reference and generated image comparison",
-    title: "Click to expand",
-    on: {
-      click: (event) => {
-        event.stopPropagation();
-        openImageLightbox(result.url, "Reference inputs · Generated edit");
-      },
-    },
-  });
-  return section(
-    "Reference comparison",
-    element("div", { className: "h3s-final-result" }, [image]),
-    null,
-    "The original @Image inputs stay on the left; the generated edit stays large on the right.",
-  );
+  const tabs = views.length > 1 ? element("div", {
+    className: "h3s-output-tabs",
+    attrs: { role: "tablist", "aria-label": "Generated output view" },
+  }, views.map(([key, label]) => element("button", {
+    className: `h3s-output-tab${active === key ? " is-active" : ""}`,
+    type: "button",
+    text: label,
+    attrs: { role: "tab", "aria-selected": String(active === key) },
+    on: { click: () => { node.__h3studioOutputView = key; renderPanel(node); } },
+  }))) : null;
+  const stage = element("div", { className: "h3s-output-stage" }, [image]);
+  const body = element("div", { className: "h3s-final-result" }, [tabs, stage, metadata, result?.url ? actions : null].filter(Boolean));
+  const status = state.ui.comparison_enabled
+    ? element("span", { className: "h3s-output-mode", text: comparison?.url ? "Comparison ready" : "Comparison enabled" })
+    : null;
+  return section("Generated output", body, status);
 }
 
 function controlRow(label, control) {
@@ -623,7 +631,10 @@ function generationSection(node, state, refresh) {
       on: {
         change: (event) => {
           state.ui = { ...state.ui, comparison_enabled: event.target.checked };
-          if (!event.target.checked) node.__h3studioComparisonImage = null;
+          if (!event.target.checked) {
+            node.__h3studioComparisonImage = null;
+            node.__h3studioOutputView = "result";
+          }
           applyState(node, state);
           refresh();
         },
@@ -1127,8 +1138,7 @@ function renderPanel(node) {
     }) : null,
     generationSection(node, state, refresh),
     promptSection(node, state, refresh),
-    finalImageSection(node),
-    comparisonImageSection(node),
+    generatedOutputSection(node, state),
     resultsSection(node),
     referencesSection(node, state, refresh),
     advancedSection(node, state, refresh),
@@ -1149,6 +1159,7 @@ api.addEventListener("executed", ({ detail }) => {
     const state = stateFromNode(node);
     if (outputNode.comfyClass === "H3StudioComparisonView") {
       node.__h3studioComparisonImage = { url, promptId: promptId(detail) };
+      node.__h3studioOutputView = "comparison";
       queueMicrotask(() => renderPanel(node));
       continue;
     }
@@ -1158,6 +1169,7 @@ api.addEventListener("executed", ({ detail }) => {
       profile: state.generation.sampling_profile,
       promptId: promptId(detail),
     };
+    if (!state.ui.comparison_enabled) node.__h3studioOutputView = "result";
     queueMicrotask(() => renderPanel(node));
   }
 });

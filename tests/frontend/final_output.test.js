@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { executedImageUrl, isNodeDownstream } from "../../web/js/core/final_output.js";
+import { executedImageUrl, isNodeDownstream, selectOutputView } from "../../web/js/core/final_output.js";
 
 test("final output reachability follows the actual workflow graph", () => {
   const links = {
@@ -19,4 +19,10 @@ test("executed output image uses the full ComfyUI media route", () => {
   assert.match(url, /filename=final.png/);
   assert.match(url, /subfolder=H3Studio%2Fday/);
   assert.match(url, /type=output/);
+});
+
+test("comparison output becomes the active Director view only when available", () => {
+  assert.equal(selectOutputView("comparison", true, true), "comparison");
+  assert.equal(selectOutputView("comparison", true, false), "result");
+  assert.equal(selectOutputView("result", false, true), "comparison");
 });

@@ -129,8 +129,15 @@ export function installTheme() {
     .h3s-writer-instruction { box-sizing: border-box; width: 100%; min-height: 72px; resize: vertical; padding: 6px 7px; border: 1px solid var(--h3s-border); border-radius: 5px; outline: none; color: var(--h3s-text); background: var(--h3s-surface); font: 9px/1.45 ui-sans-serif, system-ui; }
     .h3s-writer-instruction:focus-visible { outline: 2px solid color-mix(in srgb, var(--h3s-accent) 70%, transparent); outline-offset: 1px; }
     .h3s-final-result { display: flex; flex-direction: column; gap: 6px; }
-    .h3s-final-image { display: block; width: 100%; max-height: 420px; object-fit: contain; border: 1px solid var(--h3s-border); border-radius: 6px; background: #090b0f; cursor: zoom-in; }
-    .h3s-final-metadata { color: var(--h3s-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+    .h3s-output-tabs { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 3px; padding: 3px; border: 1px solid var(--h3s-border); border-radius: 7px; background: var(--h3s-bg); }
+    .h3s-output-tab { min-height: 25px; border: 0; border-radius: 5px; color: var(--h3s-muted); background: transparent; cursor: pointer; font: 650 9px/1.2 ui-sans-serif,system-ui; }
+    .h3s-output-tab:hover { color: var(--h3s-text); }
+    .h3s-output-tab.is-active { color: var(--h3s-text); background: color-mix(in srgb,var(--h3s-accent) 14%,var(--h3s-surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb,var(--h3s-accent) 35%,transparent); }
+    .h3s-output-stage { display: grid; place-items: center; min-height: 190px; overflow: hidden; border: 1px solid var(--h3s-border); border-radius: 8px; background: #090b0f; }
+    .h3s-final-image { display: block; width: 100%; max-height: 430px; object-fit: contain; background: #090b0f; cursor: zoom-in; }
+    .h3s-comparison-image { aspect-ratio: 8 / 5; }
+    .h3s-final-metadata { padding: 0 2px; color: var(--h3s-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+    .h3s-output-mode { padding: 2px 6px; border-radius: 999px; color: var(--h3s-accent); background: color-mix(in srgb,var(--h3s-accent) 10%,transparent); font-size: 8px; font-weight: 700; }
     .h3s-final-actions { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 5px; }
     .h3s-final-action { min-height: 27px; padding: 4px 6px; border: 1px solid var(--h3s-border); border-radius: 5px; color: var(--h3s-text); background: var(--h3s-bg); cursor: pointer; font: 650 9px/1.2 ui-sans-serif, system-ui; }
     .h3s-final-action:hover { border-color: color-mix(in srgb, var(--h3s-accent) 55%, var(--h3s-border)); background: color-mix(in srgb, var(--h3s-accent) 10%, var(--h3s-bg)); }
