@@ -11,7 +11,12 @@ from ..lora_stack import apply_custom_lora_stack, normalize_custom_loras
 from ..performance import prewarm_diffusion_model, prewarm_vae, tmpfs_pressure_note
 from .director import H3StudioContextSamplingPreset
 from .image_runtime import H3StudioDecode
-from .loader import H3StudioLoader
+from .loader import (
+    AUTO_ANALYZER,
+    DISABLED_IMAGE_VAE,
+    H3StudioLoader,
+    SAME_AS_ANALYZER,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -71,9 +76,9 @@ class H3StudioOptimizedLoader(H3StudioLoader):
         ref2va_model: str,
         text_encoder: str,
         video_vae: str,
-        image_vae: str,
-        image_analyzer: str,
-        prompt_writer: str,
+        image_vae: str = DISABLED_IMAGE_VAE,
+        image_analyzer: str = AUTO_ANALYZER,
+        prompt_writer: str = SAME_AS_ANALYZER,
     ):
         key = tuple(map(str, (
             fl2va_model,
