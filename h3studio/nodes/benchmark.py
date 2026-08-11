@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 import re
 import time
+from base64 import b64encode
 from dataclasses import dataclass, replace
+from io import BytesIO
+from textwrap import wrap
 from typing import Any
 
 import numpy as np
@@ -157,8 +160,95 @@ def _to_pil(image: torch.Tensor | None, size: int, error: str = "") -> Image.Ima
     return canvas
 
 
+def _tensor_source_to_pil(image: Any) -> Image.Image | None:
+    if not isinstance(image, torch.Tensor) or image.ndim < 3:
+        return None
+    value = image[0] if image.ndim == 4 else image
+    if value.ndim != 3:
+        return None
+    if value.shape[-1] in (1, 3, 4):
+        array = value.detach().to(device="cpu", dtype=torch.float32).clamp(0, 1).numpy()
+    elif value.shape[0] in (1, 3, 4):
+        array = value.detach().permute(1, 2, 0).to(device="cpu", dtype=torch.float32).clamp(0, 1).numpy()
+    else:
+        return None
+    array = (array * 255.0).round().clip(0, 255).astype(np.uint8)
+    if array.shape[-1] == 1:
+        array = np.repeat(array, 3, axis=-1)
+    return Image.fromarray(array).convert("RGB")
+
+
+def _preview_data_url(image: torch.Tensor | None, edge: int = 480) -> str:
+    source = _tensor_source_to_pil(image)
+    if source is None:
+        return ""
+    source.thumbnail((edge, edge), Image.Resampling.LANCZOS)
+    output = BytesIO()
+    source.save(output, format="JPEG", quality=82, optimize=True)
+    return f"data:image/jpeg;base64,{b64encode(output.getvalue()).decode('ascii')}"
+
+
+def _send_benchmark_event(node_id: Any, payload: dict[str, Any]) -> None:
+    if node_id is None:
+        return
+    try:
+        from server import PromptServer
+
+        server = PromptServer.instance
+        server.send_sync("h3studio-benchmark-progress", {"node_id": str(node_id), **payload}, server.client_id)
+    except Exception as exc:
+        LOGGER.debug("H3 Studio benchmark progress event skipped: %s", exc)
+
+
+def _context_header(context: H3StudioContext, width: int, include_references: bool, include_prompt: bool) -> Image.Image:
+    gap = 12
+    reference_size = 128
+    text_width = max(44, int((width - 2 * gap) / 10))
+    prompt = context.state.prompt.strip()
+    prompt_note = prompt[:900] + ("…" if len(prompt) > 900 else "")
+    prompt_lines = wrap(prompt_note, text_width) if include_prompt and prompt_note else []
+    reference_count = len(context.images) if include_references else 0
+    reference_rows = (reference_count + max(1, (width - gap) // (reference_size + gap)) - 1) // max(
+        1, (width - gap) // (reference_size + gap)
+    )
+    reference_height = reference_rows * (reference_size + 28) if reference_count else 0
+    prompt_height = 38 + len(prompt_lines) * 19 if prompt_lines else 0
+    height = 50 + reference_height + prompt_height + gap
+    header = Image.new("RGB", (width, height), "#10151c")
+    draw = ImageDraw.Draw(header)
+    draw.text((gap, 12), "Comparison context", fill="#f3f4f6", font=_font(20, bold=True))
+    y = 48
+    if reference_count:
+        columns = max(1, (width - gap) // (reference_size + gap))
+        for index, image in enumerate(context.images):
+            row, column = divmod(index, columns)
+            x = gap + column * (reference_size + gap)
+            top = y + row * (reference_size + 28)
+            source = _tensor_source_to_pil(image)
+            if source is not None:
+                fitted = ImageOps.contain(source, (reference_size, reference_size), Image.Resampling.LANCZOS)
+                tile = Image.new("RGB", (reference_size, reference_size), "#080b10")
+                tile.paste(fitted, ((reference_size - fitted.width) // 2, (reference_size - fitted.height) // 2))
+            else:
+                tile = _placeholder("Unavailable", reference_size)
+            header.paste(tile, (x, top))
+            draw.text((x, top + reference_size + 5), f"@Image{index + 1}", fill="#67e8d0", font=_font(14, bold=True))
+        y += reference_height
+    if prompt_lines:
+        draw.text((gap, y + 4), "Original prompt", fill="#9ca3af", font=_font(14, bold=True))
+        draw.multiline_text((gap, y + 26), "\n".join(prompt_lines), fill="#e5e7eb", font=_font(14), spacing=4)
+    return header
+
+
 def _comparison_grid(
-    results: list[_ABResult], seed_strategy: str, cell_size: int, profile_count: int, generation_count: int
+    results: list[_ABResult],
+    seed_strategy: str,
+    cell_size: int,
+    profile_count: int,
+    generation_count: int,
+    context: H3StudioContext,
+    include_references: bool,
+    include_prompt: bool,
 ) -> torch.Tensor:
     gap = 10
     header_height = 58
@@ -166,11 +256,14 @@ def _comparison_grid(
     columns = max(1, int(profile_count))
     rows = max(1, (len(results) + columns - 1) // columns)
     width = columns * cell_size + (columns + 1) * gap
-    height = header_height + rows * (cell_size + label_height) + (rows + 1) * gap
+    context_header = _context_header(context, width, include_references, include_prompt)
+    matrix_height = header_height + rows * (cell_size + label_height) + (rows + 1) * gap
+    height = context_header.height + matrix_height
     grid = Image.new("RGB", (width, height), "#080b10")
+    grid.paste(context_header, (0, 0))
     draw = ImageDraw.Draw(grid)
     draw.text(
-        (gap, 14),
+        (gap, context_header.height + 14),
         f"H3 Studio Benchmark Lab - {generation_count} generations - {seed_strategy}",
         fill="#e5e7eb",
         font=_font(22, bold=True),
@@ -179,7 +272,7 @@ def _comparison_grid(
     for index, result in enumerate(results):
         row, column = divmod(index, columns)
         x = gap + column * (cell_size + gap)
-        y = header_height + gap + row * (cell_size + label_height + gap)
+        y = context_header.height + header_height + gap + row * (cell_size + label_height + gap)
         grid.paste(_to_pil(result.image, cell_size, result.error), (x, y))
         label_y = y + cell_size
         draw.rectangle((x, label_y, x + cell_size, label_y + label_height), fill="#171c24")
@@ -309,7 +402,17 @@ class H3StudioABComparison:
                         "tooltip": "Explicitly allow a matrix above your guard after checking its generation count.",
                     },
                 ),
-            }
+                "include_reference_context": ("BOOLEAN", {"default": True}),
+                "include_original_prompt": ("BOOLEAN", {"default": True}),
+                "live_cell_previews": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "tooltip": "Show completed cells in the node. Disable to avoid preview encoding overhead.",
+                    },
+                ),
+            },
+            "hidden": {"unique_id": "UNIQUE_ID"},
         }
 
     def compare(
@@ -325,6 +428,10 @@ class H3StudioABComparison:
         grid_cell_size: int,
         max_generations: int,
         allow_large_matrix: bool,
+        include_reference_context: bool,
+        include_original_prompt: bool,
+        live_cell_previews: bool,
+        unique_id=None,
     ):
         if not isinstance(h3_bundle, H3StudioBundle):
             raise ValueError("Connect H3 Studio Loader's h3_bundle output.")
@@ -380,6 +487,18 @@ class H3StudioABComparison:
             selected_route=studio_context.route.selected,
         )
         variants = plan.variants
+        matrix_started = time.perf_counter()
+        _send_benchmark_event(
+            unique_id,
+            {
+                "phase": "preparing",
+                "finished": 0,
+                "total": plan.generation_count,
+                "remaining": plan.generation_count,
+                "elapsed_seconds": 0.0,
+                "live_previews": bool(live_cell_previews),
+            },
+        )
         results: list[_ABResult] = []
         progress = None
         try:
@@ -418,10 +537,31 @@ class H3StudioABComparison:
         indexed_results: dict[int, _ABResult] = {}
         # Group by profile to avoid repeatedly swapping patched and unpatched models.
         execution_order = sorted(range(len(variants)), key=lambda index: (variants[index].profile, index))
-        result_cache: dict[tuple[str, int, int, int, str, int], _ABResult] = {}
-        for index in execution_order:
+        completed_durations: list[float] = []
+        for execution_index, index in enumerate(execution_order, start=1):
             spec = variants[index]
             context = variant_contexts[index]
+            label = short_profile_label(spec.profile, spec.accelerated)
+            completed_before = execution_index - 1
+            _send_benchmark_event(
+                unique_id,
+                {
+                    "phase": "running",
+                    "current": execution_index,
+                    "finished": completed_before,
+                    "total": plan.generation_count,
+                    "remaining": plan.generation_count - completed_before,
+                    "profile": label,
+                    "profile_id": spec.profile,
+                    "requested_megapixels": spec.requested_megapixels,
+                    "width": context.width,
+                    "height": context.height,
+                    "seed": spec.seed,
+                    "repeat": spec.repeat,
+                    "elapsed_seconds": time.perf_counter() - matrix_started,
+                },
+            )
+            cell_started = time.perf_counter()
             result = _ABResult(
                 spec=spec,
                 width=context.width,
@@ -430,30 +570,9 @@ class H3StudioABComparison:
             )
             prepared_key = (context.width, context.height, context.seed, context.compile_result.native_prompt)
             model, conditioning, latent, video_vae, condition_error = prepared[prepared_key]
-            cache_key = (
-                spec.profile,
-                spec.seed,
-                context.width,
-                context.height,
-                context.compile_result.native_prompt,
-                spec.repeat,
-            )
-            cached_result = result_cache.get(cache_key)
-            if cached_result is not None:
-                result.image = cached_result.image
-                result.sampling_seconds = cached_result.sampling_seconds
-                result.sampling_info = cached_result.sampling_info + " | reused identical actual canvas"
-                LOGGER.info(
-                    "[H3 Studio - A/B] Reused identical variant | %s | %dx%d | seed=%d",
-                    spec.profile,
-                    context.width,
-                    context.height,
-                    spec.seed,
-                )
-            elif condition_error:
+            if condition_error:
                 result.error = condition_error
             else:
-                label = short_profile_label(spec.profile, spec.accelerated)
                 LOGGER.info(
                     "[H3 Studio - A/B] Running %.2f MP requested -> %dx%d actual | seed=%d | %s",
                     spec.requested_megapixels,
@@ -477,10 +596,37 @@ class H3StudioABComparison:
                 except Exception as exc:
                     result.error = f"{type(exc).__name__}: {exc}"
                     LOGGER.exception("[H3 Studio - A/B] Variant failed | %s", label)
-            result_cache[cache_key] = result
+            completed_durations.append(time.perf_counter() - cell_started)
             indexed_results[index] = result
+            finished = execution_index
             if progress is not None:
                 progress.update(1)
+            remaining = plan.generation_count - finished
+            eta_seconds = None
+            if len(completed_durations) >= 2 and remaining:
+                eta_seconds = sum(completed_durations) / len(completed_durations) * remaining
+            _send_benchmark_event(
+                unique_id,
+                {
+                    "phase": "complete" if not remaining else "running",
+                    "current": finished,
+                    "finished": finished,
+                    "total": plan.generation_count,
+                    "remaining": remaining,
+                    "profile": label,
+                    "profile_id": spec.profile,
+                    "requested_megapixels": spec.requested_megapixels,
+                    "width": context.width,
+                    "height": context.height,
+                    "seed": spec.seed,
+                    "repeat": spec.repeat,
+                    "elapsed_seconds": time.perf_counter() - matrix_started,
+                    "eta_seconds": eta_seconds,
+                    "eta_basis": "mean completed cell time" if eta_seconds is not None else "",
+                    "error": result.error,
+                    "preview": _preview_data_url(result.image) if live_cell_previews else "",
+                },
+            )
 
         results = [indexed_results[index] for index in range(len(variants))]
 
@@ -502,7 +648,16 @@ class H3StudioABComparison:
             )
         report = "\n".join(report_lines)
         LOGGER.info("[H3 Studio - Benchmark] Matrix complete\n%s", report)
-        return _comparison_grid(results, seed_strategy, cell_size, len(plan.profiles), plan.generation_count), report
+        return _comparison_grid(
+            results,
+            seed_strategy,
+            cell_size,
+            len(plan.profiles),
+            plan.generation_count,
+            studio_context,
+            include_reference_context,
+            include_original_prompt,
+        ), report
 
 
 NODE_CLASS_MAPPINGS = {

@@ -774,7 +774,7 @@
       ],
       "size": [
         780,
-        420
+        520
       ],
       "flags": {},
       "order": 6,
@@ -861,6 +861,30 @@
           "widget": {
             "name": "allow_large_matrix"
           }
+        },
+        {
+          "name": "include_reference_context",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "include_reference_context"
+          }
+        },
+        {
+          "name": "include_original_prompt",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "include_original_prompt"
+          }
+        },
+        {
+          "name": "live_cell_previews",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "live_cell_previews"
+          }
         }
       ],
       "outputs": [
@@ -890,7 +914,10 @@
         1,
         640,
         24,
-        false
+        false,
+        true,
+        true,
+        true
       ],
       "color": "#60467a",
       "bgcolor": "#332640"

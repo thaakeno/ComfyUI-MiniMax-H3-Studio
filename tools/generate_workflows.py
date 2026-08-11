@@ -634,7 +634,7 @@ def build_workflow():
             "H3StudioABComparison",
             "Benchmark Lab - profiles / resolution / VAE",
             [-520, 1260],
-            [780, 420],
+            [780, 520],
             order=6,
             inputs=[
                 socket("h3_bundle", "H3_STUDIO_BUNDLE", l_bundle_ab),
@@ -648,6 +648,9 @@ def build_workflow():
                 socket("grid_cell_size", "INT", widget="grid_cell_size"),
                 socket("max_generations", "INT", widget="max_generations"),
                 socket("allow_large_matrix", "BOOLEAN", widget="allow_large_matrix"),
+                socket("include_reference_context", "BOOLEAN", widget="include_reference_context"),
+                socket("include_original_prompt", "BOOLEAN", widget="include_original_prompt"),
+                socket("live_cell_previews", "BOOLEAN", widget="live_cell_previews"),
             ],
             outputs=[
                 output("comparison_grid", "IMAGE", [l_ab_switch]),
@@ -663,6 +666,9 @@ def build_workflow():
                 640,
                 24,
                 False,
+                True,
+                True,
+                True,
             ],
             color="#60467a",
             bgcolor="#332640",
