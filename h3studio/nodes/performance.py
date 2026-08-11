@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from contextlib import suppress
 from typing import Any
 
 from ..lora_stack import apply_custom_lora_stack, normalize_custom_loras
