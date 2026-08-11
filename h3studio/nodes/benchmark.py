@@ -346,7 +346,6 @@ class H3StudioABComparison:
                     "STRING",
                     {
                         "default": "base_quality_20, lightx_er_sde_4",
-                        "multiline": True,
                         "tooltip": "Comma/newline-separated profile IDs or labels. Add more than two for a wider matrix.",
                     },
                 ),

@@ -13,6 +13,23 @@ function widget(node, name) {
 function installCountPreview(node) {
   if (node.__h3studioBenchmarkCount || typeof node.addDOMWidget !== "function") return;
   node.__h3studioBenchmarkCount = true;
+  const labels = {
+    comparison_kind: "Comparison",
+    profiles: "Profiles (comma-separated)",
+    megapixels: "Targets (MP)",
+    repeats: "Repeats",
+    seed_strategy: "Seed strategy",
+    seed_step: "Seed step",
+    grid_cell_size: "Comparison cell size",
+    max_generations: "Generation safety limit",
+    allow_large_matrix: "Allow oversized matrix",
+    include_reference_context: "Show references",
+    include_original_prompt: "Show original prompt",
+    live_cell_previews: "Live cell previews",
+  };
+  for (const control of node.widgets || []) {
+    if (labels[control.name]) control.label = labels[control.name];
+  }
   const root = document.createElement("div");
   root.className = "h3s-benchmark-panel";
   root.setAttribute("role", "status");
