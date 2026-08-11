@@ -11,6 +11,7 @@ SOURCES = [
     ROOT / "h3studio" / "extension.py",
     ROOT / "h3studio" / "nodes" / "benchmark.py",
     ROOT / "h3studio" / "nodes" / "image_runtime.py",
+    ROOT / "h3studio" / "nodes" / "save.py",
 ]
 
 
