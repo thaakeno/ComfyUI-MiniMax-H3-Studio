@@ -108,7 +108,7 @@ function installPreview(node) {
     });
   }
   navigation.hidden = true;
-  node.__h3studioPreviewElements = { state, render };
+  node.__h3studioPreviewElements = { state, render, root, empty };
   const widget = node.addDOMWidget("h3studio_live_preview", "h3studio_live_preview", root, {
     serialize: false,
     hideOnZoom: false,
@@ -122,6 +122,14 @@ api.addEventListener("h3studio-preview", ({ detail }) => {
   const elements = node?.__h3studioPreviewElements;
   if (!elements) return;
   const runId = String(detail.run_id || "");
+  if (detail?.error) {
+    elements.state.activeRunId = runId;
+    elements.state.history = [];
+    elements.state.index = -1;
+    elements.state.render();
+    elements.empty.textContent = `Preview unavailable: ${detail.error}`;
+    return;
+  }
   if (detail?.reset) {
     elements.state.history = [];
     elements.state.index = -1;

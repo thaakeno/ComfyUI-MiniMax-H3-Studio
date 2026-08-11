@@ -28,7 +28,7 @@ def test_preview_wrapper_advances_executor_instead_of_recursing(monkeypatch) -> 
     assert callable(calls[0][1]["callback"])
 
 
-def test_preview_callback_preserves_native_progress_before_async_enqueue(monkeypatch) -> None:
+def test_preview_callback_preserves_native_progress_before_preview_decode(monkeypatch) -> None:
     torch_module = ModuleType("torch")
     monkeypatch.setitem(sys.modules, "torch", torch_module)
     order = []
@@ -45,6 +45,24 @@ def test_preview_callback_preserves_native_progress_before_async_enqueue(monkeyp
     captured["callback"](0, "x0", "x", 4)
 
     assert order == ["native-progress", "preview-enqueued"]
+
+
+def test_packed_preview_slices_each_channel_before_reshape() -> None:
+    from h3studio.nodes.preview import _resolve_packed_latent
+
+    class Value:
+        ndim = 3
+        shape = (1, 2, 6)
+
+        def __getitem__(self, key):
+            assert key == (slice(None), slice(None), slice(None, 4))
+            return self
+
+        def reshape(self, shape):
+            assert shape == (1, 2, 1, 2, 2)
+            return "restored"
+
+    assert _resolve_packed_latent(None, Value(), [(1, 2, 1, 2, 2)]) == "restored"
 
 
 def test_preview_callback_reports_sampler_elapsed_and_average_step_time(monkeypatch) -> None:

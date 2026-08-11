@@ -13,7 +13,7 @@ import logging
 import math
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 LOGGER = logging.getLogger(__name__)
@@ -119,11 +119,12 @@ def _resolve_packed_latent(torch, value, latent_shapes):
     if getattr(value, "ndim", 0) != 3 or not latent_shapes:
         return value
     shape = tuple(int(part) for part in latent_shapes[0])
-    required = math.prod(shape[1:])
-    flattened = value.reshape(value.shape[0], -1)
-    if flattened.shape[1] < required:
-        raise ValueError(f"Packed latent has {flattened.shape[1]} values; H3 shape requires {required}.")
-    return flattened[:, :required].reshape((value.shape[0], *shape[1:]))
+    required_per_channel = math.prod(shape[2:])
+    if value.shape[1] != shape[1] or value.shape[2] < required_per_channel:
+        raise ValueError(f"Packed latent shape {tuple(value.shape)} cannot restore H3 shape {shape}.")
+    # Comfy packs nested latents along the final axis. Slice every channel
+    # before reshaping so a following packed item cannot corrupt this frame.
+    return value[:, :, :required_per_channel].reshape((value.shape[0], *shape[1:]))
 
 
 def _first_h3_latent(torch, value, latent_shapes):
@@ -168,9 +169,7 @@ class _PreviewWrapper:
     every: int
     decoder: Any = None
     run_serial: int = 0
-    _worker_lock: Any = field(default_factory=threading.Lock, repr=False)
-    _worker: Any = field(default=None, repr=False)
-    _pending: Any = field(default=None, repr=False)
+    first_frame_reported: bool = False
 
     def _load(self, torch, device, dtype):
         if self.decoder is None:
@@ -208,37 +207,39 @@ class _PreviewWrapper:
             },
             server.client_id,
         )
-
-    def _worker_loop(self, torch):
-        while True:
-            with self._worker_lock:
-                pending = self._pending
-                self._pending = None
-                if pending is None:
-                    self._worker = None
-                    return
-            try:
-                self._send(torch, *pending)
-            except Exception as error:
-                LOGGER.warning("H3 Studio TAEH3 preview skipped: %s", error)
+        if not self.first_frame_reported:
+            self.first_frame_reported = True
+            LOGGER.info("[H3 Studio] TAEH3 live preview active | first frame %dx%d", width, height)
 
     def _enqueue(self, torch, step, x0, total_steps, latent_shapes, run_id, elapsed_seconds, average_step_seconds):
         if step % self.every != 0 and step + 1 < total_steps:
             return
-        snapshot = x0.detach().clone()
-        with self._worker_lock:
-            self._pending = (
-                step,
-                snapshot,
-                total_steps,
-                latent_shapes,
-                run_id,
-                elapsed_seconds,
-                average_step_seconds,
+        # Decode while x0 and Comfy's sampler CUDA context are still alive.
+        # The old background decoder raced post-sampling cleanup/offload and
+        # could silently lose every frame on short four-step H3 runs.
+        self._send(
+            torch,
+            step,
+            x0.detach(),
+            total_steps,
+            latent_shapes,
+            run_id,
+            elapsed_seconds,
+            average_step_seconds,
+        )
+
+    def _report_error(self, message: str, run_id: str) -> None:
+        try:
+            from server import PromptServer
+
+            server = PromptServer.instance
+            server.send_sync(
+                "h3studio-preview",
+                {"node_id": self.node_id, "run_id": run_id, "error": str(message)[:500]},
+                server.client_id,
             )
-            if self._worker is None or not self._worker.is_alive():
-                self._worker = threading.Thread(target=self._worker_loop, args=(torch,), daemon=True)
-                self._worker.start()
+        except Exception:
+            pass
 
     def _reset_frontend(self, total_steps: int, run_id: str):
         from server import PromptServer
@@ -254,6 +255,7 @@ class _PreviewWrapper:
         import torch
 
         self.run_serial += 1
+        self.first_frame_reported = False
         run_id = f"{self.node_id}:{self.run_serial}"
         positional = list(args)
         callback = kwargs.get("callback")
@@ -287,6 +289,7 @@ class _PreviewWrapper:
                 )
             except Exception as error:
                 LOGGER.warning("H3 Studio TAEH3 preview enqueue skipped: %s", error)
+                self._report_error(error, run_id)
 
         if callback_index is None:
             kwargs["callback"] = preview_callback
