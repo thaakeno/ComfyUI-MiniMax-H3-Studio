@@ -22,11 +22,11 @@ Resolution math, exact-frame decode concepts, still-selection strategies, sampli
 
 Source: https://github.com/astropuzzo/ComfyUI-MiniMax-H3-Image-Studio
 
-## H3 Studio Unified Image Director
+## Earlier H3 Studio prototypes
 
-The role-aware reference compiler, adherence controls, explicit model routing, aspect-ratio/megapixel UX, and structured prompt direction build on Alier's private `H3StudioUnifiedImageDirector_v1_3_7.py` and its paired workflow.
+Earlier internal prototypes authored for this project by Alier informed the role-aware reference compiler, adherence controls, route selection, resolution controls, and visual workflow hierarchy. They are part of H3 Studio's own development history rather than a separately distributed third-party dependency.
 
-This repository does not include H3 Studio Hub and does not claim compatibility with it.
+H3 Studio Hub is a separate project and is not included or advertised as compatible.
 
 ## Optional TAEH3 preview asset
 
