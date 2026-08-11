@@ -4,9 +4,13 @@ import { clampStudioNodeSize } from "./core/layout.js";
 
 const TARGET = "H3StudioDirector";
 
+function preferredSize(node) {
+  return node?.__h3studioPreferredSize || clampStudioNodeSize(node?.size);
+}
+
 function clampDirectorSize(node) {
   if (!node) return;
-  const [width, height] = clampStudioNodeSize(node.size);
+  const [width, height] = clampStudioNodeSize(node.size, preferredSize(node));
   if (!Array.isArray(node.size)) node.size = [width, height];
   else {
     node.size[0] = width;
@@ -24,9 +28,16 @@ function clampDirectorSize(node) {
 function installSizeGuard(node) {
   if (!node || node.__h3studioSizeGuardInstalled) return;
   node.__h3studioSizeGuardInstalled = true;
+  node.__h3studioPreferredSize = clampStudioNodeSize(node.size);
 
   const originalResize = node.onResize;
-  node.onResize = function h3studioGuardedResize() {
+  node.onResize = function h3studioGuardedResize(size) {
+    // LiteGraph exposes resizing_node only during an actual pointer resize.
+    // Accept those dimensions as the user's new preferred size; automatic
+    // computeSize/layout passes are not allowed to ratchet the node smaller.
+    if (app.canvas?.resizing_node === this) {
+      this.__h3studioPreferredSize = clampStudioNodeSize(size || this.size);
+    }
     const result = originalResize?.apply(this, arguments);
     clampDirectorSize(this);
     return result;
