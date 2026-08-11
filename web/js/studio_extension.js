@@ -28,6 +28,7 @@ import { element, field, iconButton, numberControl, rangeControl, selectControl 
 import { executedImageUrl, isNodeDownstream } from "./core/final_output.js";
 import { STUDIO_PANEL_HEIGHT, initialStudioNodeSize, studioPanelSize } from "./core/layout.js";
 import { openImageLightbox } from "./core/lightbox.js";
+import { splitReferenceMentions } from "./core/result_text.js";
 import { installTheme } from "./core/theme.js";
 import {
   chooseImageFiles,
@@ -363,6 +364,28 @@ function friendlyReferences(value) {
     .replace(/<Subject\s+(\d+)>/gi, "@Image$1");
 }
 
+function richResultPrompt(value, state) {
+  const prompt = element("pre", { className: "h3s-result-prompt" });
+  for (const part of splitReferenceMentions(value)) {
+    if (part.type === "text") {
+      prompt.append(document.createTextNode(part.value));
+      continue;
+    }
+    const reference = state.references.find((item) => Number(item.ordinal) === part.ordinal);
+    const preview = reference?.storage_name
+      ? previewUrlForStorage(reference.storage_name)
+      : reference?.thumbnail;
+    const chip = element("span", {
+      className: "h3s-mention-chip h3s-result-mention",
+      title: reference?.filename ? `${part.value} · ${reference.filename}` : part.value,
+    });
+    if (preview) chip.append(element("img", { className: "h3s-mention-chip-thumb", src: preview, alt: "" }));
+    chip.append(element("span", { className: "h3s-mention-chip-label", text: part.value }));
+    prompt.append(chip);
+  }
+  return prompt;
+}
+
 function resultsSection(node) {
   const result = node.__h3studioResult;
   if (!result?.prompt) return null;
@@ -377,7 +400,7 @@ function resultsSection(node) {
       click: async (event) => {
         event.preventDefault();
         event.stopPropagation();
-        await globalThis.navigator?.clipboard?.writeText?.(enhancedInstruction);
+        await globalThis.navigator?.clipboard?.writeText?.(friendlyPrompt);
         event.currentTarget.textContent = "Copied";
         setTimeout(() => { event.currentTarget.textContent = "Copy"; }, 1200);
       },
@@ -406,20 +429,24 @@ function resultsSection(node) {
   const labels = element("div", { className: "h3s-result-labels" }, result.labels.map((label) => (
     element("span", { className: "h3s-result-label", text: label, title: label })
   )));
-  const analyzed = stateFromNode(node).prompt_options.analyze_images;
-  const resultTitle = analyzed ? "Qwen-enhanced instruction" : "Compiled prompt";
+  const state = stateFromNode(node);
+  const resultTitle = ({
+    off: "Exact H3 instruction",
+    single_prompt: "Direct one-line H3 instruction",
+    compile_only: "Structured H3 production brief",
+  })[state.prompt_options.enhance_mode] || "H3 production instruction";
   const children = [
     element("summary", {}, [
       element("span", { text: resultTitle }),
       element("span", { className: "h3s-result-actions" }, [edit, copy]),
     ]),
     labels,
-    element("pre", { className: "h3s-result-prompt", text: enhancedInstruction }),
+    richResultPrompt(friendlyPrompt, state),
   ];
-  if (analyzed && enhancedInstruction !== friendlyPrompt) {
+  if (state.prompt_options.deep_enhancement && enhancedInstruction !== friendlyPrompt) {
     children.push(element("details", { className: "h3s-runtime-prompt" }, [
-      element("summary", { text: "H3 runtime prompt" }),
-      element("pre", { className: "h3s-result-prompt", text: friendlyPrompt }),
+      element("summary", { text: "Qwen-written source direction" }),
+      richResultPrompt(enhancedInstruction, state),
     ]));
   }
   if ((result.descriptions || []).some(Boolean)) {
@@ -428,7 +455,7 @@ function resultsSection(node) {
       .join("\n\n");
     children.push(element("details", { className: "h3s-runtime-prompt" }, [
       element("summary", { text: "What the detailed compiler received" }),
-      element("pre", { className: "h3s-result-prompt", text: records }),
+      richResultPrompt(records, state),
     ]));
   }
   return element("details", { className: "h3s-result", attrs: { open: "" } }, children);

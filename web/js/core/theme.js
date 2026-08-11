@@ -134,6 +134,8 @@ export function installTheme() {
     .h3s-final-actions { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 5px; }
     .h3s-final-action { min-height: 27px; padding: 4px 6px; border: 1px solid var(--h3s-border); border-radius: 5px; color: var(--h3s-text); background: var(--h3s-bg); cursor: pointer; font: 650 9px/1.2 ui-sans-serif, system-ui; }
     .h3s-final-action:hover { border-color: color-mix(in srgb, var(--h3s-accent) 55%, var(--h3s-border)); background: color-mix(in srgb, var(--h3s-accent) 10%, var(--h3s-bg)); }
+    .h3s-result-prompt .h3s-result-mention { display: inline-flex; max-width: 150px; margin: 0 2px; padding: 1px 5px 1px 3px; align-items: center; gap: 3px; border: 1px solid color-mix(in srgb, var(--h3s-accent) 55%, var(--h3s-border)); border-radius: 999px; color: var(--h3s-text); background: color-mix(in srgb, var(--h3s-accent) 14%, var(--h3s-surface)); font: 700 9px/1.45 ui-sans-serif, system-ui; vertical-align: 1px; white-space: nowrap; }
+    .h3s-result-prompt .h3s-result-mention .h3s-mention-chip-thumb { width: 14px; height: 14px; margin: 0; border-radius: 3px; object-fit: cover; }
     .h3s-runtime-prompt { border-top: 1px solid var(--h3s-border); }
     .h3s-runtime-prompt > summary { min-height: 25px; padding-left: 8px; color: var(--h3s-muted); font-size: 9px; font-weight: 620; }
     .h3s-advanced-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0; border: 0; color: var(--h3s-muted); background: transparent; cursor: pointer; font: inherit; }
