@@ -274,7 +274,8 @@ function buildSection(node) {
   toolbar.className = "h3s-lora-toolbar";
   const catalogStatus = document.createElement("span");
   catalogStatus.className = "h3s-lora-status";
-  catalogStatus.textContent = catalog.length ? `${catalog.length} installed LoRA${catalog.length === 1 ? "" : "s"}` : "Loading installed LoRAs…";
+  catalogStatus.textContent = node.__h3studioLoraCatalogError
+    || (catalog.length ? `${catalog.length} installed LoRA${catalog.length === 1 ? "" : "s"}` : "Loading installed LoRAs…");
   const toolbarActions = document.createElement("div");
   toolbarActions.className = "h3s-lora-toolbar-actions";
   const refresh = button("Refresh", "Refresh ComfyUI/models/loras", async () => {
@@ -282,9 +283,11 @@ function buildSection(node) {
     catalogStatus.textContent = "Refreshing…";
     try {
       await loadCatalog(true);
+      node.__h3studioLoraCatalogError = "";
       rerender();
     } catch (error) {
-      catalogStatus.textContent = String(error?.message || error);
+      node.__h3studioLoraCatalogError = String(error?.message || error);
+      catalogStatus.textContent = node.__h3studioLoraCatalogError;
       refresh.disabled = false;
     }
   });
@@ -319,13 +322,18 @@ function installLoraSection(node, replace = false) {
 }
 
 function watchDirector(node) {
-  if (node.__h3studioLoraObserver) return;
+  if (node.__h3studioLoraObserver || node.__h3studioLoraWatchPending) return;
+  node.__h3studioLoraWatchPending = true;
+  let attempts = 0;
   const wait = () => {
     const panel = node.__h3studioPanel;
     if (!panel) {
-      queueMicrotask(wait);
+      attempts += 1;
+      if (attempts < 600) setTimeout(wait, 25);
+      else node.__h3studioLoraWatchPending = false;
       return;
     }
+    node.__h3studioLoraWatchPending = false;
     installStyles();
     installLoraSection(node);
     const observer = new MutationObserver(() => {
@@ -333,12 +341,15 @@ function watchDirector(node) {
     });
     observer.observe(panel, { childList: true });
     node.__h3studioLoraObserver = observer;
-    loadCatalog().then(() => installLoraSection(node, true)).catch((error) => {
+    loadCatalog().then(() => {
+      node.__h3studioLoraCatalogError = "";
+      installLoraSection(node, true);
+    }).catch((error) => {
       node.__h3studioLoraCatalogError = String(error?.message || error);
       installLoraSection(node, true);
     });
   };
-  queueMicrotask(wait);
+  setTimeout(wait, 0);
 }
 
 app.registerExtension({
