@@ -179,14 +179,6 @@ Local checks cover Python and frontend syntax, deterministic compilation, state 
 
 If generation fails, open an [issue](https://github.com/thaakeno/ComfyUI-MiniMax-H3-Studio/issues) with the full traceback, ComfyUI version, GPU/VRAM, selected model filenames, route, profile, resolution, and a workflow JSON or metadata PNG when safe.
 
-## Aggregate generation counter
-
-After a still is successfully saved through **H3 Studio Save Image**, H3 Studio adds the actual output batch size to an in-memory batch. Every ten images—or after one minute—it sends only `{ "count": N, "schema": 1 }` in a background thread. It never sends prompts, images, references, filenames, workflows, seeds, hardware, usernames, paths, or installation identifiers. Failures are silent and cannot delay generation.
-
-To opt out, set `H3STUDIO_TELEMETRY=0` before starting ComfyUI, or create an empty `.h3studio-telemetry-disabled` file in this repository. The endpoint can be self-hosted with the deployable [Cloudflare Worker](telemetry/README.md).
-
-The public counter runs at [`h3-studio-counter.h3-studio-counter.workers.dev`](https://h3-studio-counter.h3-studio-counter.workers.dev/v1/count), and its live aggregate appears in the badge at the top of this README.
-
 <details>
 <summary><strong>Development checks</strong></summary>
 
@@ -222,6 +214,9 @@ If H3 Studio makes MiniMax H3 easier to direct, a star is the clearest signal to
     </picture>
   </a>
 </div>
+
+> [!NOTE]
+> **What the GENERATED badge counts:** successful images saved through H3 Studio. It sends only a batched number—never prompts, images, references, seeds, hardware details, paths, or identifiers. Set `H3STUDIO_TELEMETRY=0` to opt out; [implementation details](telemetry/README.md) are public.
 
 ## License
 
