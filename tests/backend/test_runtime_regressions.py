@@ -26,7 +26,7 @@ def test_taeh3_restores_video_latent_from_flattened_video_plus_audio_pack() -> N
         ndim = 3
         shape = (1, 1, video_values + audio_values)
 
-        def reshape(self, *shape):
+        def reshape(self, shape):
             assert shape == (1, -1)
             return Flat()
 
