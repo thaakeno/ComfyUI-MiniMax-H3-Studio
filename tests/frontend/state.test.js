@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   applyReferenceInferences,
+  advanceSeedAfterGeneration,
   canonicalizeMentions,
   MAX_MEGAPIXELS,
   MAX_REFERENCES,
@@ -46,9 +47,10 @@ import { parseStorageName, previewUrlForStorage, storageNameFromUpload } from ".
 
 test("default state is an immediately usable text-to-image request", () => {
   const state = defaultState();
-  assert.equal(state.schema_version, 9);
+  assert.equal(state.schema_version, 10);
   assert.equal(state.generation.mode, "auto");
   assert.equal(state.generation.cap_native_resolution, false);
+  assert.equal(state.generation.seed_locked, false);
   assert.equal(state.prompt_options.analyzer_resolution, 512);
   assert.deepEqual(state.references, []);
 });
@@ -108,7 +110,7 @@ test("schema one settings migrate into their typed sections", () => {
     schema_version: 1,
     settings: { mode: "reference_edit", megapixels: 1.4, enhance_mode: "vlm", adherence: 0.7 },
   });
-  assert.equal(state.schema_version, 9);
+  assert.equal(state.schema_version, 10);
   assert.equal(state.generation.mode, "reference_edit");
   assert.equal(state.generation.megapixels, 1.4);
   assert.equal(state.prompt_options.enhance_mode, "compile_only");
@@ -127,6 +129,16 @@ test("normalization clamps fields and limits references", () => {
   assert.equal(state.generation.seed, 0);
   assert.equal(state.prompt_options.adherence, 0);
   assert.equal(state.references.length, MAX_REFERENCES);
+});
+
+test("seed lock persists and controls post-generation advancement", () => {
+  const locked = parseState(serializeState(normalizeState({ generation: { seed: 42, seed_locked: true } })));
+  assert.equal(locked.generation.seed_locked, true);
+  assert.equal(advanceSeedAfterGeneration(locked.generation, () => 99).seed, 42);
+
+  const unlocked = normalizeState({ generation: { seed: 42, seed_locked: false } }).generation;
+  assert.equal(advanceSeedAfterGeneration(unlocked, () => 99).seed, 99);
+  assert.equal(advanceSeedAfterGeneration(unlocked, () => 42).seed, 43);
 });
 
 test("single-line prompt shaping survives state normalization", () => {

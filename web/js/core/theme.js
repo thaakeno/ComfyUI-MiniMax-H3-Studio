@@ -46,7 +46,8 @@ export function installTheme() {
     .h3s-control { width: 100%; min-width: 0; height: 25px; padding: 3px 7px; border: 1px solid var(--h3s-border); border-radius: 5px; outline: none; color: var(--h3s-text); background: var(--h3s-bg); font: inherit; }
     .h3s-control:hover { border-color: color-mix(in srgb, var(--h3s-accent) 40%, var(--h3s-border)); }
     .h3s-control:focus-visible, .h3s-icon-button:focus-visible, .h3s-reference-description:focus-visible { outline: 2px solid color-mix(in srgb, var(--h3s-accent) 70%, transparent); outline-offset: 1px; }
-    .h3s-seed-row { display: grid; grid-template-columns: minmax(0,1fr) 27px; gap: 4px; }
+    .h3s-seed-row { display: grid; grid-template-columns: minmax(0,1fr) 27px 27px; gap: 4px; }
+    .h3s-seed-lock[aria-pressed="true"] { border-color: color-mix(in srgb, var(--h3s-accent) 65%, var(--h3s-border)); color: var(--h3s-accent); background: color-mix(in srgb, var(--h3s-accent) 12%, var(--h3s-bg)); }
     .h3s-range { --h3s-range-progress: 0%; position: relative; width: 100%; height: 16px; }
     .h3s-range-track { position: absolute; left: 0; right: 0; top: 50%; height: 3px; overflow: hidden; border-radius: 999px; background: var(--h3s-border); transform: translateY(-50%); pointer-events: none; }
     .h3s-range-track::before { content: ""; display: block; width: var(--h3s-range-progress); height: 100%; background: var(--h3s-accent); }

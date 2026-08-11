@@ -227,7 +227,9 @@ class H3StudioDirector:
                 "reference_mention_mode": (["index", "filename"], {"default": "index"}),
                 # Image Studio controls.
                 "megapixels": ("FLOAT", {"default": 1.0, "min": 0.20, "max": MAX_MEGAPIXELS, "step": 0.05}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 2**63 - 1, "control_after_generate": True}),
+                # Studio owns lock/unlock advancement after execution_success;
+                # native control_after_generate would race persisted state.
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2**63 - 1}),
                 "enhance_mode": (list(ENHANCE_MODES), {"default": ENHANCE_COMPILE}),
                 "adherence": ("FLOAT", {"default": 0.85, "min": 0.0, "max": 1.0, "step": 0.05}),
                 "route": (list(ROUTES), {"default": "auto"}),

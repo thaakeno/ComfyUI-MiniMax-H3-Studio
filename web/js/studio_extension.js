@@ -12,6 +12,7 @@ import {
   RETENTION,
   ROLES,
   SAMPLING_PROFILES,
+  advanceSeedAfterGeneration,
   formatMegapixels,
   normalizeState,
   planResolution,
@@ -36,6 +37,8 @@ const LINKS_PROPERTY = "h3studio_virtual_media_links";
 const STATE_PROPERTY = "h3studio_state";
 const STATE_RECOVERY_PROPERTY = "h3studio_state_recovery";
 const VISIBLE_STUDIO_WIDGETS = new Set(["prompt", "h3_prompt_mentions", "h3studio_controls"]);
+const pendingSeedAdvances = new Map();
+let activePromptId = "";
 
 function widget(node, name) {
   return node.widgets?.find((candidate) => candidate.name === name) || null;
@@ -125,6 +128,47 @@ function sourcePreview(source) {
   const subfolder = typeof widgetValue === "object" ? widgetValue.subfolder || "" : "";
   const query = new URLSearchParams({ filename, type, subfolder, preview: "webp;90" });
   return `/view?${query.toString()}`;
+}
+
+function promptId(detail) {
+  return String(detail?.prompt_id || detail?.promptId || activePromptId || "");
+}
+
+function queueSeedAdvance(node) {
+  if (stateFromNode(node).generation.seed_locked) return;
+  const id = activePromptId;
+  if (!id) return;
+  const nodes = pendingSeedAdvances.get(id) || new Set();
+  nodes.add(node);
+  pendingSeedAdvances.set(id, nodes);
+}
+
+function finishSeedAdvances(detail) {
+  const id = promptId(detail);
+  const nodes = pendingSeedAdvances.get(id);
+  if (!nodes) return;
+  pendingSeedAdvances.delete(id);
+  for (const node of nodes) {
+    const state = stateFromNode(node);
+    state.generation = advanceSeedAfterGeneration(state.generation, randomSeed);
+    applyState(node, state, false);
+    renderPanel(node);
+  }
+}
+
+api.addEventListener("execution_start", ({ detail }) => {
+  activePromptId = promptId(detail);
+});
+api.addEventListener("execution_success", ({ detail }) => {
+  finishSeedAdvances(detail);
+  if (promptId(detail) === activePromptId) activePromptId = "";
+});
+for (const eventName of ["execution_error", "execution_interrupted"]) {
+  api.addEventListener(eventName, ({ detail }) => {
+    const id = promptId(detail);
+    pendingSeedAdvances.delete(id);
+    if (id === activePromptId) activePromptId = "";
+  });
 }
 
 function sourceMedia(source) {
@@ -400,7 +444,14 @@ function generationSection(node, state, refresh) {
     : "H3 normally benefits from a short temporal packet; the workflow selects one stable decoded still.";
   const seed = numberControl(generation.seed, { min: 0, max: Number.MAX_SAFE_INTEGER, step: 1 }, "Seed", (value) => update({ seed: Math.max(0, Math.trunc(value)) }));
   const random = iconButton("Randomize seed", "↻", () => update({ seed: randomSeed() }));
-  const seedWrap = element("div", { className: "h3s-seed-row" }, [seed, random]);
+  const lock = iconButton(
+    generation.seed_locked ? "Unlock seed after generation" : "Lock exact seed",
+    generation.seed_locked ? "🔒" : "🔓",
+    () => update({ seed_locked: !generation.seed_locked }),
+    "h3s-seed-lock",
+  );
+  lock.setAttribute("aria-pressed", String(generation.seed_locked));
+  const seedWrap = element("div", { className: "h3s-seed-row" }, [seed, random, lock]);
   const plan = planResolution(
     generation.aspect_ratio,
     generation.megapixels,
@@ -847,7 +898,6 @@ function installPanel(node) {
   const originalExecuted = node.onExecuted;
   node.onExecuted = function h3studioExecuted(message) {
     const result = originalExecuted?.apply(this, arguments);
-    const completedSeed = stateFromNode(this).generation.seed;
     const roles = executionValue(message, "reference_roles");
     const retentions = executionValue(message, "reference_retentions");
     const descriptions = executionValue(message, "reference_descriptions");
@@ -865,15 +915,9 @@ function installPanel(node) {
       diagnostics: executionValue(message, "diagnostics")[0] || "",
     };
     queueMicrotask(() => renderPanel(this));
-    // ComfyUI updates control_after_generate on the hidden native seed widget.
-    // Synchronize that next seed back into the visible Studio state after the
-    // execution event instead of restoring the previous queue's value.
-    setTimeout(() => {
-      const synced = stateFromNode(this);
-      if (synced.generation.seed === completedSeed) synced.generation.seed = randomSeed();
-      applyState(this, synced, false);
-      renderPanel(this);
-    }, 50);
+    // Advance only when the entire prompt succeeds. Director executes before
+    // sampling, so changing here would expose a seed that has not generated yet.
+    queueSeedAdvance(this);
     return result;
   };
   node.__h3studioConnectionsChanged = function h3studioConnectionsChanged() {

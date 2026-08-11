@@ -95,6 +95,14 @@ def test_generation_options_clamp_values() -> None:
     assert options.custom_width == 32
 
 
+def test_seed_lock_round_trips_and_schema9_defaults_unlocked() -> None:
+    locked = GenerationOptions.from_dict({"seed": 987, "seed_locked": True})
+    assert GenerationOptions.from_dict(locked.as_dict()).seed_locked is True
+    migrated = StudioState.from_dict({"schema_version": 9, "generation": {"seed": 42}})
+    assert migrated.generation.seed == 42
+    assert migrated.generation.seed_locked is False
+
+
 def test_schema8_native_cap_migrates_to_direct_two_megapixel_canvas() -> None:
     state = StudioState.from_dict({
         "schema_version": 8,

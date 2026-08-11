@@ -115,6 +115,7 @@ class GenerationOptions:
     mode: str = MODE_AUTO
     route: str = ROUTE_AUTO
     seed: int = DEFAULT_SEED
+    seed_locked: bool = False
     aspect_ratio: str = "1:1"
     megapixels: float = DEFAULT_MEGAPIXELS
     custom_width: int = DEFAULT_WIDTH
@@ -140,6 +141,7 @@ class GenerationOptions:
             "mode": self.mode,
             "route": self.route,
             "seed": self.seed,
+            "seed_locked": self.seed_locked,
             "aspect_ratio": self.aspect_ratio,
             "megapixels": self.megapixels,
             "custom_width": self.custom_width,
@@ -172,6 +174,7 @@ class GenerationOptions:
             mode=_choice(value.get("mode"), MODES, MODE_AUTO),
             route=_choice(value.get("route"), ROUTES, ROUTE_AUTO),
             seed=_int(value.get("seed"), DEFAULT_SEED, 0, 2**63 - 1),
+            seed_locked=bool(value.get("seed_locked", False)),
             aspect_ratio=str(value.get("aspect_ratio") or "1:1"),
             megapixels=_float(value.get("megapixels"), DEFAULT_MEGAPIXELS, MIN_MEGAPIXELS, MAX_MEGAPIXELS),
             custom_width=_int(value.get("custom_width"), DEFAULT_WIDTH, 32, 16384),
@@ -349,4 +352,11 @@ def migrate_state_dict(value: Mapping[str, Any]) -> dict[str, Any]:
         generation["cap_native_resolution"] = False
         migrated["generation"] = generation
         migrated["schema_version"] = 9
+        version = 9
+    if version == 9:
+        # Schema 10 persists whether generation keeps or advances the seed.
+        generation = dict(_mapping(migrated.get("generation")))
+        generation.setdefault("seed_locked", False)
+        migrated["generation"] = generation
+        migrated["schema_version"] = 10
     return migrated

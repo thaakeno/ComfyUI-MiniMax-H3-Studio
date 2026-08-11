@@ -380,7 +380,7 @@ def build_subgraph_blueprint():
 def build_workflow():
     links = Links()
     state = {
-        "schema_version": 9,
+        "schema_version": 10,
         "prompt": "Describe the final still image.",
         "references": [],
         "prompt_options": {
@@ -403,6 +403,7 @@ def build_workflow():
             "mode": "auto",
             "route": "auto",
             "seed": 42,
+            "seed_locked": False,
             "aspect_ratio": "1:1",
             "megapixels": 1.0,
             "custom_width": 1024,
