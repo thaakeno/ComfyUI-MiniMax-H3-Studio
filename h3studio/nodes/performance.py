@@ -113,28 +113,40 @@ class H3StudioOptimizedContextSamplingPreset(H3StudioContextSamplingPreset):
     """Apply acceleration + custom LoRAs, then pre-materialize the H3 model."""
 
     def build(self, model, studio_context):
-        built_model, sampler, sigmas, info = super().build(model, studio_context)
         profile = str(studio_context.state.generation.sampling_profile)
-
-        reserved: list[str] = []
-        with suppress(Exception):
-            from ..acceleration import LIGHTX_PROFILES, PDD_PROFILES
-
-            if profile in LIGHTX_PROFILES:
-                reserved.append(LIGHTX_PROFILES[profile].lora_filename)
-            if profile in PDD_PROFILES:
-                reserved.append(PDD_PROFILES[profile].lora_filename)
-
         custom_specs = normalize_custom_loras(dict(studio_context.state.ui).get("custom_loras", ()))
-        if custom_specs:
-            built_model, custom_info = apply_custom_lora_stack(
-                built_model,
-                custom_specs,
-                reserved_artifacts=reserved,
-            )
+
+        from ..acceleration import LIGHTX_PROFILES, PDD_PROFILES, is_pdd_profile
+
+        accelerated = profile in LIGHTX_PROFILES or is_pdd_profile(profile)
+        reserved: list[str] = []
+        if profile in LIGHTX_PROFILES:
+            reserved.append(LIGHTX_PROFILES[profile].lora_filename)
+        if profile in PDD_PROFILES:
+            reserved.append(PDD_PROFILES[profile].lora_filename)
+
+        if custom_specs and not accelerated:
+            # Base sampling creates a shifted ModelPatcher clone. Apply custom
+            # LoRAs to the stable base patcher first so prompt/seed reruns hit
+            # the stack cache instead of reloading the same adapter files.
+            from .director import SAMPLING_PROFILE_TO_RUNTIME, _sampling_profile
+            from .image_runtime import H3StudioSamplingPreset
+
+            base_model, custom_info = apply_custom_lora_stack(model, custom_specs)
+            runtime_profile = SAMPLING_PROFILE_TO_RUNTIME[_sampling_profile(profile)]
+            built_model, sampler, sigmas, info = H3StudioSamplingPreset().build(base_model, runtime_profile)
             info = f"{info} | {custom_info}"
         else:
-            info = f"{info} | custom_loras=none"
+            built_model, sampler, sigmas, info = super().build(model, studio_context)
+            if custom_specs:
+                built_model, custom_info = apply_custom_lora_stack(
+                    built_model,
+                    custom_specs,
+                    reserved_artifacts=reserved,
+                )
+                info = f"{info} | {custom_info}"
+            else:
+                info = f"{info} | custom_loras=none"
 
         residency = prewarm_diffusion_model(built_model)
         info = f"{info} | {residency.summary()}"
