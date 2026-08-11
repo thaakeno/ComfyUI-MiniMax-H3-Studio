@@ -2,6 +2,24 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [0.1.0-alpha.13] - 2026-08-11
+
+### Added
+
+- Added regression coverage for the real flattened H3 video-plus-audio latent pack, prompt-writer runtime behavior, qualified preview execution IDs, and Director sizing stability.
+
+### Fixed
+
+- Restored TAEH3 live preview for current flattened H3 multi-latent sampler tensors while retaining compatibility with the older channel-packed layout.
+- Fixed live-preview frontend rerenders and qualified subgraph execution IDs.
+- Preserved selected Qwen prompt enhancement when enabled while releasing optional helper-model residency before H3 32B conditioning instead of disabling enhancement.
+- Stopped the Image Director from progressively shrinking in width or height during ComfyUI layout recomputation; manual resizing remains supported.
+
+### Changed
+
+- Kept the proven staged conditioning caches and ComfyUI DynamicVRAM ownership unchanged while using a compact compile-only runtime prompt.
+- Made the release path update all tracked version metadata and regenerate uv.lock before publishing so prerelease archives cannot ship stale package metadata.
+
 ## [0.1.0-alpha.12] - 2026-08-11
 
 ### Added
