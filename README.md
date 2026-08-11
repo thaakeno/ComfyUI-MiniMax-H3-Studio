@@ -39,7 +39,7 @@ Build text-to-image, anchored edits, multi-reference compositions, and controlle
 <img width="1600" height="1000" alt="H3StudioComparison_temp_rlcer_00005_" src="https://github.com/user-attachments/assets/9e68b1dc-e7d1-4a4e-8c1c-d4379fa081c5" />
 
 
-Auto selects the valid route from your requested mode and enabled references. Impossible PDD, REF2VA, forced-route, and missing-reference combinations are rejected before expensive model work starts.
+Auto selects the valid route from your requested mode and enabled references. Impossible PDD, LightX/REF2VA, forced-route, and missing-reference combinations are rejected before expensive model work starts.
 
 ## What you get
 
@@ -57,7 +57,7 @@ Auto selects the valid route from your requested mode and enabled references. Im
   <tr>
     <td width="50%" valign="top">
       <h3>⚡ Choose a real sampling recipe</h3>
-      Compare native Base RES20/RES12, Kijai's empirical LightX v0.1 four-step profiles, or Mamad8's external four-step PDD REF2VA students. Profile metadata states what is proven and what remains empirical.
+      Compare native Base RES20/RES12, the official LightX v1.0 FL2V 8-step ComfyUI adapter, legacy Kijai LightX v0.1 four-step profiles, or Mamad8's external four-step PDD REF2VA students. Profile metadata keeps those adapter families separate instead of silently mixing recipes.
     </td>
     <td width="50%" valign="top">
       <h3>🔬 Benchmark more than A/B</h3>
@@ -107,7 +107,7 @@ For a reproducible shared install, pin the current release instead of following 
 
 ```bash
 cd /path/to/ComfyUI/custom_nodes
-git clone --branch v0.1.0-alpha.12 --depth 1 https://github.com/thaakeno/ComfyUI-MiniMax-H3-Studio.git
+git clone --branch v0.1.0-alpha.13 --depth 1 https://github.com/thaakeno/ComfyUI-MiniMax-H3-Studio.git
 cd ComfyUI-MiniMax-H3-Studio
 python -m pip install -r requirements.txt
 ```
@@ -128,7 +128,8 @@ git log -1 --format='Updated H3 Studio %h · %s'
 | MiniMax H3 32B conditioning encoder | `models/text_encoders/` | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
 | H3 video VAE | `models/vae/` | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
 | Qwen3-VL 4B/8B analyzer and prompt writer, optional | `models/text_encoders/` | [Comfy-Org/Qwen3-VL](https://huggingface.co/Comfy-Org/Qwen3-VL) |
-| LightX v0.1 LoRA, optional | `models/loras/` | [Kijai/MiniMax-H3_comfy](https://huggingface.co/Kijai/MiniMax-H3_comfy) |
+| LightX v1.0 FL2V 8-step ComfyUI LoRA, optional | `models/loras/` | [lightx2v/Minimax-h3-Turbo](https://huggingface.co/lightx2v/Minimax-h3-Turbo/blob/main/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors) |
+| LightX v0.1 resized rank-21 LoRA, legacy optional | `models/loras/` | [Kijai/MiniMax-H3_comfy](https://huggingface.co/Kijai/MiniMax-H3_comfy) |
 | TAEH3 approximate preview, optional | `models/vae_approx/` | [Kijai/MiniMax-H3-TAE](https://huggingface.co/Kijai/MiniMax-H3-TAE) |
 | PDD LoRA + heads, optional | `models/loras/`, `models/pdd_heads/` | [Mamad8 PDD](https://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8) |
 | T=1 Image VAE, experimental | `models/vae/` | [Mamad8 Image VAE](https://huggingface.co/Mamad8/MiniMax-H3-Image-VAE) |
@@ -141,11 +142,12 @@ PDD also requires the separately installed [ComfyUI-MiniMaxH3-PDD-Mamad8](https:
 | --- | --- | --- |
 | Base Quality | RES, 20 steps | Safest native quality baseline |
 | Base Balanced | RES, 12 steps | Faster native comparison |
-| LightX ER-SDE | LightX v0.1 at `0.75`, 4 steps | Empirical Kijai ComfyUI recipe |
-| LightX SA-Solver | LightX v0.1 at `0.75`, 4 steps | Alternate stochastic empirical recipe |
+| LightX v1.0 FL2V 8-step | Official ComfyUI BF16 adapter at `1.0`; Euler/simple, 8 steps, H3 DMD-family shifts `6/3` | Fast T2I or single-source FL2VA work |
+| LightX v0.1 ER-SDE | Resized rank-21 adapter at `0.75`, 4 steps | Legacy empirical Kijai recipe |
+| LightX v0.1 SA-Solver | Resized rank-21 adapter at `0.75`, 4 steps | Legacy alternate empirical recipe |
 | PDD 600 / 900 | Matching REF2VA student LoRA + heads, 4 steps | Optional accelerated reference work |
 
-The LightX labels are deliberately marked empirical: they reproduce a current working ComfyUI recipe, not an official guarantee that one sampler is universally best. PDD is REF2VA-only and cannot run without a valid reference context.
+LightX2V also announced an official **v1.0 4-step 768p distilled LoRA** with guidance-free inference, `video_flow_shift=6`, `audio_flow_shift=3`, and LoRA alpha 128. H3 Studio currently auto-resolves only the verified `minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors` ComfyUI artifact; the older v0.1 profiles remain available for reproducibility. All configured LightX adapters are FL2V/FL2VA-only, so Studio rejects them before model work when a request resolves to REF2VA.
 
 Conditioning uses separate prompt, reference, VAE, and latent caches. Compatible current ComfyUI builds can use upstream chunked H3 VAE encode/decode without changing decoded output. NVFP4 32B conditioning is preferred when installed.
 
@@ -216,7 +218,7 @@ uv run python tools/release_check.py
 
 H3 Studio adapts the ordered media interaction and mention-editor foundations from [ComfyUI-MiniMaxH3-Easy](https://github.com/nkxx188/ComfyUI-MiniMaxH3-Easy) under MIT, and resolution/decode/workflow foundations from [ComfyUI-MiniMax-H3-Image-Studio](https://github.com/astropuzzo/ComfyUI-MiniMax-H3-Image-Studio) under the Unlicense.
 
-Kijai and Mamad8 model artifacts and optional nodes remain external works under their published terms. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the exact boundaries. This independent project is not endorsed by MiniMax, ComfyUI, or the referenced projects.
+Kijai, LightX2V, and Mamad8 model artifacts and optional nodes remain external works under their published terms. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the exact boundaries. This independent project is not endorsed by MiniMax, ComfyUI, or the referenced projects.
 
 ## Star history
 
