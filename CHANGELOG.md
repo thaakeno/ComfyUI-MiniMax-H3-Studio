@@ -194,15 +194,15 @@ All notable changes are recorded here. The format follows Keep a Changelog; vers
 - Base and experimental sampling profiles, exact temporal-packet decode, and still-selection strategies.
 - A deterministic 2,103-line unified workflow and reusable sampling/decode subgraph.
 - Backend, frontend, workflow, node-surface, and release-integrity checks.
-- Lightning.ai smoke-test documentation and honest local/GPU verification boundaries.
+- GPU smoke-test documentation and honest local/runtime verification boundaries.
 
 ### Excluded
 
 - H3 Hub and the old monolithic Hub UI.
 - App Mode/App Builder integration.
-- Model installer, deleter, storage scanner, or Lightning launcher scripts.
+- Model installer, deleter, storage scanner, or cloud-workspace launcher scripts.
 - Audio generation and image-prompt soundscape fields.
 
 ### Known validation boundary
 
-- CUDA generation and visual-quality comparisons have not been run in the target Lightning.ai workspace from this repository. This prerelease must remain marked alpha until the smoke-test matrix passes there.
+- CUDA generation and visual-quality comparisons require a real GPU workspace. This prerelease remains alpha until its runtime smoke-test matrix passes there.

@@ -10,7 +10,7 @@ npm run check
 uv run pytest -q
 ```
 
-ComfyUI itself is not installed as a package dependency. Pure logic tests run outside ComfyUI; runtime/GPU behavior is verified in a real ComfyUI checkout using [docs/LIGHTNING_TEST_PLAN.md](docs/LIGHTNING_TEST_PLAN.md).
+ComfyUI itself is not installed as a package dependency. Pure logic tests run outside ComfyUI; runtime and GPU behavior must also be verified in a real ComfyUI checkout.
 
 ## Rules
 

@@ -109,7 +109,7 @@ def test_nodes_within_each_layout_group_do_not_overlap():
     nodes = {node["id"]: node for node in workflow["nodes"]}
     memberships = [
         (10,), (11, 12), (16, 13), (14, 15),
-        (25, 26, 28, 29), (20, 21, 22, 23, 24), (17, 19, 27),
+        (25, 26, 28, 29), (20, 21, 22, 24), (17, 19, 27),
     ]
     for node_ids in memberships:
         group_nodes = [nodes[node_id] for node_id in node_ids]
@@ -133,7 +133,7 @@ def test_nodes_are_fully_contained_by_their_intended_groups():
         3: (16, 13),
         4: (14, 15),
         5: (25, 26, 28, 29),
-        6: (20, 21, 22, 23, 24),
+        6: (20, 21, 22, 24),
         7: (17, 19, 27),
     }
     for group_id, node_ids in membership.items():

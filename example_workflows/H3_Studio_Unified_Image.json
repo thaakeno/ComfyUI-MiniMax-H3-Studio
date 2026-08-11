@@ -1154,7 +1154,7 @@
       "bgcolor": "#17211f"
     },
     {
-      "id": 23,
+      "id": 24,
       "type": "H3StudioWorkflowNote",
       "pos": [
         170,
@@ -1166,51 +1166,6 @@
       ],
       "flags": {},
       "order": 13,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "section",
-          "type": "COMBO",
-          "link": null,
-          "widget": {
-            "name": "section"
-          }
-        },
-        {
-          "name": "text",
-          "type": "STRING",
-          "link": null,
-          "widget": {
-            "name": "text"
-          }
-        }
-      ],
-      "outputs": [],
-      "title": "Lightning.ai validation boundary",
-      "properties": {
-        "Node name for S&R": "H3StudioWorkflowNote",
-        "purpose": "Documentation only; never enters the generation graph."
-      },
-      "widgets_values": [
-        "troubleshooting",
-        "## What local checks prove\n\nSyntax, state migration, prompt compilation, resolution math, routes, registration, and graph integrity are checked here.\n\n> [!IMPORTANT]\n> CUDA generation, installed model filenames, VRAM, speed, and visual quality require the real Lightning workspace. Follow `docs/LIGHTNING_TEST_PLAN.md`."
-      ],
-      "color": "#22322f",
-      "bgcolor": "#17211f"
-    },
-    {
-      "id": 24,
-      "type": "H3StudioWorkflowNote",
-      "pos": [
-        710,
-        -180
-      ],
-      "size": [
-        520,
-        320
-      ],
-      "flags": {},
-      "order": 14,
       "mode": 0,
       "inputs": [
         {
