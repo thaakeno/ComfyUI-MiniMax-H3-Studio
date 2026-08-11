@@ -10,6 +10,7 @@ from h3studio.lora_stack import (
     normalize_custom_loras,
     resolve_custom_lora,
 )
+from h3studio.state import StudioState
 
 
 def test_normalize_custom_loras_is_bounded_ordered_and_clamped() -> None:
@@ -41,6 +42,22 @@ def test_normalize_custom_loras_is_bounded_ordered_and_clamped() -> None:
 def test_normalize_custom_loras_accepts_windows_paths_and_defaults_strength() -> None:
     specs = normalize_custom_loras([{"name": r"people\hero.safetensors", "strength": "bad"}])
     assert specs == (CustomLoraSpec("people/hero.safetensors", 1.0, True),)
+
+
+def test_custom_lora_stack_survives_studio_state_json_roundtrip() -> None:
+    payload = {
+        "ui": {
+            "advanced_open": True,
+            "custom_loras": [
+                {"name": "styles/anime.safetensors", "strength": 0.7, "enabled": True},
+                {"name": "characters/hero.safetensors", "strength": 1.15, "enabled": False},
+            ],
+        }
+    }
+    restored = StudioState.from_json(StudioState.from_dict(payload).to_json())
+
+    assert restored.ui["advanced_open"] is True
+    assert restored.ui["custom_loras"] == payload["ui"]["custom_loras"]
 
 
 def test_resolve_custom_lora_prefers_exact_relative_path() -> None:
