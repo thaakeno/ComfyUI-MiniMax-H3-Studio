@@ -316,16 +316,17 @@ class H3StudioDirector:
         )
         compiler = PromptCompiler()
         enhanced_prompt = state.prompt
-        if state.prompt_options.analyze_images and images:
+        if (state.prompt_options.analyze_images and images) or state.prompt_options.deep_enhancement:
             from ..prompting.comfy_analyzer import analyze_references
 
             analyzer_bundle = h3_bundle if isinstance(h3_bundle, H3StudioBundle) else None
             analyzer = analyzer_bundle.analyzer_clip if analyzer_bundle else None
+            analysis_images = images if state.prompt_options.analyze_images else ()
             analyzed_references, enhanced_prompt, vlm_note = analyze_references(
                 analyzer,
                 state.prompt,
                 state.enabled_references,
-                images,
+                analysis_images,
                 analyzer_name=analyzer_bundle.analyzer_name or "" if analyzer_bundle else "",
                 clip_loader=analyzer_bundle.analyzer_for_analysis if analyzer_bundle else None,
                 max_image_edge=state.prompt_options.analyzer_resolution,
@@ -364,7 +365,8 @@ class H3StudioDirector:
         ]
         analyzer_status = (
             f"Analyzer: {(h3_bundle.analyzer_name if isinstance(h3_bundle, H3StudioBundle) else None) or 'disabled'}"
-            " · Detailed writer: fast deterministic (no second model load)"
+            f" · Prompt writer: "
+            f"{(h3_bundle.prompt_writer_name if isinstance(h3_bundle, H3StudioBundle) else None) or 'deterministic fallback'}"
         )
         result = (
             context,

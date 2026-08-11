@@ -26,9 +26,12 @@ except Exception:  # pragma: no cover - ComfyUI always provides this at runtime
 
 NONE_MODEL = "None"
 AUTO_ANALYZER = "Auto · Qwen3-VL 4B"
+AUTO_WRITER_4B = "Auto · Qwen3-VL 4B writer"
+AUTO_WRITER_8B = "Auto · Qwen3-VL 8B writer"
 DISABLED_ANALYZER = "Disabled"
 SAME_AS_ANALYZER = "Same as image analyzer"
 FAST_WRITER = "Fast deterministic - no second model"
+DETERMINISTIC_WRITER = "Deterministic fallback only"
 DISABLED_IMAGE_VAE = "Disabled - original H3 video VAE only"
 OFFICIAL_H3_TEXT_ENCODER = "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
 LEGACY_H3_INT8_TEXT_ENCODER = "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
@@ -149,9 +152,14 @@ def analyzer_choices() -> list[str]:
 
 
 def prompt_writer_choices() -> list[str]:
-    """Keep the serialized input while preventing a second large model load."""
+    """Offer shared, size-targeted, and explicit full Qwen writer checkpoints."""
 
-    return [FAST_WRITER]
+    automatic = []
+    if _preferred_writer("4b"):
+        automatic.append(AUTO_WRITER_4B)
+    if _preferred_writer("8b"):
+        automatic.append(AUTO_WRITER_8B)
+    return [SAME_AS_ANALYZER, *automatic, DETERMINISTIC_WRITER, *analyzer_choices()[2:]]
 
 
 def _resolve_analyzer(name: str) -> str | None:
@@ -164,14 +172,28 @@ def _resolve_analyzer(name: str) -> str | None:
     return preferred or next((value for value in values if "qwen3vl4b" in _compact(value)), None)
 
 
-def _resolve_prompt_writer(name: str, _analyzer_name: str | None) -> str | None:
-    if name not in {FAST_WRITER, SAME_AS_ANALYZER, DISABLED_ANALYZER} and not _is_none(name):
-        LOGGER.warning(
-            "[H3 Studio] Ignoring legacy separate prompt writer %s; detailed expansion is deterministic and will not "
-            "stage a second language model.",
-            name,
-        )
-    return None
+def _preferred_writer(size: str) -> str | None:
+    values = analyzer_choices()[2:]
+    exact = next((value for value in values if f"qwen3vl{size}fp8scaled" in _compact(value)), None)
+    return exact or next((value for value in values if f"qwen3vl{size}" in _compact(value)), None)
+
+
+def _resolve_prompt_writer(name: str, analyzer_name: str | None) -> str | None:
+    if name == SAME_AS_ANALYZER:
+        return analyzer_name
+    if name == AUTO_WRITER_4B:
+        selected = _preferred_writer("4b")
+        if not selected:
+            raise ValueError("Auto 4B prompt writer was selected, but no full Qwen3-VL 4B checkpoint is installed.")
+        return selected
+    if name == AUTO_WRITER_8B:
+        selected = _preferred_writer("8b")
+        if not selected:
+            raise ValueError("Auto 8B prompt writer was selected, but no full Qwen3-VL 8B checkpoint is installed.")
+        return selected
+    if name in {FAST_WRITER, DETERMINISTIC_WRITER, DISABLED_ANALYZER} or _is_none(name):
+        return None
+    return _normalize(name)
 
 
 def vae_choices() -> list[str]:
@@ -276,7 +298,8 @@ class H3StudioBundle:
     def writer_for_enhancement(self):
         if not self.prompt_writer_name:
             return None
-        if self.prompt_writer_name == self.analyzer_name:
+        if _compact(self.prompt_writer_name) == _compact(self.analyzer_name or ""):
+            LOGGER.info("[H3 Studio] Reusing visual analyzer for prompt writing=%s", self.prompt_writer_name)
             return self.analyzer_for_analysis()
         with self._lock:
             if self.prompt_writer_clip is None:
@@ -333,8 +356,8 @@ class H3StudioLoader:
     RETURN_TYPES = ("H3_STUDIO_BUNDLE", "CLIP", "VAE", "STRING")
     RETURN_NAMES = ("h3_bundle", "clip", "video_vae", "model_info")
     DESCRIPTION = (
-        "Load H3's conditioning encoder and VAE, plus one optional Qwen3-VL model for cached pixel analysis. "
-        "Detailed prompt expansion is deterministic and never stages a second language model. "
+        "Load H3's conditioning encoder and VAE, plus optional full Qwen3-VL models for cached pixel analysis and "
+        "generative prompt direction. Same as image analyzer reuses one model; mixed 4B/8B choices load two. "
         "NVFP4 AWQ is preferred for H3's native 32B conditioning encoder."
     )
 
@@ -372,8 +395,11 @@ class H3StudioLoader:
                 "prompt_writer": (
                     prompt_writer_choices(),
                     {
-                        "default": FAST_WRITER,
-                        "tooltip": "Compatibility setting: detailed expansion is fast and deterministic; no second model is loaded.",
+                        "default": SAME_AS_ANALYZER,
+                        "tooltip": (
+                            "Same as image analyzer is fastest and reuses one loaded checkpoint. Auto 4B/8B or an "
+                            "explicit file permits mixed models but must stage the second checkpoint."
+                        ),
                     },
                 ),
             }

@@ -31,12 +31,12 @@ Return JSON only with this exact shape:
 {"references":[{"ordinal":1,"role":"character","description":"detailed factual source-pixel observation"}]}
 
 Allowed roles: auto, identity, face, character, style, composition, pose, outfit, object, environment, layout, typography, color_palette, lighting, texture, reference.
-Write 35-160 words per image using connected factual prose. Cover, when visibly supported: subject count and recognizable appearance; face, hair, body proportions, pose, expression and gaze; clothing, accessories and objects; spatial relationships; composition, framing and camera angle; environment and background; lighting and color palette; visual medium or rendering style; and legible text or typography. Omit categories that are not visible. State uncertainty instead of inventing hidden anatomy, identity, text or context. Never copy a requested new action, prop, pose, gaze, clothing change, style, environment or edit into a source description unless it is already visible in that image. Never write generic phrases such as 'visible information requested by the user'.
+Write 35-100 information-dense words per image using connected factual prose. Cover, when visibly supported: subject count and recognizable appearance; face, hair, body proportions, pose, expression and gaze; clothing, accessories and objects; spatial relationships; composition, framing and camera angle; environment and background; lighting and color palette; visual medium or rendering style; and legible text or typography. Omit categories that are not visible instead of padding the answer. State uncertainty instead of inventing hidden anatomy, identity, text or context. Never copy a requested new action, prop, pose, gaze, clothing change, style, environment or edit into a source description unless it is already visible in that image. Never write generic phrases such as 'visible information requested by the user'.
 Choose role only as a conservative visible-content category, never as ownership or retention reasoning for a future request.
 Do not emit prose outside JSON."""
 
 WRITER_SYSTEM_INSTRUCTION = """You are the senior image prompt director for MiniMax H3.
-You receive the user's exact request and factual source-image observations from a separate vision pass. You are not viewing pixels now. Expand them into one precise 200-450 word production instruction inside JSON: {"instruction":"..."}.
+You receive the user's exact request and factual source-image observations from a separate vision pass. You are not viewing pixels now. Expand them into one precise 120-220 word production instruction inside JSON: {"instruction":"..."}.
 
 Preserve every requested action, direction, expression, object, environment, exact wording, negative constraint, and @Image assignment. Never replace @Image tags with Picture, Subject, filenames, Markdown, or internal identifiers. Resolve pronouns and make physical relationships explicit. References are source material, never extra panels, floating objects, duplicate bodies, mannequins, or a collage.
 
@@ -162,10 +162,10 @@ def _extract_writer_instruction(text: str) -> str:
 def _writer_failures(candidate: str, original_prompt: str) -> list[str]:
     failures: list[str] = []
     count = len(candidate.split())
-    if count < 180:
-        failures.append(f"instruction has {count} words; minimum is 180")
-    if count > 500:
-        failures.append(f"instruction has {count} words; maximum is 500")
+    if count < 90:
+        failures.append(f"instruction has {count} words; minimum is 90")
+    if count > 280:
+        failures.append(f"instruction has {count} words; maximum is 280")
     if not set(mention_ordinals(original_prompt)).issubset(set(mention_ordinals(candidate))):
         failures.append("one or more @Image assignments were dropped")
     source, result = original_prompt.lower(), candidate.lower()
@@ -251,9 +251,11 @@ def _run_prompt_writer(
         LOGGER.info("[H3 Studio - Prompt Director] Loading writer: %s", writer_name or "selected model")
         clip = clip_loader()
     if clip is None:
-        raise ValueError(
-            "Two-pass prompt direction is enabled, but no full Qwen3-VL prompt writer is selected in H3 Studio Loader."
-        )
+        candidate = _deterministic_writer_fallback(prompt, references, additional_instruction)
+        note = "Prompt director: no generative writer selected; used the deterministic fallback."
+        with _CACHE_LOCK:
+            _WRITER_CACHE_KEY, _WRITER_CACHE_VALUE = key, (candidate, note)
+        return candidate, note
     records = "\n".join(
         f"@Image{item.ordinal}: role={item.effective_role}; retention={item.retention}; source observation={item.description or 'no visual description available'}"
         for item in references
@@ -269,12 +271,17 @@ def _run_prompt_writer(
     started = time.perf_counter()
     for attempt in range(2):
         retry = "" if not failures else "\n\nVALIDATION FAILED. Rewrite completely and fix: " + "; ".join(failures)
-        LOGGER.info("[H3 Studio - Prompt Director] Writing detailed brief | attempt %d/2 | text-only", attempt + 1)
+        token_ceiling = 320 if attempt == 0 else 384
+        LOGGER.info(
+            "[H3 Studio - Prompt Director] Writing detailed brief | attempt %d/2 | text-only | max tokens=%d",
+            attempt + 1,
+            token_ceiling,
+        )
         tokens = clip.tokenize(base + retry, images=[], thinking=False)
         generated = clip.generate(
             tokens,
             do_sample=True,
-            max_length=900,
+            max_length=token_ceiling,
             temperature=0.65,
             top_k=20,
             top_p=0.88,
@@ -299,7 +306,7 @@ def _run_prompt_writer(
             LOGGER.info("[H3 Studio - Prompt Director] Complete | %d words | validated", len(candidate.split()))
             return candidate, note
         LOGGER.warning("[H3 Studio - Prompt Director] Validation failed | %s", "; ".join(failures))
-    candidate = _deterministic_writer_fallback(prompt, references)
+    candidate = _deterministic_writer_fallback(prompt, references, additional_instruction)
     note = "Prompt director: model output failed validation twice; used the complete deterministic fallback."
     with _CACHE_LOCK:
         _WRITER_CACHE_KEY, _WRITER_CACHE_VALUE = key, (candidate, note)
@@ -328,7 +335,20 @@ def analyze_references(
     if max_image_edge != 0:
         max_image_edge = max(256, min(1024, max_image_edge))
     if not images or not references:
-        return tuple(references), str(prompt), "Image analysis: no references to inspect."
+        analyzed = tuple(references)
+        enhanced = str(prompt)
+        note = "Image analysis: no references to inspect."
+        if deep_enhancement:
+            enhanced, writer_note = _run_prompt_writer(
+                writer_clip,
+                prompt,
+                analyzed,
+                writer_name=writer_name,
+                clip_loader=writer_loader,
+                additional_instruction=writer_instruction,
+            )
+            note = f"{note} {writer_note}"
+        return analyzed, enhanced, note
     identity = analyzer_name or (type(clip).__name__ if clip is not None else "default")
     paired = list(zip(references, images, strict=False))
     keys = [_analysis_cache_key(identity, max_image_edge, reference, image) for reference, image in paired]
@@ -388,9 +408,9 @@ def analyze_references(
                 tokens,
                 do_sample=False,
                 max_length=(
-                    min(2048, 220 + len(missing_pairs) * 180)
+                    min(1536, 160 + len(missing_pairs) * 140)
                     if attempt == 0
-                    else min(2560, 320 + len(missing_pairs) * 220)
+                    else min(2048, 220 + len(missing_pairs) * 180)
                 ),
                 temperature=1.0,
                 top_k=0,
@@ -445,11 +465,15 @@ def analyze_references(
     if not missing:
         note += " Cache: HIT."
     if deep_enhancement:
-        enhanced = _deterministic_writer_fallback(prompt, analyzed, writer_instruction)
-        note = (
-            f"{note} Prompt director: fast deterministic expansion produced {len(enhanced.split())} words; "
-            "no second language model was loaded."
+        enhanced, writer_note = _run_prompt_writer(
+            writer_clip,
+            prompt,
+            analyzed,
+            writer_name=writer_name,
+            clip_loader=writer_loader,
+            additional_instruction=writer_instruction,
         )
+        note = f"{note} {writer_note}"
     return analyzed, enhanced, note
 
 

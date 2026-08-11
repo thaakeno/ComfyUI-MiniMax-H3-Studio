@@ -90,6 +90,7 @@ class FakeWriter:
 
     def generate(self, tokens, **kwargs):
         assert kwargs["do_sample"] is True
+        assert kwargs["max_length"] <= 384
         self.generate_calls += 1
         return [2]
 
@@ -391,7 +392,7 @@ def test_alternating_reference_sets_remain_cached(monkeypatch) -> None:
     assert clip.generate_calls == 2
 
 
-def test_detailed_expansion_does_not_load_a_second_language_model(monkeypatch) -> None:
+def test_two_pass_writer_is_generative_text_only_and_cached(monkeypatch) -> None:
     import h3studio.prompting.comfy_analyzer as analyzer_module
 
     analyzer_module._ANALYSIS_CACHE.clear()
@@ -412,10 +413,42 @@ def test_detailed_expansion_does_not_load_a_second_language_model(monkeypatch) -
         writer_name="qwen3vl_8b_fp8_scaled.safetensors",
         writer_instruction="Favor a restrained editorial lighting treatment.",
     )
-    assert 180 <= len(enhanced.split()) <= 500
-    assert writer.generate_calls == 0
-    assert "restrained editorial lighting" in enhanced
-    assert "no second language model was loaded" in note
+    _references, enhanced_again, note_again = analyze_references(
+        analyzer,
+        "Place @Image1 outside",
+        references,
+        images,
+        deep_enhancement=True,
+        writer_clip=writer,
+        writer_name="qwen3vl_8b_fp8_scaled.safetensors",
+        writer_instruction="Favor a restrained editorial lighting treatment.",
+    )
+    assert 90 <= len(enhanced.split()) <= 280
+    assert enhanced_again == enhanced
+    assert writer.generate_calls == 1
+    assert "validated" in note
+    assert "Cache: HIT" in note_again
+    assert "restrained editorial lighting" in writer.instruction
+
+
+def test_text_to_image_can_use_qwen_writer_without_reference_analysis(monkeypatch) -> None:
+    import h3studio.prompting.comfy_analyzer as analyzer_module
+
+    monkeypatch.setattr(analyzer_module, "_WRITER_CACHE_KEY", None)
+    monkeypatch.setattr(analyzer_module, "_WRITER_CACHE_VALUE", None)
+    writer = FakeWriter()
+    _references, enhanced, note = analyze_references(
+        None,
+        "Create a restrained editorial portrait",
+        (),
+        (),
+        deep_enhancement=True,
+        writer_clip=writer,
+        writer_name="qwen3vl_4b_fp8_scaled.safetensors",
+    )
+    assert writer.generate_calls == 1
+    assert len(enhanced.split()) >= 90
+    assert "no references to inspect" in note
 
 
 def test_persisted_fingerprinted_description_skips_cold_reanalysis() -> None:

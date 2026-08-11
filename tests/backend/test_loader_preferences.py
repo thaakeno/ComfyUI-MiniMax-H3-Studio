@@ -45,10 +45,35 @@ def test_deliberately_named_int8_choice_is_respected(monkeypatch) -> None:
     assert loader._resolve_text_encoder(explicit) == explicit
 
 
-def test_legacy_separate_prompt_writer_cannot_stage_a_second_model(monkeypatch) -> None:
+def test_prompt_writer_supports_shared_4b_8b_and_mixed_choices(monkeypatch) -> None:
     loader = _load_with_models(
         monkeypatch,
         ["qwen3vl_4b_fp8_scaled.safetensors", "qwen3vl_8b_fp8_scaled.safetensors"],
     )
-    assert loader.prompt_writer_choices() == [loader.FAST_WRITER]
-    assert loader._resolve_prompt_writer("qwen3vl_8b_fp8_scaled.safetensors", "qwen3vl_4b_fp8_scaled.safetensors") is None
+    choices = loader.prompt_writer_choices()
+    assert choices[:3] == [loader.SAME_AS_ANALYZER, loader.AUTO_WRITER_4B, loader.AUTO_WRITER_8B]
+    assert loader._resolve_prompt_writer(loader.SAME_AS_ANALYZER, "qwen3vl_8b_fp8_scaled.safetensors") == (
+        "qwen3vl_8b_fp8_scaled.safetensors"
+    )
+    assert loader._resolve_prompt_writer(loader.AUTO_WRITER_4B, "qwen3vl_8b_fp8_scaled.safetensors") == (
+        "qwen3vl_4b_fp8_scaled.safetensors"
+    )
+    assert loader._resolve_prompt_writer(loader.AUTO_WRITER_8B, "qwen3vl_4b_fp8_scaled.safetensors") == (
+        "qwen3vl_8b_fp8_scaled.safetensors"
+    )
+    assert loader._resolve_prompt_writer(loader.DETERMINISTIC_WRITER, "qwen3vl_4b_fp8_scaled.safetensors") is None
+
+    shared = object()
+    bundle = loader.H3StudioBundle(
+        fl2va_name="fl.safetensors",
+        ref2va_name="ref.safetensors",
+        clip_name="h3.safetensors",
+        video_vae_name="vae.safetensors",
+        image_vae_name=None,
+        analyzer_name="qwen3vl_4b_fp8_scaled.safetensors",
+        prompt_writer_name="qwen3vl_4b_fp8_scaled.safetensors",
+        clip=object(),
+        video_vae=object(),
+        analyzer_clip=shared,
+    )
+    assert bundle.writer_for_enhancement() is shared
