@@ -170,6 +170,60 @@ def test_compile_warns_when_connected_references_are_not_mentioned() -> None:
     assert any(item.code == "references_not_mentioned" for item in result.diagnostics)
 
 
+def test_unmentioned_auto_reference_is_not_promoted_to_identity_retention() -> None:
+    analyzed = ReferenceImage(
+        "person",
+        "person.png",
+        1,
+        role="identity",
+        retention="fully_preserved",
+        role_auto=True,
+        retention_auto=True,
+        tags=("visually_analyzed",),
+    )
+    result = PromptCompiler().compile(
+        StudioState(
+            prompt="Make an unrelated landscape",
+            references=(analyzed,),
+            generation=GenerationOptions(mode="reference_edit"),
+        )
+    )
+
+    assert result.references[0].role == "reference"
+    assert result.references[0].retention == "reference_only"
+
+
+def test_manual_role_and_retention_remain_authoritative() -> None:
+    manual = ReferenceImage(
+        "manual",
+        "manual.png",
+        1,
+        role="style",
+        retention="reference_only",
+        role_auto=False,
+        retention_auto=False,
+    )
+    result = PromptCompiler().compile(
+        StudioState(prompt="Preserve the person identity from @Image1", references=(manual,))
+    )
+
+    assert result.references[0].role == "style"
+    assert result.references[0].retention == "reference_only"
+    assert "role_origin:manual" in result.references[0].tags
+    assert "retention_origin:manual" in result.references[0].tags
+
+
+def test_multiple_explicit_identity_sources_can_be_fully_preserved() -> None:
+    state = StudioState(
+        prompt="Show the same person from @Image1 beside the same character from @Image2.",
+        references=(ref(1), ref(2)),
+    )
+    result = PromptCompiler().compile(state)
+
+    assert all(item.role in {"identity", "character"} for item in result.references)
+    assert all(item.retention == "fully_preserved" for item in result.references)
+
+
 def test_compile_rejects_empty_prompt() -> None:
     with pytest.raises(PromptFormatError, match="empty"):
         PromptCompiler().compile(StudioState())

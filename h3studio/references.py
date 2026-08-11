@@ -308,41 +308,52 @@ def infer_role(context: str, *, fallback: str = "auto") -> str:
     return max(scored)[2] if scored else canonical_role(fallback)
 
 
+def mention_context(prompt: str, ordinal: int, window: int = 120) -> str:
+    """Return bounded language owned by one explicit image mention."""
+
+    mentions = list(iter_mentions(prompt))
+    snippets: list[str] = []
+    for mention in (item for item in mentions if item.ordinal == ordinal):
+        left_candidates = [prompt.rfind(mark, max(0, mention.start - window), mention.start) for mark in ".!?\n;"]
+        right_candidates = [prompt.find(mark, mention.end, min(len(prompt), mention.end + window)) for mark in ".!?\n;"]
+        left = max(left_candidates) + 1
+        valid_right = [candidate for candidate in right_candidates if candidate >= 0]
+        right = min(valid_right) + 1 if valid_right else min(len(prompt), mention.end + window)
+        previous = [item for item in mentions if left <= item.start < mention.start]
+        following = [item for item in mentions if mention.end < item.end <= right]
+        if previous:
+            left = max(left, (previous[-1].end + mention.start) // 2)
+        if following:
+            right = min(right, (mention.end + following[0].start) // 2)
+        snippets.append(prompt[left:right])
+    return " ".join(snippets)
+
+
+def _with_origin(tags: tuple[str, ...], kind: str, origin: str) -> tuple[str, ...]:
+    prefix = f"{kind}_origin:"
+    return tuple((*[tag for tag in tags if not tag.startswith(prefix)], f"{prefix}{origin}"))
+
+
 def infer_roles_from_prompt(
     prompt: str, references: Sequence[ReferenceImage], window: int = 120
 ) -> tuple[ReferenceImage, ...]:
-    mentions = list(iter_mentions(prompt))
+    mentioned = set(mention_ordinals(prompt))
     inferred: list[ReferenceImage] = []
     for reference in references:
         if reference.role != "auto" and not reference.role_auto:
-            inferred.append(reference)
+            inferred.append(replace(reference, tags=_with_origin(reference.tags, "role", "manual")))
             continue
-        matching = [mention for mention in mentions if mention.ordinal == reference.ordinal]
-        snippets = []
-        for mention in matching:
-            # Bound context at sentence edges and at the midpoint between
-            # adjacent mentions. This keeps "person from @Image 2 with the
-            # clothes in @Image 1" from assigning both roles to both images.
-            left_candidates = [prompt.rfind(mark, max(0, mention.start - window), mention.start) for mark in ".!?\n;"]
-            right_candidates = [
-                prompt.find(mark, mention.end, min(len(prompt), mention.end + window)) for mark in ".!?\n;"
-            ]
-            left = max(left_candidates) + 1
-            valid_right = [candidate for candidate in right_candidates if candidate >= 0]
-            right = min(valid_right) + 1 if valid_right else min(len(prompt), mention.end + window)
-            previous = [item for item in mentions if left <= item.start < mention.start]
-            following = [item for item in mentions if mention.end < item.end <= right]
-            if previous:
-                neighbor = previous[-1]
-                left = max(left, (neighbor.end + mention.start) // 2)
-            if following:
-                neighbor = following[0]
-                right = min(right, (mention.end + neighbor.start) // 2)
-            snippets.append(prompt[left:right])
-        # Prompt grammar is authoritative for an auto-managed card. The VLM's
-        # source-pixel role remains the fallback when the sentence gives no cue.
-        role = infer_role(" ".join(snippets), fallback=reference.role)
-        inferred.append(replace(reference, role=role, role_auto=True))
+        context = mention_context(prompt, reference.ordinal, window)
+        prompt_role = infer_role(context, fallback="auto")
+        if prompt_role != "auto":
+            role, origin = prompt_role, "prompt"
+        elif reference.ordinal in mentioned and reference.role != "auto" and "visually_analyzed" in reference.tags:
+            role, origin = reference.role, "vision"
+        else:
+            role, origin = "reference", "fallback"
+        inferred.append(
+            replace(reference, role=role, role_auto=True, tags=_with_origin(reference.tags, "role", origin))
+        )
     return tuple(inferred)
 
 

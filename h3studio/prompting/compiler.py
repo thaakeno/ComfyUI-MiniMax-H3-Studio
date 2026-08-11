@@ -19,6 +19,7 @@ from ..references import (
     ReferenceImage,
     compile_mentions,
     infer_roles_from_prompt,
+    mention_context,
     mention_ordinals,
     validate_mentions,
 )
@@ -248,6 +249,7 @@ def _single_prompt(prompt: str, references: Sequence[ReferenceImage], mode: str)
 def _infer_retentions(
     references: Sequence[ReferenceImage],
     mode: str,
+    prompt: str,
 ) -> tuple[ReferenceImage, ...]:
     """Resolve auto-managed retention from the operation and inferred role."""
 
@@ -255,15 +257,34 @@ def _infer_retentions(
     for reference in references:
         auto_managed = reference.retention_auto or reference.role_auto or reference.role == "auto"
         if not auto_managed:
-            resolved.append(reference)
+            tags = tuple(tag for tag in reference.tags if not tag.startswith("retention_origin:"))
+            resolved.append(replace(reference, tags=(*tags, "retention_origin:manual")))
             continue
-        if mode == MODE_IMAGE_TO_IMAGE or reference.effective_role in {"identity", "character", "face"}:
+        context = mention_context(prompt, reference.ordinal).lower()
+        tags = tuple(tag for tag in reference.tags if not tag.startswith("retention_origin:"))
+        if mode == MODE_IMAGE_TO_IMAGE:
             retention = "fully_preserved"
+            origin = "mode"
+        elif not context:
+            retention = "reference_only"
+            origin = "fallback"
+        elif re.search(r"\b(?:guidance|inspiration|inspired|loosely|reference only)\b", context):
+            retention = "reference_only"
+            origin = "prompt"
+        elif re.search(r"\b(?:preserve|retain|keep|exact|same|identity|likeness|person|character|face)\b", context) and reference.effective_role in {
+            "identity", "character", "face"
+        }:
+            retention = "fully_preserved"
+            origin = "prompt"
         elif reference.effective_role in {"composition", "pose", "environment"}:
             retention = "partially_preserved"
+            origin = "role"
         else:
             retention = "attribute_transfer"
-        resolved.append(replace(reference, retention=retention, retention_auto=True))
+            origin = "role"
+        resolved.append(
+            replace(reference, retention=retention, retention_auto=True, tags=(*tags, f"retention_origin:{origin}"))
+        )
     return tuple(resolved)
 
 
@@ -300,7 +321,7 @@ class PromptCompiler:
         if state.prompt_options.infer_roles:
             references = infer_roles_from_prompt(prompt, references)
         resolved_mode = resolve_mode(state.generation.mode, len(references))
-        references = _infer_retentions(references, resolved_mode)
+        references = _infer_retentions(references, resolved_mode, prompt)
 
         if resolved_mode == MODE_TEXT_TO_IMAGE and references:
             bag.warning(

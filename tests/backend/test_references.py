@@ -121,6 +121,34 @@ def test_role_inference_uses_nearby_mention_language() -> None:
     assert inferred[1].role in {"layout", "typography", "composition"}
 
 
+def test_unmentioned_auto_reference_uses_conservative_fallback() -> None:
+    analyzed = replace(
+        reference(1),
+        role="identity",
+        role_auto=True,
+        tags=("visually_analyzed",),
+        description="A recognizable character portrait.",
+    )
+    inferred = infer_roles_from_prompt("Create an unrelated landscape", (analyzed,))
+
+    assert inferred[0].role == "reference"
+    assert "role_origin:fallback" in inferred[0].tags
+
+
+def test_prompt_ownership_overrides_swapped_vision_categories() -> None:
+    refs = (
+        replace(reference(1), role="style", role_auto=True, tags=("visually_analyzed",)),
+        replace(reference(2), role="face", role_auto=True, tags=("visually_analyzed",)),
+    )
+    inferred = infer_roles_from_prompt(
+        "Preserve the character identity from @Image1 and use the poster layout from @Image2.", refs
+    )
+
+    assert inferred[0].role == "identity"
+    assert inferred[1].role in {"layout", "composition"}
+    assert all("role_origin:prompt" in item.tags for item in inferred)
+
+
 def test_validate_mentions_returns_actionable_diagnostic() -> None:
     diagnostics = validate_mentions("Use @Image 4", (reference(1),))
     assert diagnostics.has_errors
