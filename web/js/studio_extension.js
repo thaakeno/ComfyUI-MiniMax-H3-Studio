@@ -14,8 +14,8 @@ import {
   SAMPLING_PROFILES,
   formatMegapixels,
   normalizeState,
-  parseState,
   planResolution,
+  restorePersistedState,
   serializeState,
   validateGenerationContract,
 } from "./core/state.js";
@@ -33,6 +33,8 @@ import {
 
 const TARGET = "H3StudioDirector";
 const LINKS_PROPERTY = "h3studio_virtual_media_links";
+const STATE_PROPERTY = "h3studio_state";
+const STATE_RECOVERY_PROPERTY = "h3studio_state_recovery";
 const VISIBLE_STUDIO_WIDGETS = new Set(["prompt", "h3_prompt_mentions", "h3studio_controls"]);
 
 function widget(node, name) {
@@ -216,7 +218,16 @@ function notifyReferenceChange(node) {
 }
 
 function stateFromNode(node) {
-  const persisted = parseState(widget(node, "studio_state")?.value);
+  const restored = restorePersistedState(
+    widget(node, "studio_state")?.value,
+    node.properties?.[STATE_PROPERTY],
+  );
+  const persisted = restored.state;
+  node.__h3studioStateError = restored.error?.message || "";
+  if (restored.recovery) {
+    node.properties ||= {};
+    node.properties[STATE_RECOVERY_PROPERTY] ||= restored.recovery;
+  }
   const links = normalizedLinks(node);
   const available = new Map(links.map((link) => [linkKey(link), link]));
   const used = new Set();
@@ -267,7 +278,10 @@ function applyState(node, state, dirty = true) {
   setWidget(node, "sampling_profile", generation.sampling_profile);
   setWidget(node, "frame_profile", generation.frame_profile);
   setWidget(node, "analyzer_model", options.analyzer_model);
-  setWidget(node, "studio_state", serializeState(normalized));
+  const serialized = serializeState(normalized);
+  setWidget(node, "studio_state", serialized);
+  node.properties ||= {};
+  node.properties[STATE_PROPERTY] = serialized;
   for (let index = 1; index <= MAX_REFERENCES; index += 1) {
     const reference = normalized.references[index - 1];
     setWidget(node, `media_filename_${index}`, reference?.storage_name || reference?.filename || "");
@@ -760,6 +774,10 @@ function renderPanel(node) {
       element("div", { className: "h3s-studio-brand" }, [element("span", { className: "h3s-studio-mark" }), element("span", { className: "h3s-studio-title", text: "MiniMax H3 Studio" })]),
       element("span", { className: "h3s-status-pill", text: resolvedMode }),
     ]),
+    node.__h3studioStateError ? element("div", {
+      className: "h3s-state-warning",
+      text: `${node.__h3studioStateError} The original value was preserved for recovery.`,
+    }) : null,
     generationSection(node, state, refresh),
     promptSection(node, state, refresh),
     resultsSection(node),
@@ -810,8 +828,17 @@ function installPanel(node) {
 
   const originalSerialize = node.onSerialize;
   node.onSerialize = function h3studioSerialize(data) {
-    applyState(this, stateFromNode(this), false);
-    return originalSerialize?.apply(this, arguments);
+    const state = applyState(this, stateFromNode(this), false);
+    const result = originalSerialize?.apply(this, arguments);
+    if (data) {
+      data.properties ||= {};
+      data.properties[STATE_PROPERTY] = serializeState(state);
+      data.properties[LINKS_PROPERTY] = normalizedLinks(this);
+      if (this.properties?.[STATE_RECOVERY_PROPERTY]) {
+        data.properties[STATE_RECOVERY_PROPERTY] = this.properties[STATE_RECOVERY_PROPERTY];
+      }
+    }
+    return result;
   };
   const originalConfigure = node.onConfigure;
   node.onConfigure = function h3studioConfigure(data) {

@@ -107,6 +107,7 @@ export function installTheme() {
     .h3s-advanced-toggle:hover { color: var(--h3s-text); }
     .h3s-advanced-content[hidden] { display: none; }
     .h3s-warning { color: var(--h3s-warning); }
+    .h3s-state-warning { padding: 7px 8px; border: 1px solid color-mix(in srgb, var(--h3s-warning) 45%, var(--h3s-border)); border-radius: 6px; color: var(--h3s-warning); background: color-mix(in srgb, var(--h3s-warning) 7%, var(--h3s-surface)); font-size: 9px; line-height: 1.45; }
     .h3s-live-preview { position: relative; display: grid; place-items: center; width: 100%; min-height: 260px; height: min(52vh, 520px); overflow: hidden; border: 1px solid rgba(255,255,255,.13); border-radius: 8px; background: #111317; color: #9ca3af; font: 11px/1.4 ui-sans-serif, system-ui; }
     .h3s-live-preview img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; cursor: zoom-in; }
     .h3s-live-preview img:not([src]) { display: none; }

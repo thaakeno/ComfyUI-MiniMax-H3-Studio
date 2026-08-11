@@ -270,6 +270,32 @@ export function parseState(value) {
   }
 }
 
+export function restorePersistedState(primary, backup) {
+  const failures = [];
+  for (const [source, value] of [["widget", primary], ["property", backup]]) {
+    if (value == null || String(value).trim() === "") continue;
+    try {
+      const decoded = typeof value === "object" ? value : JSON.parse(String(value));
+      return {
+        state: normalizeState(decoded),
+        source,
+        error: failures[0]?.error || null,
+        recovery: failures[0]?.value || "",
+      };
+    } catch (error) {
+      failures.push({ source, value: String(value), error });
+    }
+  }
+  return {
+    state: defaultState(),
+    source: "default",
+    error: failures.length
+      ? new Error(`Could not restore H3 Studio state from ${failures.map(({ source }) => source).join(" or ")}.`)
+      : null,
+    recovery: failures[0]?.value || "",
+  };
+}
+
 export function serializeState(state) {
   return JSON.stringify(normalizeState(state));
 }

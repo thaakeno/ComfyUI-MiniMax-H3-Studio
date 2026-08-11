@@ -14,10 +14,28 @@ import {
   normalizeState,
   parseState,
   planResolution,
+  restorePersistedState,
   rewriteMentions,
   serializeState,
   validateGenerationContract,
 } from "../../web/js/core/state.js";
+
+test("persisted state restores from the property backup when the hidden widget is corrupt", () => {
+  const backup = serializeState(normalizeState({ prompt: "restored", ui: { advanced_open: true } }));
+  const restored = restorePersistedState("{truncated", backup);
+  assert.equal(restored.source, "property");
+  assert.equal(restored.state.prompt, "restored");
+  assert.equal(restored.state.ui.advanced_open, true);
+  assert.ok(restored.error);
+  assert.equal(restored.recovery, "{truncated");
+});
+
+test("unrecoverable persisted state reports the failure and preserves the raw value", () => {
+  const restored = restorePersistedState("{truncated", "also invalid");
+  assert.equal(restored.source, "default");
+  assert.ok(restored.error);
+  assert.equal(restored.recovery, "{truncated");
+});
 import {
   STUDIO_NODE_HEIGHT,
   STUDIO_PANEL_HEIGHT,

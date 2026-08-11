@@ -254,6 +254,7 @@
       "properties": {
         "Node name for S&R": "H3StudioDirector",
         "h3studio_virtual_media_links": [],
+        "h3studio_state": "{\"schema_version\":9,\"prompt\":\"Describe the final still image.\",\"references\":[],\"prompt_options\":{\"enhance_mode\":\"compile_only\",\"analyze_images\":true,\"deep_enhancement\":true,\"analyzer_resolution\":512,\"adherence\":0.85,\"detail_level\":\"detailed\",\"preserve_user_text\":true,\"infer_roles\":true,\"system_instruction\":\"\",\"analyzer_model\":\"\",\"analyzer_device\":\"auto\",\"analyzer_quantization\":\"auto\",\"analyzer_max_tokens\":1800,\"analyzer_keep_loaded\":false},\"generation\":{\"mode\":\"auto\",\"route\":\"auto\",\"seed\":42,\"aspect_ratio\":\"1:1\",\"megapixels\":1.0,\"custom_width\":1024,\"custom_height\":1024,\"cap_native_resolution\":true,\"sampling_profile\":\"base_quality_20\",\"frame_profile\":\"recommended_5\",\"frame_selection\":\"decode_recommended\",\"reference_short_edge\":2048,\"source_image_ordinal\":1},\"ui\":{\"advanced_open\":false,\"reference_details\":{}}}",
         "h3studio_prompt_reference_doc": {
           "version": 1,
           "parts": [
@@ -285,7 +286,7 @@
         "base_quality_20",
         "recommended_5",
         "",
-        "{\"schema_version\":8,\"prompt\":\"Describe the final still image.\",\"references\":[],\"prompt_options\":{\"enhance_mode\":\"compile_only\",\"analyze_images\":true,\"deep_enhancement\":true,\"analyzer_resolution\":512,\"adherence\":0.85,\"detail_level\":\"detailed\",\"preserve_user_text\":true,\"infer_roles\":true,\"system_instruction\":\"\",\"analyzer_model\":\"\",\"analyzer_device\":\"auto\",\"analyzer_quantization\":\"auto\",\"analyzer_max_tokens\":1800,\"analyzer_keep_loaded\":false},\"generation\":{\"mode\":\"auto\",\"route\":\"auto\",\"seed\":42,\"aspect_ratio\":\"1:1\",\"megapixels\":1.0,\"custom_width\":1024,\"custom_height\":1024,\"cap_native_resolution\":true,\"sampling_profile\":\"base_quality_20\",\"frame_profile\":\"recommended_5\",\"frame_selection\":\"decode_recommended\",\"reference_short_edge\":2048,\"source_image_ordinal\":1},\"ui\":{\"advanced_open\":false,\"reference_details\":{}}}",
+        "{\"schema_version\":9,\"prompt\":\"Describe the final still image.\",\"references\":[],\"prompt_options\":{\"enhance_mode\":\"compile_only\",\"analyze_images\":true,\"deep_enhancement\":true,\"analyzer_resolution\":512,\"adherence\":0.85,\"detail_level\":\"detailed\",\"preserve_user_text\":true,\"infer_roles\":true,\"system_instruction\":\"\",\"analyzer_model\":\"\",\"analyzer_device\":\"auto\",\"analyzer_quantization\":\"auto\",\"analyzer_max_tokens\":1800,\"analyzer_keep_loaded\":false},\"generation\":{\"mode\":\"auto\",\"route\":\"auto\",\"seed\":42,\"aspect_ratio\":\"1:1\",\"megapixels\":1.0,\"custom_width\":1024,\"custom_height\":1024,\"cap_native_resolution\":true,\"sampling_profile\":\"base_quality_20\",\"frame_profile\":\"recommended_5\",\"frame_selection\":\"decode_recommended\",\"reference_short_edge\":2048,\"source_image_ordinal\":1},\"ui\":{\"advanced_open\":false,\"reference_details\":{}}}",
         "",
         "image",
         "",

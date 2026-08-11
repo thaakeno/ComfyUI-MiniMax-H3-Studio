@@ -100,8 +100,10 @@ def _state_from_widgets(
 ) -> StudioState:
     try:
         persisted = StudioState.from_json(studio_state) if str(studio_state or "").strip() else StudioState()
-    except Exception:
-        persisted = StudioState()
+    except Exception as exc:
+        raise ValueError(
+            "H3 Studio could not restore its saved state. Reload the workflow and use the preserved recovery value."
+        ) from exc
     references = []
     existing_by_ordinal = {reference.ordinal: reference for reference in persisted.references}
     for ordinal, filename in enumerate(filenames, start=1):

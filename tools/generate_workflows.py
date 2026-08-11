@@ -348,7 +348,7 @@ def build_subgraph():
 def build_workflow():
     links = Links()
     state = {
-        "schema_version": 8,
+        "schema_version": 9,
         "prompt": "Describe the final still image.",
         "references": [],
         "prompt_options": {
@@ -452,6 +452,7 @@ def build_workflow():
             properties={
                 "Node name for S&R": "H3StudioDirector",
                 "h3studio_virtual_media_links": virtual_links,
+                "h3studio_state": state_json,
                 "h3studio_prompt_reference_doc": {"version": 1, "parts": [{"type": "text", "text": state["prompt"]}]},
             },
             color="#255049",
