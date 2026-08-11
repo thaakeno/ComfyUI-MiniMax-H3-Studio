@@ -5,8 +5,10 @@
 # H3 Studio gives every node a unique id so both packages can coexist.
 from __future__ import annotations
 
+import logging
 import math
 import re
+import time
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import torch
@@ -25,10 +27,11 @@ except Exception as exc:  # pragma: no cover - only reached outside ComfyUI
         "Update ComfyUI before loading this extension."
     ) from exc
 
-from ..vae_io import detect_vae_io
 from ..telemetry import record_generation_success
+from ..vae_io import detect_vae_io
 
 
+LOGGER = logging.getLogger(__name__)
 CATEGORY = "H3 Studio/Runtime"
 CANVAS_MULTIPLE = 32
 NATIVE_MAX_PIXELS = 768 * 1344
@@ -1316,7 +1319,9 @@ class H3StudioDecode:
         # Do not fork or tile H3 decode here. Current ComfyUI selects its
         # output-identical chunked path inside VAE.decode when advertised by
         # first_stage_model.comfy_has_chunked_io.
+        decode_started = time.perf_counter()
         images = vae.decode(latent)
+        decode_seconds = time.perf_counter() - decode_started
         vae_io = detect_vae_io(vae)
 
         profile_frames = max(
@@ -1375,7 +1380,16 @@ class H3StudioDecode:
         info = (
             f"{packet_note} Batch items={batch_size}; emitted images={decoded_frames}. "
             f"Preferred still(s) via {output_strategy}: {preferred_text}. "
-            f"No requested profile frames were discarded before Single Image Output. VAE I/O: {vae_io.label}."
+            f"No requested profile frames were discarded before Single Image Output. VAE I/O: {vae_io.label}; "
+            f"decode={decode_seconds:.2f}s."
+        )
+        LOGGER.info(
+            "[H3 Studio - Decode] %s | batch=%d | natural=%d | kept=%d | %.2fs",
+            vae_io.label,
+            batch_size,
+            natural_frames,
+            kept_frames,
+            decode_seconds,
         )
         return images_out, decoded_frames, info, preferred_indices[0]
 

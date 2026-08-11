@@ -69,6 +69,15 @@ def test_primary_graph_has_one_conditioning_pass():
     assert not any(node["type"] == "CLIPTextEncode" for node in workflow["nodes"])
 
 
+def test_maintained_workflow_reuses_one_qwen_model_and_exposes_decoder_choices():
+    workflow = load_workflow()
+    loader = next(node for node in workflow["nodes"] if node["type"] == "H3StudioLoader")
+    assert loader["widgets_values"][-2:] == ["Auto · Qwen3-VL 4B", "Same as image analyzer"]
+    frontend = STUDIO_FRONTEND.read_text(encoding="utf-8")
+    assert "Original H3 Video VAE · quality" in frontend
+    assert "T=1 Image VAE · fastest · experimental" in frontend
+
+
 def test_final_png_save_receives_completed_studio_context():
     workflow = load_workflow()
     saver = next(node for node in workflow["nodes"] if node["type"] == "H3StudioSaveImage")

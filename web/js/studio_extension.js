@@ -540,10 +540,20 @@ function generationSection(node, state, refresh) {
   const ratio = selectControl(generation.aspect_ratio, Object.keys(ASPECT_RATIOS), "Aspect ratio", (value) => update({ aspect_ratio: value }));
   const sampling = selectControl(generation.sampling_profile, SAMPLING_PROFILES, "Sampling speed", (value) => update({ sampling_profile: value }));
   sampling.title = samplingHelp(generation.sampling_profile);
-  const frames = selectControl(generation.frame_profile, FRAME_PROFILES, "Temporal packet length", (value) => update({ frame_profile: value }));
-  frames.title = generation.frame_profile === "image_vae_1"
-    ? "Experimental image-only mode: sample one temporal latent and decode it with the optional Mamad8 Image VAE selected in H3 Studio Loader. Do not use this VAE for video."
-    : "H3 normally benefits from a short temporal packet; the workflow selects one stable decoded still.";
+  const imageDecoder = generation.frame_profile === "image_vae_1";
+  const decoder = selectControl(imageDecoder ? "image" : "video", [
+    ["video", "Original H3 Video VAE · quality"],
+    ["image", "T=1 Image VAE · fastest · experimental"],
+  ], "Final decoder", (value) => update({ frame_profile: value === "image" ? "image_vae_1" : "recommended_5" }));
+  decoder.title = imageDecoder
+    ? "Samples one temporal latent and uses the optional Mamad8 T=1 Image VAE. This is the fastest decode path, but it can soften fine text, hair, contours, and texture."
+    : "Uses the original H3 Video VAE and selects one still from the requested temporal packet. Highest-confidence output path.";
+  const temporalProfiles = FRAME_PROFILES.filter(([value]) => value !== "image_vae_1");
+  const frames = selectControl(imageDecoder ? "recommended_5" : generation.frame_profile, temporalProfiles, "Temporal quality", (value) => update({ frame_profile: value }));
+  frames.disabled = imageDecoder;
+  frames.title = imageDecoder
+    ? "Temporal quality is disabled because the experimental Image VAE accepts only T=1."
+    : "More frames give the still selector more temporal candidates but increase sampling and video-VAE decode cost.";
   const seed = numberControl(generation.seed, { min: 0, max: Number.MAX_SAFE_INTEGER, step: 1 }, "Seed", (value) => update({ seed: Math.max(0, Math.trunc(value)) }));
   const random = iconButton("Randomize seed", "↻", () => update({ seed: randomSeed() }));
   const lock = iconButton(
@@ -635,13 +645,19 @@ function generationSection(node, state, refresh) {
   ]);
   const grid = element("div", { className: "h3s-grid" }, [
     controlRow("Mode", mode), controlRow("Aspect", ratio), controlRow("Target size", megapixelControl), controlRow("Seed", seedWrap),
-    controlRow("Speed", sampling), controlRow("Frames", frames),
+    controlRow("Speed", sampling), controlRow("Decoder", decoder), controlRow("Temporal quality", frames),
   ]);
   const sizeHelp = element("p", {
     className: "h3s-context-help",
     text: `Direct mode sends the aligned target canvas to H3 from ${formatMegapixels(MIN_MEGAPIXELS)} up to ${formatMegapixels(MAX_MEGAPIXELS)}. Higher resolution costs substantially more memory and is not a quality guarantee.`,
   });
   const help = element("p", { className: "h3s-context-help", text: samplingHelp(generation.sampling_profile) });
+  const decodeHelp = element("p", {
+    className: "h3s-context-help",
+    text: imageDecoder
+      ? "Fastest decode: T=1 avoids decoding a 5-20 frame video packet. It requires the optional Image VAE selected in Loader and remains experimental for fine detail."
+      : "Quality decode: the original Video VAE decodes the temporal packet. Current ComfyUI's chunked H3 path lowers peak memory with identical pixels, but upstream measurements show roughly the same speed; choose fewer frames or T=1 to reduce time.",
+  });
   const modeHelp = {
     auto: "Auto: no images uses FL2VA text-to-image; one image uses FL2VA as a first-frame anchor; two or more images use REF2VA as ordered references.",
     text_to_image: "Text to image · FL2VA: creates a new image from text. Uploaded references are intentionally ignored.",
@@ -653,7 +669,7 @@ function generationSection(node, state, refresh) {
   const validation = validationMessage
     ? element("p", { className: "h3s-validation-error", text: validationMessage, attrs: { role: "alert" } })
     : null;
-  return section("Generation", element("div", { className: "h3s-section-stack" }, [grid, resolutionModes, validation, modeDescription, sizeHelp, preview, help].filter(Boolean)));
+  return section("Generation", element("div", { className: "h3s-section-stack" }, [grid, resolutionModes, validation, modeDescription, sizeHelp, preview, help, decodeHelp].filter(Boolean)));
 }
 
 function promptSection(node, state, refresh) {
@@ -689,17 +705,17 @@ function promptSection(node, state, refresh) {
     element("input", {
       type: "checkbox",
       checked: options.deep_enhancement === true,
-      disabled: options.analyze_images !== true || options.enhance_mode === "off",
-      attrs: { "aria-label": "Build a fast deterministic detailed prompt" },
+      disabled: options.enhance_mode === "off",
+      attrs: { "aria-label": "Enhance the prompt with the selected Qwen3-VL writer" },
       on: { change: (event) => update({ deep_enhancement: event.target.checked }) },
     }),
     element("span", { className: "h3s-switch-track" }),
-    element("span", { className: "h3s-switch-label", text: "Fast detailed expansion" }),
+    element("span", { className: "h3s-switch-label", text: "Qwen prompt enhancement" }),
   ]);
   const writerInstruction = element("textarea", {
     className: "h3s-writer-instruction",
     value: options.system_instruction,
-    placeholder: "Optional: extra creative direction for the detailed prompt compiler",
+    placeholder: "Optional: extra creative direction for the Qwen prompt writer",
     attrs: { maxlength: "4000", "aria-label": "Optional prompt writer instruction" },
     on: {
       input: (event) => {
@@ -718,7 +734,7 @@ function promptSection(node, state, refresh) {
       writerInstruction,
       element("p", {
         className: "h3s-context-help",
-        text: "This guides the fast detailed compiler. Factual pixel analysis keeps its fixed source-only contract.",
+        text: "This guides only the generative prompt writer. Factual pixel analysis keeps its fixed source-only contract.",
       }),
     ]),
   ]);
@@ -779,7 +795,7 @@ function promptSection(node, state, refresh) {
       controlRow("Analyzer detail", analyzerResolution), controlRow("Prompt director", directorToggle),
       controlRow("Reference priority", adherenceWrap),
     ]),
-    element("p", { className: "h3s-context-help", text: `${explanations[options.enhance_mode]} ${analyzerHelp} ${options.deep_enhancement ? "Fast detailed expansion is ON: the deterministic compiler builds the full production direction without loading a second language model." : "Detailed expansion is OFF: pixel analysis still describes and assigns references, but the generated instruction stays intentionally short (about 40-90 words)."} Reference priority controls how strongly the written prompt tells H3 to preserve reference details; it is not a LoRA strength.` }),
+    element("p", { className: "h3s-context-help", text: `${explanations[options.enhance_mode]} ${analyzerHelp} ${options.deep_enhancement ? "Qwen prompt enhancement is ON. Same as analyzer reuses one checkpoint; a different 4B/8B choice stages a second model. Results are cached by writer, prompt, facts, and creative direction." : "Generative prompt enhancement is OFF; the deterministic compiler still preserves roles and reference ownership."} Reference priority controls how strongly the written prompt tells H3 to preserve reference details; it is not a LoRA strength.` }),
     promptStudio,
   ]);
   return section("Direction", body, null, "Choose how H3 Studio prepares your words before Qwen3-VL encodes them for H3.");
