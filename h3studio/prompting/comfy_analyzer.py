@@ -122,9 +122,9 @@ def _repair_truncated_json(value: str) -> str:
             in_string = True
         elif character in "[{":
             stack.append(character)
-        elif character == "]" and stack and stack[-1] == "[":
-            stack.pop()
-        elif character == "}" and stack and stack[-1] == "{":
+        elif (character == "]" and stack and stack[-1] == "[") or (
+            character == "}" and stack and stack[-1] == "{"
+        ):
             stack.pop()
     if in_string:
         text += '"'
