@@ -21,8 +21,8 @@ _CACHE_LOCK = threading.RLock()
 _ANALYSIS_SCHEMA_VERSION = 2
 _ANALYSIS_CACHE_LIMIT = 64
 _ANALYSIS_CACHE: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
-_WRITER_CACHE_KEY: tuple[Any, ...] | None = None
-_WRITER_CACHE_VALUE: tuple[str, str] | None = None
+_WRITER_CACHE_LIMIT = 32
+_WRITER_CACHE: OrderedDict[tuple[Any, ...], tuple[str, str]] = OrderedDict()
 _RETENTIONS = {"attribute_transfer", "fully_preserved", "partially_preserved", "reference_only"}
 
 SYSTEM_INSTRUCTION = """You are the factual visual reference analyst for MiniMax H3 image generation.
@@ -238,15 +238,16 @@ def _run_prompt_writer(
     clip_loader: Any = None,
     additional_instruction: str = "",
 ) -> tuple[str, str]:
-    global _WRITER_CACHE_KEY, _WRITER_CACHE_VALUE
     facts = tuple((item.ordinal, item.effective_role, item.retention, item.description) for item in references)
     identity = writer_name or (type(clip).__name__ if clip is not None else "default")
     additional_instruction = str(additional_instruction or "").strip()[:4000]
     key = (str(identity), str(prompt), facts, additional_instruction)
     with _CACHE_LOCK:
-        if key == _WRITER_CACHE_KEY and _WRITER_CACHE_VALUE is not None:
+        cached = _WRITER_CACHE.get(key)
+        if cached is not None:
+            _WRITER_CACHE.move_to_end(key)
             LOGGER.info("[H3 Studio - Prompt Director] Cache HIT | text generation skipped")
-            return _WRITER_CACHE_VALUE[0], _WRITER_CACHE_VALUE[1] + " Cache: HIT."
+            return cached[0], cached[1] + " Cache: HIT."
     if clip is None and callable(clip_loader):
         LOGGER.info("[H3 Studio - Prompt Director] Loading writer: %s", writer_name or "selected model")
         clip = clip_loader()
@@ -254,7 +255,7 @@ def _run_prompt_writer(
         candidate = _deterministic_writer_fallback(prompt, references, additional_instruction)
         note = "Prompt director: no generative writer selected; used the deterministic fallback."
         with _CACHE_LOCK:
-            _WRITER_CACHE_KEY, _WRITER_CACHE_VALUE = key, (candidate, note)
+            _store_writer_result(key, candidate, note)
         return candidate, note
     records = "\n".join(
         f"@Image{item.ordinal}: role={item.effective_role}; retention={item.retention}; source observation={item.description or 'no visual description available'}"
@@ -302,16 +303,23 @@ def _run_prompt_writer(
             elapsed = time.perf_counter() - started
             note = f"Prompt director: {identity} produced and validated a {len(candidate.split())}-word text-only brief in {elapsed:.2f}s."
             with _CACHE_LOCK:
-                _WRITER_CACHE_KEY, _WRITER_CACHE_VALUE = key, (candidate, note)
+                _store_writer_result(key, candidate, note)
             LOGGER.info("[H3 Studio - Prompt Director] Complete | %d words | validated", len(candidate.split()))
             return candidate, note
         LOGGER.warning("[H3 Studio - Prompt Director] Validation failed | %s", "; ".join(failures))
     candidate = _deterministic_writer_fallback(prompt, references, additional_instruction)
     note = "Prompt director: model output failed validation twice; used the complete deterministic fallback."
     with _CACHE_LOCK:
-        _WRITER_CACHE_KEY, _WRITER_CACHE_VALUE = key, (candidate, note)
+        _store_writer_result(key, candidate, note)
     LOGGER.warning("[H3 Studio - Prompt Director] Used deterministic fallback | %d words", len(candidate.split()))
     return candidate, note
+
+
+def _store_writer_result(key: tuple[Any, ...], candidate: str, note: str) -> None:
+    _WRITER_CACHE[key] = (candidate, note)
+    _WRITER_CACHE.move_to_end(key)
+    while len(_WRITER_CACHE) > _WRITER_CACHE_LIMIT:
+        _WRITER_CACHE.popitem(last=False)
 
 
 def analyze_references(
