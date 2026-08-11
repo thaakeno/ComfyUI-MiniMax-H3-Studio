@@ -10,7 +10,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
 
-DEFAULT_ENDPOINT = "https://h3-studio-counter.thaakeno.workers.dev/v1/report"
+DEFAULT_ENDPOINT = "https://h3-studio-counter.h3-studio-counter.workers.dev/v1/report"
 OPT_OUT_FILE = Path(__file__).resolve().parents[1] / ".h3studio-telemetry-disabled"
 
 

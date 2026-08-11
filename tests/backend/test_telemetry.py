@@ -7,6 +7,10 @@ from h3studio import telemetry
 from h3studio.telemetry import AggregateReporter
 
 
+def test_default_endpoint_targets_the_deployed_counter() -> None:
+    assert telemetry.DEFAULT_ENDPOINT == "https://h3-studio-counter.h3-studio-counter.workers.dev/v1/report"
+
+
 def test_aggregate_reporter_sends_only_batched_integer_counts() -> None:
     sent: list[int] = []
     delivered = threading.Event()
