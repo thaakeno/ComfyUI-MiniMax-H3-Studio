@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from .nodes.benchmark import NODE_CLASS_MAPPINGS as BENCHMARK_NODE_CLASS_MAPPINGS
 from .nodes.benchmark import NODE_DISPLAY_NAME_MAPPINGS as BENCHMARK_NODE_DISPLAY_NAME_MAPPINGS
+from .nodes.comparison import NODE_CLASS_MAPPINGS as COMPARISON_NODE_CLASS_MAPPINGS
+from .nodes.comparison import NODE_DISPLAY_NAME_MAPPINGS as COMPARISON_NODE_DISPLAY_NAME_MAPPINGS
 from .nodes.director import (
     H3StudioCondition,
     H3StudioContextInspector,
@@ -30,6 +32,7 @@ NODE_CLASS_MAPPINGS = {
     "H3StudioContextSamplingPreset": H3StudioContextSamplingPreset,
     "H3StudioTAEH3Preview": H3StudioTAEH3Preview,
     **BENCHMARK_NODE_CLASS_MAPPINGS,
+    **COMPARISON_NODE_CLASS_MAPPINGS,
     **IMAGE_NODE_CLASS_MAPPINGS,
     **SAVE_NODE_CLASS_MAPPINGS,
 }
@@ -43,6 +46,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "H3StudioContextSamplingPreset": "H3 Studio · Director Sampling Preset",
     "H3StudioTAEH3Preview": "H3 Studio · Live Preview (TAEH3)",
     **BENCHMARK_NODE_DISPLAY_NAME_MAPPINGS,
+    **COMPARISON_NODE_DISPLAY_NAME_MAPPINGS,
     **IMAGE_NODE_DISPLAY_NAME_MAPPINGS,
     **SAVE_NODE_DISPLAY_NAME_MAPPINGS,
 }

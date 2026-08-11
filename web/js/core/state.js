@@ -132,6 +132,7 @@ export function defaultState() {
     },
     ui: {
       advanced_open: false,
+      comparison_enabled: false,
       reference_details: {},
     },
   };
@@ -237,7 +238,11 @@ export function normalizeState(value) {
     references,
     prompt_options: promptOptions,
     generation,
-    ui: { ...defaults.ui, ...object(source.ui) },
+    ui: {
+      ...defaults.ui,
+      ...object(source.ui),
+      comparison_enabled: object(source.ui).comparison_enabled === true,
+    },
   };
 }
 

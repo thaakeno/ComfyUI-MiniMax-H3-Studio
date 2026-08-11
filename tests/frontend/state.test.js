@@ -64,6 +64,12 @@ test("default state is an immediately usable text-to-image request", () => {
   assert.deepEqual(state.references, []);
 });
 
+test("comparison presentation is opt-in and persists in Studio UI state", () => {
+  assert.equal(defaultState().ui.comparison_enabled, false);
+  const restored = normalizeState({ ui: { comparison_enabled: true } });
+  assert.equal(restored.ui.comparison_enabled, true);
+});
+
 test("native analyzer resolution is preserved as the zero sentinel", () => {
   const state = normalizeState({ prompt_options: { analyzer_resolution: 0 } });
   assert.equal(state.prompt_options.analyzer_resolution, 0);

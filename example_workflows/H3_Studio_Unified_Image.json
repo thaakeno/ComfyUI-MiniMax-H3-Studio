@@ -1,8 +1,8 @@
 {
   "id": "51ffc0bb-1b7a-4a1c-a183-1ce99edb4e5e",
   "revision": 0,
-  "last_node_id": 29,
-  "last_link_id": 17,
+  "last_node_id": 30,
+  "last_link_id": 19,
   "nodes": [
     {
       "id": 10,
@@ -215,7 +215,8 @@
             1,
             10,
             13,
-            14
+            14,
+            15
           ]
         },
         {
@@ -708,7 +709,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 16
+          "link": 17
         }
       ],
       "outputs": [],
@@ -738,7 +739,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 17
+          "link": 18
         },
         {
           "name": "studio_context",
@@ -766,11 +767,46 @@
       "bgcolor": "#24312f"
     },
     {
+      "id": 30,
+      "type": "H3StudioComparisonView",
+      "pos": [
+        1030,
+        1010
+      ],
+      "size": [
+        440,
+        420
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 19
+        },
+        {
+          "name": "studio_context",
+          "type": "H3_STUDIO_CONTEXT",
+          "link": 15
+        }
+      ],
+      "outputs": [],
+      "title": "Reference comparison · optional",
+      "properties": {
+        "Node name for S&R": "H3StudioComparisonView"
+      },
+      "widgets_values": [],
+      "color": "#3c514c",
+      "bgcolor": "#24312f"
+    },
+    {
       "id": 17,
       "type": "H3StudioABComparison",
       "pos": [
         -520,
-        1500
+        1700
       ],
       "size": [
         780,
@@ -892,7 +928,7 @@
           "name": "comparison_grid",
           "type": "IMAGE",
           "links": [
-            15
+            16
           ]
         },
         {
@@ -927,7 +963,7 @@
       "type": "H3StudioLazyImageSwitch",
       "pos": [
         340,
-        1500
+        1700
       ],
       "size": [
         420,
@@ -953,7 +989,7 @@
         {
           "name": "benchmark_image",
           "type": "IMAGE",
-          "link": 15
+          "link": 16
         }
       ],
       "outputs": [
@@ -961,8 +997,9 @@
           "name": "image",
           "type": "IMAGE",
           "links": [
-            16,
-            17
+            17,
+            18,
+            19
           ]
         },
         {
@@ -1301,7 +1338,7 @@
       "type": "H3StudioWorkflowNote",
       "pos": [
         820,
-        1460
+        1660
       ],
       "size": [
         480,
@@ -1547,6 +1584,14 @@
     ],
     [
       15,
+      10,
+      0,
+      30,
+      1,
+      "H3_STUDIO_CONTEXT"
+    ],
+    [
+      16,
       17,
       0,
       19,
@@ -1554,7 +1599,7 @@
       "IMAGE"
     ],
     [
-      16,
+      17,
       19,
       0,
       14,
@@ -1562,10 +1607,18 @@
       "IMAGE"
     ],
     [
-      17,
+      18,
       19,
       0,
       15,
+      0,
+      "IMAGE"
+    ],
+    [
+      19,
+      19,
+      0,
+      30,
       0,
       "IMAGE"
     ]
@@ -1617,7 +1670,7 @@
         970,
         190,
         560,
-        820
+        1320
       ],
       "color": "#496073",
       "font_size": 26,
@@ -1654,7 +1707,7 @@
       "title": "OPTIONAL - MULTI-PROFILE BENCHMARK LAB",
       "bounding": [
         -580,
-        1400,
+        1600,
         1940,
         700
       ],
@@ -2414,7 +2467,7 @@
     "frontendVersion": "1.30.0",
     "h3studio": {
       "schema_version": 8,
-      "template_version": "1.5.0",
+      "template_version": "1.6.0",
       "design_source": "H3 Studio maintained column layout",
       "audio_prompt_sections": false,
       "hub_included": false

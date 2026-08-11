@@ -434,9 +434,11 @@ def build_workflow():
     l_bundle_ab = links.add(11, 0, 17, 0, "H3_STUDIO_BUNDLE")
     l_context_ab = links.add(10, 0, 17, 1, "H3_STUDIO_CONTEXT")
     l_context_save = links.add(10, 0, 15, 1, "H3_STUDIO_CONTEXT")
+    l_context_comparison = links.add(10, 0, 30, 1, "H3_STUDIO_CONTEXT")
     l_ab_switch = links.add(17, 0, 19, 2, "IMAGE")
     l_selected_preview = links.add(19, 0, 14, 0, "IMAGE")
     l_selected_save = links.add(19, 0, 15, 0, "IMAGE")
+    l_selected_comparison = links.add(19, 0, 30, 0, "IMAGE")
 
     director_inputs = [
         socket("mode", "COMBO", widget="mode"),
@@ -477,7 +479,7 @@ def build_workflow():
                 output(
                     "studio_context",
                     "H3_STUDIO_CONTEXT",
-                    [l_context_condition, l_context_sub, l_context_ab, l_context_save],
+                    [l_context_condition, l_context_sub, l_context_ab, l_context_save, l_context_comparison],
                 ),
                 output("compiled_prompt", "STRING", None),
                 output("state_json", "STRING", None),
@@ -630,10 +632,26 @@ def build_workflow():
             bgcolor="#24312f",
         ),
         node(
+            30,
+            "H3StudioComparisonView",
+            "Reference comparison · optional",
+            [1030, 1010],
+            [440, 420],
+            order=6,
+            inputs=[
+                socket("images", "IMAGE", l_selected_comparison),
+                socket("studio_context", "H3_STUDIO_CONTEXT", l_context_comparison),
+            ],
+            outputs=[],
+            widgets=[],
+            color="#3c514c",
+            bgcolor="#24312f",
+        ),
+        node(
             17,
             "H3StudioABComparison",
             "Benchmark Lab - profiles / resolution / VAE",
-            [-520, 1500],
+            [-520, 1700],
             [780, 520],
             order=6,
             inputs=[
@@ -677,7 +695,7 @@ def build_workflow():
             19,
             "H3StudioLazyImageSwitch",
             "Run mode - normal or benchmark only",
-            [340, 1500],
+            [340, 1700],
             [420, 180],
             order=7,
             inputs=[
@@ -686,7 +704,7 @@ def build_workflow():
                 socket("benchmark_image", "IMAGE", l_ab_switch),
             ],
             outputs=[
-                output("image", "IMAGE", [l_selected_preview, l_selected_save]),
+                output("image", "IMAGE", [l_selected_preview, l_selected_save, l_selected_comparison]),
                 output("selected_mode", "STRING", None),
             ],
             widgets=[False],
@@ -761,7 +779,7 @@ def build_workflow():
             "Benchmark Lab - quality and speed diagnosis",
             "optional / experimental",
             "## Compare two or many setups\n\n1. Enter Base, LightX, or PDD profiles and resolution targets.\n2. Check the exact generation count shown on the node.\n3. Turn **Benchmark ON** in the purple Run mode switch.\n\nNormal sampling stays lazy and is not scheduled. Same seed is the fairest comparison; new seeds are for diversity sweeps. Disable live cells for maximum throughput.",
-            [820, 1460],
+            [820, 1660],
             [480, 400],
             17,
         ),
@@ -812,7 +830,7 @@ def build_workflow():
         {
             "id": 4,
             "title": "04 · OUTPUT",
-            "bounding": [970, 190, 560, 820],
+            "bounding": [970, 190, 560, 1320],
             "color": "#496073",
             "font_size": 26,
             "flags": {},
@@ -836,7 +854,7 @@ def build_workflow():
         {
             "id": 7,
             "title": "OPTIONAL - MULTI-PROFILE BENCHMARK LAB",
-            "bounding": [-580, 1400, 1940, 700],
+            "bounding": [-580, 1600, 1940, 700],
             "color": "#60467a",
             "font_size": 28,
             "flags": {},
@@ -857,7 +875,7 @@ def build_workflow():
             "frontendVersion": "1.30.0",
             "h3studio": {
                 "schema_version": 8,
-                "template_version": "1.5.0",
+                "template_version": "1.6.0",
                 "design_source": "H3 Studio maintained column layout",
                 "audio_prompt_sections": False,
                 "hub_included": False,

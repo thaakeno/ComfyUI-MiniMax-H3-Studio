@@ -525,6 +525,29 @@ function finalImageSection(node) {
   return section("Finished image", element("div", { className: "h3s-final-result" }, [image, metadata, actions]));
 }
 
+function comparisonImageSection(node) {
+  const result = node.__h3studioComparisonImage;
+  if (!result?.url) return null;
+  const image = element("img", {
+    className: "h3s-final-image h3s-comparison-image",
+    src: result.url,
+    alt: "H3 Studio reference and generated image comparison",
+    title: "Click to expand",
+    on: {
+      click: (event) => {
+        event.stopPropagation();
+        openImageLightbox(result.url, "Reference inputs · Generated edit");
+      },
+    },
+  });
+  return section(
+    "Reference comparison",
+    element("div", { className: "h3s-final-result" }, [image]),
+    null,
+    "The original @Image inputs stay on the left; the generated edit stays large on the right.",
+  );
+}
+
 function controlRow(label, control) {
   return field(label, control);
 }
@@ -592,6 +615,23 @@ function generationSection(node, state, refresh) {
   );
   lock.setAttribute("aria-pressed", String(generation.seed_locked));
   const seedWrap = element("div", { className: "h3s-seed-row" }, [seed, random, lock]);
+  const comparisonToggle = element("label", { className: "h3s-switch" }, [
+    element("input", {
+      type: "checkbox",
+      checked: state.ui.comparison_enabled === true,
+      attrs: { "aria-label": "Build a reference and generated image comparison" },
+      on: {
+        change: (event) => {
+          state.ui = { ...state.ui, comparison_enabled: event.target.checked };
+          if (!event.target.checked) node.__h3studioComparisonImage = null;
+          applyState(node, state);
+          refresh();
+        },
+      },
+    }),
+    element("span", { className: "h3s-switch-track" }),
+    element("span", { className: "h3s-switch-label", text: "Show after generation" }),
+  ]);
   const plan = planResolution(
     generation.aspect_ratio,
     generation.megapixels,
@@ -692,6 +732,7 @@ function generationSection(node, state, refresh) {
   const grid = element("div", { className: "h3s-grid" }, [
     controlRow("Mode", mode), controlRow("Aspect", ratio), controlRow("Target size", megapixelControl), controlRow("Seed", seedWrap),
     controlRow("Speed", sampling), controlRow("Decoder", decoder), controlRow("Temporal quality", frames),
+    controlRow("Comparison image", comparisonToggle),
   ]);
   const sizeHelp = element("p", {
     className: "h3s-context-help",
@@ -1087,6 +1128,7 @@ function renderPanel(node) {
     generationSection(node, state, refresh),
     promptSection(node, state, refresh),
     finalImageSection(node),
+    comparisonImageSection(node),
     resultsSection(node),
     referencesSection(node, state, refresh),
     advancedSection(node, state, refresh),
@@ -1098,13 +1140,18 @@ function renderPanel(node) {
 api.addEventListener("executed", ({ detail }) => {
   const targetId = detail?.node;
   const outputNode = app.graph?.getNodeById?.(Number(targetId));
-  if (!outputNode || !["PreviewImage", "H3StudioSaveImage"].includes(outputNode.comfyClass)) return;
+  if (!outputNode || !["PreviewImage", "H3StudioSaveImage", "H3StudioComparisonView"].includes(outputNode.comfyClass)) return;
   const item = detail?.output?.images?.[0];
   const url = executedImageUrl(item);
   if (!url) return;
   for (const node of app.graph?._nodes || []) {
     if (node.comfyClass !== TARGET || !isNodeDownstream(app.graph?.links, node.id, targetId)) continue;
     const state = stateFromNode(node);
+    if (outputNode.comfyClass === "H3StudioComparisonView") {
+      node.__h3studioComparisonImage = { url, promptId: promptId(detail) };
+      queueMicrotask(() => renderPanel(node));
+      continue;
+    }
     node.__h3studioFinalImage = {
       url,
       seed: state.generation.seed,
