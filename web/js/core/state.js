@@ -79,6 +79,10 @@ export function formatMegapixels(value) {
   return `${clamp(value, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1).toFixed(2)} MP`;
 }
 
+export function capNativeForTarget(value, currentCap) {
+  return clamp(value, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1) > 1 ? false : currentCap === true;
+}
+
 export function resolutionTier(value, conservative = false) {
   const megapixels = clamp(value, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1);
   if (conservative) return { key: "conservative", label: "RECOMMENDED CAP", note: "Plans near 1 MP for predictable memory use." };

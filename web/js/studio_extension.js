@@ -13,6 +13,7 @@ import {
   ROLES,
   SAMPLING_PROFILES,
   advanceSeedAfterGeneration,
+  capNativeForTarget,
   formatMegapixels,
   missingReferenceOrdinals,
   normalizeState,
@@ -592,6 +593,10 @@ function generationSection(node, state, refresh) {
     `Target megapixels, minimum ${formatMegapixels(MIN_MEGAPIXELS)}, maximum ${formatMegapixels(MAX_MEGAPIXELS)}`,
     (value) => {
       state.generation.megapixels = value;
+      state.generation.cap_native_resolution = capNativeForTarget(
+        value,
+        state.generation.cap_native_resolution,
+      );
       const next = planResolution(
         state.generation.aspect_ratio,
         value,
@@ -607,6 +612,7 @@ function generationSection(node, state, refresh) {
       tierBadge.textContent = tier.label;
       tierNote.textContent = tier.note;
       megapixelSlider.dataset.tier = tier.key;
+      syncResolutionMode(state.generation.cap_native_resolution);
       applyState(node, state);
     },
   );
@@ -618,7 +624,12 @@ function generationSection(node, state, refresh) {
     type: "button",
     text: label,
     attrs: { "aria-label": `Set ${label}, ${formatMegapixels(value)}` },
-    on: { click: () => update({ megapixels: value }) },
+    on: {
+      click: () => update({
+        megapixels: value,
+        cap_native_resolution: capNativeForTarget(value, generation.cap_native_resolution),
+      }),
+    },
   }));
   const megapixelControl = element("div", { className: "h3s-megapixel-control" }, [
     element("div", { className: "h3s-megapixel-top" }, [
@@ -629,19 +640,27 @@ function generationSection(node, state, refresh) {
     megapixelSlider,
     element("div", { className: "h3s-resolution-presets" }, presets),
   ]);
+  const conservativeMode = element("button", {
+    className: `h3s-resolution-mode${generation.cap_native_resolution ? " is-active" : ""}`,
+    type: "button", text: "Conservative · ~1 MP",
+    attrs: { "aria-pressed": String(generation.cap_native_resolution) },
+    on: { click: () => update({ cap_native_resolution: true }) },
+  });
+  const directMode = element("button", {
+    className: `h3s-resolution-mode${generation.cap_native_resolution ? "" : " is-active"}`,
+    type: "button", text: "Direct · honor target",
+    attrs: { "aria-pressed": String(!generation.cap_native_resolution) },
+    on: { click: () => update({ cap_native_resolution: false }) },
+  });
+  function syncResolutionMode(conservative) {
+    conservativeMode.classList.toggle("is-active", conservative);
+    directMode.classList.toggle("is-active", !conservative);
+    conservativeMode.setAttribute("aria-pressed", String(conservative));
+    directMode.setAttribute("aria-pressed", String(!conservative));
+  }
   const resolutionModes = element("div", { className: "h3s-resolution-modes", attrs: { role: "group", "aria-label": "Resolution planning mode" } }, [
-    element("button", {
-      className: `h3s-resolution-mode${generation.cap_native_resolution ? " is-active" : ""}`,
-      type: "button", text: "Conservative · ~1 MP",
-      attrs: { "aria-pressed": String(generation.cap_native_resolution) },
-      on: { click: () => update({ cap_native_resolution: true }) },
-    }),
-    element("button", {
-      className: `h3s-resolution-mode${generation.cap_native_resolution ? "" : " is-active"}`,
-      type: "button", text: "Direct · honor target",
-      attrs: { "aria-pressed": String(!generation.cap_native_resolution) },
-      on: { click: () => update({ cap_native_resolution: false }) },
-    }),
+    conservativeMode,
+    directMode,
   ]);
   const grid = element("div", { className: "h3s-grid" }, [
     controlRow("Mode", mode), controlRow("Aspect", ratio), controlRow("Target size", megapixelControl), controlRow("Seed", seedWrap),

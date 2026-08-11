@@ -10,6 +10,7 @@ import {
   MIN_MEGAPIXELS,
   UHD_4K_MEGAPIXELS,
   backendResolutionValue,
+  capNativeForTarget,
   defaultState,
   formatMegapixels,
   missingReferenceOrdinals,
@@ -265,6 +266,13 @@ test("megapixel display exposes stable minimum and maximum limits", () => {
   assert.equal(formatMegapixels(MIN_MEGAPIXELS), "0.20 MP");
   assert.equal(formatMegapixels(1), "1.00 MP");
   assert.equal(formatMegapixels(MAX_MEGAPIXELS), "8.50 MP");
+});
+
+test("targets above one megapixel automatically leave conservative mode", () => {
+  assert.equal(capNativeForTarget(1, true), true);
+  assert.equal(capNativeForTarget(1.05, true), false);
+  assert.equal(capNativeForTarget(4, true), false);
+  assert.equal(capNativeForTarget(0.4, false), false);
 });
 
 test("resolution tiers label safe and experimental direct ranges honestly", () => {
