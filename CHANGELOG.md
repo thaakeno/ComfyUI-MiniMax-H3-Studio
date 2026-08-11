@@ -2,6 +2,30 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [Unreleased]
+
+### Added
+
+- Added the official LightX v1.0 FL2V eight-step ComfyUI profile while retaining the legacy Kijai v0.1 four-step recipes.
+- Added a persisted Director **Custom LoRAs** stack with installed-file discovery, up to six ordered H3-compatible adapters, per-LoRA enable/strength controls, refresh/reorder/remove actions, and exact artifact diagnostics.
+- Added stage-residency diagnostics for the H3 32B text encoder, final patched diffusion model, and VAE plus host-RAM warnings when large selected model files live in `/dev/shm`.
+
+### Fixed
+
+- Recovered the alpha.13 flattened-latent TAEH3 preview, qualified preview IDs, Qwen helper-release behavior, compact conditioning prompt, Director size guard, release tooling, and regression coverage after the README-history rewrite dropped them from `main`.
+- Fully materializes the 32B text encoder only on conditioning cache misses, then targets it for release before diffusion, avoiding repeated DynamicVRAM layer streaming while keeping cache hits unchanged.
+- Fully materializes the final LightX/PDD/custom-LoRA-patched H3 transformer before KSampler so first materialization is no longer deferred into an opaque per-step `Model Initializing` path when the model fits.
+- Fully materializes the selected H3 VAE before the unchanged tiled decode path, targeting the multi-minute failure mode where a partially resident ViT3D decoder streams the same weights again for every spatial tile.
+- Preserves every previous bypass-forward injection when another LoRA is stacked, so a custom style/character LoRA cannot silently replace the active LightX adapter.
+- Rejects duplicate use of the active acceleration artifact through the custom-LoRA stack and rejects FL2V LightX profiles on REF2VA routes.
+- Reuses an unchanged process-level H3 model bundle and keeps acceleration/custom-LoRA patch stacks bounded and cached across ordinary prompt/seed reruns.
+
+### Changed
+
+- Performance ownership is now stage-scoped rather than globally forcing a VRAM mode: full-residency requests are nonfatal and fall back to normal ComfyUI DynamicVRAM when the complete stage cannot fit.
+- Kept MiniMax H3's upstream VAE tile geometry, chunking, temporal attention, frame-selection semantics, and final decode pixels unchanged; the decode optimization only changes model residency before that path.
+- Removed internal `plans.md`, `prompt.md`, `implement.md`, and stale `documentation.md` from the public repository surface.
+
 ## [0.1.0-alpha.13] - 2026-08-11
 
 ### Added
