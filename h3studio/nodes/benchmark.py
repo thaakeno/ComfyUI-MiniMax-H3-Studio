@@ -13,10 +13,9 @@ import torch
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from ..benchmark import (
-    PROFILE_CHOICES,
     SEED_STRATEGIES,
     ABVariantSpec,
-    build_ab_variants,
+    build_matrix_plan,
     short_profile_label,
 )
 from ..context import H3StudioContext
@@ -158,18 +157,21 @@ def _to_pil(image: torch.Tensor | None, size: int, error: str = "") -> Image.Ima
     return canvas
 
 
-def _comparison_grid(results: list[_ABResult], seed_strategy: str, cell_size: int) -> torch.Tensor:
+def _comparison_grid(
+    results: list[_ABResult], seed_strategy: str, cell_size: int, profile_count: int, generation_count: int
+) -> torch.Tensor:
     gap = 10
     header_height = 58
     label_height = 70
-    rows, columns = 3, 2
+    columns = max(1, int(profile_count))
+    rows = max(1, (len(results) + columns - 1) // columns)
     width = columns * cell_size + (columns + 1) * gap
     height = header_height + rows * (cell_size + label_height) + (rows + 1) * gap
     grid = Image.new("RGB", (width, height), "#080b10")
     draw = ImageDraw.Draw(grid)
     draw.text(
         (gap, 14),
-        f"H3 Studio A/B Matrix - same prompt and references - {seed_strategy}",
+        f"H3 Studio Benchmark Lab - {generation_count} generations - {seed_strategy}",
         fill="#e5e7eb",
         font=_font(22, bold=True),
     )
@@ -185,9 +187,13 @@ def _comparison_grid(results: list[_ABResult], seed_strategy: str, cell_size: in
         actual = f"{result.width}x{result.height} - {result.actual_megapixels:.2f} MP actual"
         profile = short_profile_label(result.spec.profile, result.spec.accelerated)
         timing = "failed" if result.sampling_seconds is None else f"sampling {result.sampling_seconds:.2f}s"
+        repeat = f" - repeat {result.spec.repeat}" if result.spec.repeat > 1 else ""
         draw.text((x + 10, label_y + 8), f"{requested} - {actual}", fill="#f3f4f6", font=_font(16, bold=True))
         draw.text(
-            (x + 10, label_y + 37), f"seed {result.spec.seed} - {profile} - {timing}", fill="#67e8d0", font=_font(15)
+            (x + 10, label_y + 37),
+            f"seed {result.spec.seed}{repeat} - {profile} - {timing}",
+            fill="#67e8d0",
+            font=_font(15),
         )
 
     array = np.asarray(grid, dtype=np.uint8).copy()
@@ -219,16 +225,15 @@ def _vae_comparison_grid(items, *, cell_size: int, seed: int, sampling_seconds: 
 
 
 class H3StudioABComparison:
-    """Generate a six-cell comparison for any two sampling profiles."""
+    """Generate a guarded profile x resolution benchmark matrix."""
 
     CATEGORY = "H3 Studio/Benchmark"
     FUNCTION = "compare"
     RETURN_TYPES = ("IMAGE", "STRING")
     RETURN_NAMES = ("comparison_grid", "comparison_report")
     DESCRIPTION = (
-        "Runs 0.40, 1.00 and 2.00 MP with fixed, paired-row, or per-image seeds. Each resolution compares a native "
-        "sampling profiles, including Base-vs-LoRA or LoRA-vs-LoRA, measures the synchronized sampler call, and labels "
-        "every seed. Put it behind H3 Studio's lazy output switch so benchmark mode executes no normal generation."
+        "Compare one or more Base, LightX and PDD profiles across a configurable resolution matrix. The generation "
+        "guard rejects accidental large runs before conditioning or model patching. Two profiles remain a simple A/B."
     )
 
     @classmethod
@@ -244,20 +249,22 @@ class H3StudioABComparison:
                         "tooltip": "Compare any two sampling profiles across resolutions, or isolate decoder quality using one identical T=1 latent.",
                     },
                 ),
-                "profile_a": (
-                    list(PROFILE_CHOICES.keys()),
+                "profiles": (
+                    "STRING",
                     {
-                        "default": "Base Quality - RES 20",
-                        "tooltip": "Left column. May be Base, LightX, PDD, or the Director's current profile.",
+                        "default": "base_quality_20, lightx_er_sde_4",
+                        "multiline": True,
+                        "tooltip": "Comma/newline-separated profile IDs or labels. Add more than two for a wider matrix.",
                     },
                 ),
-                "profile_b": (
-                    list(PROFILE_CHOICES.keys()),
+                "megapixels": (
+                    "STRING",
                     {
-                        "default": "LightX v0.1 - ER-SDE 4",
-                        "tooltip": "Right column. Choose another LoRA here for a direct LoRA-vs-LoRA test.",
+                        "default": "0.40, 1.00, 2.00",
+                        "tooltip": "Comma/newline-separated direct resolutions from 0.20 to 8.50 MP.",
                     },
                 ),
+                "repeats": ("INT", {"default": 1, "min": 1, "max": 16, "step": 1}),
                 "seed_strategy": (
                     list(SEED_STRATEGIES),
                     {
@@ -285,6 +292,23 @@ class H3StudioABComparison:
                         "tooltip": "Display size per grid cell; generation resolution is unaffected.",
                     },
                 ),
+                "max_generations": (
+                    "INT",
+                    {
+                        "default": 24,
+                        "min": 1,
+                        "max": 128,
+                        "step": 1,
+                        "tooltip": "The run is rejected before execution when the matrix exceeds this count.",
+                    },
+                ),
+                "allow_large_matrix": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Explicitly allow a matrix above your guard after checking its generation count.",
+                    },
+                ),
             }
         }
 
@@ -293,11 +317,14 @@ class H3StudioABComparison:
         h3_bundle,
         studio_context,
         comparison_kind: str,
-        profile_a: str,
-        profile_b: str,
+        profiles: str,
+        megapixels: str,
+        repeats: int,
         seed_strategy: str,
         seed_step: int,
         grid_cell_size: int,
+        max_generations: int,
+        allow_large_matrix: bool,
     ):
         if not isinstance(h3_bundle, H3StudioBundle):
             raise ValueError("Connect H3 Studio Loader's h3_bundle output.")
@@ -339,14 +366,20 @@ class H3StudioABComparison:
             return _vae_comparison_grid(
                 items, cell_size=cell_size, seed=vae_context.seed, sampling_seconds=sampling_seconds, canvas=canvas
             ), report
-        variants = build_ab_variants(
-            profile_a,
-            profile_b,
+        plan = build_matrix_plan(
+            profiles,
+            megapixels,
             studio_context.state.generation.sampling_profile,
-            studio_context.seed,
-            seed_strategy,
-            seed_step,
+            base_seed=studio_context.seed,
+            seed_strategy=seed_strategy,
+            seed_step=seed_step,
+            repeats=repeats,
+            max_generations=max_generations,
+            allow_large_matrix=allow_large_matrix,
+            reference_count=len(studio_context.images),
+            selected_route=studio_context.route.selected,
         )
+        variants = plan.variants
         results: list[_ABResult] = []
         progress = None
         try:
@@ -357,11 +390,12 @@ class H3StudioABComparison:
             pass
 
         LOGGER.info(
-            "[H3 Studio - A/B] Starting matrix | base seed=%d | strategy=%s | profile A=%s | profile B=%s",
+            "[H3 Studio - Benchmark] Starting %d-generation matrix | base seed=%d | strategy=%s | profiles=%s | resolutions=%s",
+            plan.generation_count,
             studio_context.seed,
             seed_strategy,
-            variants[0].profile,
-            variants[1].profile,
+            ",".join(plan.profiles),
+            ",".join(f"{value:g}" for value in plan.megapixels),
         )
         prepared: dict[tuple[int, int, int, str], tuple[Any, Any, Any, Any, str]] = {}
         variant_contexts = [_variant_context(studio_context, spec) for spec in variants]
@@ -384,7 +418,7 @@ class H3StudioABComparison:
         indexed_results: dict[int, _ABResult] = {}
         # Group by profile to avoid repeatedly swapping patched and unpatched models.
         execution_order = sorted(range(len(variants)), key=lambda index: (variants[index].profile, index))
-        result_cache: dict[tuple[str, int, int, int, str], _ABResult] = {}
+        result_cache: dict[tuple[str, int, int, int, str, int], _ABResult] = {}
         for index in execution_order:
             spec = variants[index]
             context = variant_contexts[index]
@@ -396,7 +430,14 @@ class H3StudioABComparison:
             )
             prepared_key = (context.width, context.height, context.seed, context.compile_result.native_prompt)
             model, conditioning, latent, video_vae, condition_error = prepared[prepared_key]
-            cache_key = (spec.profile, spec.seed, context.width, context.height, context.compile_result.native_prompt)
+            cache_key = (
+                spec.profile,
+                spec.seed,
+                context.width,
+                context.height,
+                context.compile_result.native_prompt,
+                spec.repeat,
+            )
             cached_result = result_cache.get(cache_key)
             if cached_result is not None:
                 result.image = cached_result.image
@@ -444,7 +485,9 @@ class H3StudioABComparison:
         results = [indexed_results[index] for index in range(len(variants))]
 
         report_lines = [
-            f"H3 Studio A/B Matrix | base_seed={studio_context.seed} | strategy={seed_strategy} | same prompt and references",
+            f"H3 Studio Benchmark Lab | generations={plan.generation_count} | profiles={len(plan.profiles)} "
+            f"| resolutions={len(plan.megapixels)} | repeats={plan.repeats} | base_seed={studio_context.seed} "
+            f"| strategy={seed_strategy} | same prompt and references",
             "Sampling time is CUDA-synchronized time inside SamplerCustomAdvanced; conditioning and VAE decode are excluded.",
             "The first sampled cell can include lazy model initialization; later cells may benefit from warm caches.",
         ]
@@ -453,12 +496,13 @@ class H3StudioABComparison:
             timing = "FAILED" if result.sampling_seconds is None else f"{result.sampling_seconds:.3f}s"
             report_lines.append(
                 f"{result.spec.requested_megapixels:.2f} MP requested -> {result.width}x{result.height} "
-                f"({result.actual_megapixels:.3f} MP actual) | seed={result.spec.seed} | {label} | sampling={timing}"
+                f"({result.actual_megapixels:.3f} MP actual) | seed={result.spec.seed} | repeat={result.spec.repeat} "
+                f"| {label} | sampling={timing}"
                 + (f" | error={result.error}" if result.error else "")
             )
         report = "\n".join(report_lines)
-        LOGGER.info("[H3 Studio - A/B] Matrix complete\n%s", report)
-        return _comparison_grid(results, seed_strategy, cell_size), report
+        LOGGER.info("[H3 Studio - Benchmark] Matrix complete\n%s", report)
+        return _comparison_grid(results, seed_strategy, cell_size, len(plan.profiles), plan.generation_count), report
 
 
 NODE_CLASS_MAPPINGS = {
@@ -466,6 +510,6 @@ NODE_CLASS_MAPPINGS = {
     "H3StudioLazyImageSwitch": H3StudioLazyImageSwitch,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "H3StudioABComparison": "H3 Studio - Seeded A/B Matrix",
+    "H3StudioABComparison": "H3 Studio - Benchmark Lab",
     "H3StudioLazyImageSwitch": "H3 Studio - Normal / Benchmark Output",
 }

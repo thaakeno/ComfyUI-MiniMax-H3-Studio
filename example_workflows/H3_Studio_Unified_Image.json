@@ -774,7 +774,7 @@
       ],
       "size": [
         780,
-        330
+        420
       ],
       "flags": {},
       "order": 6,
@@ -799,19 +799,27 @@
           }
         },
         {
-          "name": "profile_a",
-          "type": "COMBO",
+          "name": "profiles",
+          "type": "STRING",
           "link": null,
           "widget": {
-            "name": "profile_a"
+            "name": "profiles"
           }
         },
         {
-          "name": "profile_b",
-          "type": "COMBO",
+          "name": "megapixels",
+          "type": "STRING",
           "link": null,
           "widget": {
-            "name": "profile_b"
+            "name": "megapixels"
+          }
+        },
+        {
+          "name": "repeats",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "repeats"
           }
         },
         {
@@ -837,6 +845,22 @@
           "widget": {
             "name": "grid_cell_size"
           }
+        },
+        {
+          "name": "max_generations",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "max_generations"
+          }
+        },
+        {
+          "name": "allow_large_matrix",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "allow_large_matrix"
+          }
         }
       ],
       "outputs": [
@@ -859,11 +883,14 @@
       },
       "widgets_values": [
         "Sampling profiles x resolution",
-        "Base Quality - RES 20",
-        "LightX v0.1 - ER-SDE 4",
+        "base_quality_20, lightx_er_sde_4",
+        "0.40, 1.00, 2.00",
+        1,
         "Same seed for all - fair comparison",
         1,
-        640
+        640,
+        24,
+        false
       ],
       "color": "#60467a",
       "bgcolor": "#332640"
@@ -917,7 +944,7 @@
           "links": null
         }
       ],
-      "title": "Run mode - normal or A/B only",
+      "title": "Run mode - normal or benchmark only",
       "properties": {
         "Node name for S&R": "H3StudioLazyImageSwitch"
       },
@@ -1275,14 +1302,14 @@
         }
       ],
       "outputs": [],
-      "title": "A/B Matrix - quality and speed diagnosis",
+      "title": "Benchmark Lab - quality and speed diagnosis",
       "properties": {
         "Node name for S&R": "H3StudioWorkflowNote",
         "purpose": "Documentation only; never enters the generation graph."
       },
       "widgets_values": [
         "optional / experimental",
-        "Turn Benchmark ON only in the purple Run mode switch. ComfyUI lazy evaluation then requests the matrix and never schedules the normal sampler. Choose any Profile A and Profile B, including LightX-vs-PDD. Same seed is the fair default; New seed every image is only a diversity sweep. Identical native-capped variants are reused instead of sampled twice. VAE mode samples one T=1 latent once and decodes it through both the original video VAE and optional Mamad8 Image VAE, isolating decoder differences."
+        "Turn Benchmark ON only in the purple Run mode switch. ComfyUI lazy evaluation then requests the matrix and never schedules the normal sampler. Enter two profiles for simple A/B, or add more Base, LightX and PDD profile IDs. The node shows and guards the exact profile x resolution x repeat generation count before expensive work. PDD requires references and a REF2VA Director context. Same seed is the fair default; New seed every image is only a diversity sweep. VAE mode samples one T=1 latent once and decodes it through both available VAEs."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1597,7 +1624,7 @@
     },
     {
       "id": 7,
-      "title": "OPTIONAL - SAME-SEED A/B QUALITY MATRIX",
+      "title": "OPTIONAL - MULTI-PROFILE BENCHMARK LAB",
       "bounding": [
         -580,
         1180,

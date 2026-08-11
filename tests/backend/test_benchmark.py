@@ -3,7 +3,10 @@ from __future__ import annotations
 from h3studio.benchmark import (
     SEED_STRATEGIES,
     build_ab_variants,
+    build_matrix_plan,
     build_seed_plan,
+    parse_megapixel_list,
+    parse_profile_list,
     resolve_accelerator,
     short_profile_label,
 )
@@ -59,6 +62,63 @@ def test_ab_variants_store_the_seed_shown_for_each_cell() -> None:
         5,
     )
     assert [item.seed for item in variants] == [100, 100, 105, 105, 110, 110]
+
+
+def test_matrix_accepts_more_than_two_profiles_and_reports_exact_launch_count() -> None:
+    plan = build_matrix_plan(
+        "base_quality_20, lightx_er_sde_4, lightx_sa_solver_4",
+        "0.4, 1.0",
+        "base_quality_20",
+        repeats=2,
+        max_generations=12,
+    )
+
+    assert plan.profiles == ("base_quality_20", "lightx_er_sde_4", "lightx_sa_solver_4")
+    assert plan.megapixels == (0.4, 1.0)
+    assert plan.generation_count == 12
+    assert [item.repeat for item in plan.variants] == [1] * 6 + [2] * 6
+
+
+def test_matrix_guard_rejects_accidental_large_run_before_execution() -> None:
+    try:
+        build_matrix_plan(
+            "base_quality_20, lightx_er_sde_4, lightx_sa_solver_4",
+            "0.4, 1.0, 2.0",
+            "base_quality_20",
+            repeats=2,
+            max_generations=12,
+        )
+    except ValueError as exc:
+        assert "18 generations" in str(exc)
+        assert "guard" in str(exc)
+    else:
+        raise AssertionError("large benchmark matrix was not guarded")
+
+
+def test_matrix_pdd_requires_references_and_ref2va_context() -> None:
+    for reference_count, selected_route, expected in (
+        (0, "ref2va", "reference image"),
+        (1, "fl2va", "REF2VA Director context"),
+    ):
+        try:
+            build_matrix_plan(
+                "base_quality_20, pdd_ref2va_4_900",
+                "1.0",
+                "base_quality_20",
+                reference_count=reference_count,
+                selected_route=selected_route,
+            )
+        except ValueError as exc:
+            assert expected in str(exc)
+        else:
+            raise AssertionError("invalid PDD matrix was not rejected")
+
+
+def test_matrix_parsers_accept_labels_ids_mp_suffixes_and_remove_duplicates() -> None:
+    assert parse_profile_list(
+        "Base Quality - RES 20\nbase_quality_20\nLightX v0.1 - ER-SDE 4", "base_quality_20"
+    ) == ("base_quality_20", "lightx_er_sde_4")
+    assert parse_megapixel_list("0.4 MP, 1 megapixel, 1.0") == (0.4, 1.0)
 
 
 def test_lazy_switch_validates_only_the_selected_connected_branch() -> None:
