@@ -4,7 +4,7 @@ import sys
 from types import ModuleType
 
 import h3studio.nodes.preview as preview_module
-from h3studio.nodes.preview import H3StudioTAEH3Preview, _PreviewWrapper
+from h3studio.nodes.preview import H3StudioTAEH3Preview, _limit_latent, _PreviewWrapper
 
 
 def test_preview_wrapper_advances_executor_instead_of_recursing(monkeypatch) -> None:
@@ -26,6 +26,47 @@ def test_preview_wrapper_advances_executor_instead_of_recursing(monkeypatch) -> 
     assert result == "next-wrapper"
     assert len(calls) == 1
     assert callable(calls[0][1]["callback"])
+
+
+def test_preview_callback_preserves_native_progress_before_async_enqueue(monkeypatch) -> None:
+    torch_module = ModuleType("torch")
+    monkeypatch.setitem(sys.modules, "torch", torch_module)
+    order = []
+    captured = {}
+
+    class Executor:
+        def __call__(self, *args, **kwargs):
+            captured.update(kwargs)
+            return "sampled"
+
+    wrapper = _PreviewWrapper("taeh3.safetensors", "16", 768, 90, 1)
+    monkeypatch.setattr(wrapper, "_enqueue", lambda *_args: order.append("preview-enqueued"))
+    wrapper(Executor(), "noise", callback=lambda *_args: order.append("native-progress"))
+    captured["callback"](0, "x0", "x", 4)
+
+    assert order == ["native-progress", "preview-enqueued"]
+
+
+def test_preview_downscale_preserves_latent_aspect_ratio() -> None:
+    captured = {}
+
+    class Functional:
+        @staticmethod
+        def interpolate(value, *, size, mode, align_corners):
+            captured.update(size=size, mode=mode, align_corners=align_corners)
+            return "resized"
+
+    class NN:
+        functional = Functional()
+
+    class Torch:
+        nn = NN()
+
+    class Latent:
+        shape = (1, 24, 20, 10)
+
+    assert _limit_latent(Torch(), Latent(), 160) == "resized"
+    assert captured["size"] == (10, 5)
 
 
 def test_preview_attach_reuses_one_wrapper_model(monkeypatch) -> None:

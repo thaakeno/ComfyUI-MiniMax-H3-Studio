@@ -606,8 +606,8 @@
       "widgets_values": [
         false,
         "taeh3.safetensors",
-        512,
-        80,
+        768,
+        90,
         1
       ],
       "color": "#31475c",

@@ -1,34 +1,9 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
+import { openImageLightbox } from "./core/lightbox.js";
 
 const TARGET = "H3StudioTAEH3Preview";
 const MAX_HISTORY = 40;
-
-function openLightbox(source, label) {
-  if (!source) return;
-  const overlay = document.createElement("div");
-  overlay.className = "h3s-preview-lightbox";
-  overlay.tabIndex = -1;
-  const image = document.createElement("img");
-  image.src = source;
-  image.alt = label || "Expanded TAEH3 sampling preview";
-  const close = document.createElement("button");
-  close.type = "button";
-  close.className = "h3s-preview-lightbox-close";
-  close.textContent = "×";
-  close.title = "Close preview";
-  const dismiss = () => overlay.remove();
-  close.addEventListener("click", dismiss);
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) dismiss();
-  });
-  overlay.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") dismiss();
-  });
-  overlay.append(image, close);
-  document.body.append(overlay);
-  overlay.focus();
-}
 
 function installPreview(node) {
   if (node.__h3studioPreviewInstalled || typeof node.addDOMWidget !== "function") return;
@@ -60,10 +35,20 @@ function installPreview(node) {
   navigation.append(previous, position, next);
   root.append(image, empty, navigation, status);
 
-  const state = { history: [], index: -1, runId: null };
+  const state = { history: [], index: -1, runId: null, activeRunId: null, total: 0 };
   const render = () => {
     const frame = state.history[state.index];
-    if (!frame) return;
+    if (!frame) {
+      image.removeAttribute("src");
+      image.hidden = true;
+      empty.hidden = false;
+      empty.textContent = state.activeRunId ? "Sampling started · waiting for the first TAEH3 frame" : "Enable for fast approximate sampling previews";
+      status.textContent = state.activeRunId && state.total ? `Step 0/${state.total}` : "";
+      position.textContent = "";
+      navigation.hidden = true;
+      node.setDirtyCanvas?.(true, true);
+      return;
+    }
     image.src = frame.image;
     image.hidden = false;
     empty.hidden = true;
@@ -87,7 +72,7 @@ function installPreview(node) {
   image.addEventListener("click", (event) => {
     event.stopPropagation();
     const frame = state.history[state.index];
-    openLightbox(frame?.image, status.textContent);
+    openImageLightbox(frame?.image, status.textContent || "Expanded TAEH3 sampling preview");
   });
   navigation.hidden = true;
   node.__h3studioPreviewElements = { state, render };
@@ -95,15 +80,25 @@ function installPreview(node) {
     serialize: false,
     hideOnZoom: false,
   });
-  widget.computeSize = (width) => [width, 230];
-  node.setSize?.([Math.max(node.size?.[0] || 360, 360), Math.max(node.size?.[1] || 360, 360)]);
+  widget.computeSize = (width) => [width, 350];
+  node.setSize?.([Math.max(node.size?.[0] || 420, 420), Math.max(node.size?.[1] || 480, 480)]);
 }
 
 api.addEventListener("h3studio-preview", ({ detail }) => {
   const node = app.graph?.getNodeById?.(Number(detail?.node_id));
   const elements = node?.__h3studioPreviewElements;
-  if (!elements || !detail?.image) return;
+  if (!elements) return;
   const runId = String(detail.run_id || "");
+  if (detail?.reset) {
+    elements.state.history = [];
+    elements.state.index = -1;
+    elements.state.runId = runId;
+    elements.state.activeRunId = runId;
+    elements.state.total = Number(detail.total) || 0;
+    elements.state.render();
+    return;
+  }
+  if (!detail?.image || (elements.state.activeRunId && elements.state.activeRunId !== runId)) return;
   if (elements.state.runId !== runId) {
     elements.state.history = [];
     elements.state.runId = runId;

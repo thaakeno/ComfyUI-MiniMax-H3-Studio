@@ -12,7 +12,7 @@ import io
 import logging
 import math
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 LOGGER = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ def _conv(torch, channels_in: int, channels_out: int, *, bias: bool = True):
     return torch.nn.Conv2d(channels_in, channels_out, 3, padding=1, bias=bias)
 
 
-def _block(torch, channels_in: int, channels_out: int):
+def _block(torch, channels_in: int, channels_out: int, *, use_midblock_gn: bool = False):
     class Block(torch.nn.Module):
         def __init__(self):
             super().__init__()
@@ -43,42 +43,59 @@ def _block(torch, channels_in: int, channels_out: int):
                 if channels_in != channels_out
                 else torch.nn.Identity()
             )
+            expanded = channels_in * 4
+            self.pool = (
+                torch.nn.Sequential(
+                    torch.nn.Conv2d(channels_in, expanded, 1, bias=False),
+                    torch.nn.GroupNorm(4, expanded),
+                    torch.nn.ReLU(inplace=True),
+                    torch.nn.Conv2d(expanded, channels_in, 1, bias=False),
+                )
+                if use_midblock_gn
+                else None
+            )
 
         def forward(self, value):
+            if self.pool is not None:
+                value = value + self.pool(value)
             return torch.nn.functional.relu(self.conv(value) + self.skip(value))
 
     return Block()
 
 
-def _decoder(torch):
+def _decoder(torch, state):
     class Clamp(torch.nn.Module):
         def forward(self, value):
             return torch.tanh(value / 3) * 3
+
+    def block(index: int, channels_in: int, channels_out: int):
+        use_midblock_gn = any(str(key).startswith(f"{index}.pool.") for key in state)
+        return _block(torch, channels_in, channels_out, use_midblock_gn=use_midblock_gn)
 
     return torch.nn.Sequential(
         Clamp(),
         _conv(torch, 24, 96),
         torch.nn.ReLU(inplace=True),
-        _block(torch, 96, 96),
-        _block(torch, 96, 96),
-        _block(torch, 96, 96),
+        block(3, 96, 96),
+        block(4, 96, 96),
+        block(5, 96, 96),
         torch.nn.Upsample(scale_factor=2),
         _conv(torch, 96, 96, bias=False),
-        _block(torch, 96, 96),
-        _block(torch, 96, 96),
-        _block(torch, 96, 96),
+        block(8, 96, 96),
+        block(9, 96, 96),
+        block(10, 96, 96),
         torch.nn.Upsample(scale_factor=2),
         _conv(torch, 96, 96, bias=False),
-        _block(torch, 96, 64),
-        _block(torch, 64, 64),
-        _block(torch, 64, 64),
+        block(13, 96, 64),
+        block(14, 64, 64),
+        block(15, 64, 64),
         torch.nn.Upsample(scale_factor=2),
         _conv(torch, 64, 64, bias=False),
-        _block(torch, 64, 64),
-        _block(torch, 64, 64),
+        block(18, 64, 64),
+        block(19, 64, 64),
         torch.nn.Upsample(scale_factor=2),
         _conv(torch, 64, 64, bias=False),
-        _block(torch, 64, 64),
+        block(22, 64, 64),
         _conv(torch, 64, 3),
     )
 
@@ -136,7 +153,7 @@ def _jpeg_data_url(torch, image, quality: int) -> tuple[str, int, int]:
     pixels = image[0].detach().float().clamp(0, 1).mul(255).byte().permute(1, 2, 0).cpu().numpy()
     pil_image = Image.fromarray(pixels, mode="RGB")
     buffer = io.BytesIO()
-    pil_image.save(buffer, format="JPEG", quality=quality, optimize=False)
+    pil_image.save(buffer, format="JPEG", quality=quality, subsampling=0, optimize=False)
     encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
     return f"data:image/jpeg;base64,{encoded}", pil_image.width, pil_image.height
 
@@ -150,26 +167,22 @@ class _PreviewWrapper:
     every: int
     decoder: Any = None
     run_serial: int = 0
+    _worker_lock: Any = field(default_factory=threading.Lock, repr=False)
+    _worker: Any = field(default=None, repr=False)
+    _pending: Any = field(default=None, repr=False)
 
     def _load(self, torch, device, dtype):
         if self.decoder is None:
             import comfy.utils
 
             state = comfy.utils.load_torch_file(self.checkpoint_path, safe_load=True)
-            decoder = _decoder(torch)
-            missing, unexpected = decoder.load_state_dict(state, strict=False)
-            if missing or unexpected:
-                raise ValueError(
-                    "The selected file is not the supported Kijai TAEH3 decoder "
-                    f"(missing={len(missing)}, unexpected={len(unexpected)})."
-                )
+            decoder = _decoder(torch, state)
+            decoder.load_state_dict(state, strict=True)
             self.decoder = decoder.eval()
         self.decoder.to(device=device, dtype=dtype)
         return self.decoder
 
     def _send(self, torch, step, x0, total_steps, latent_shapes, run_id):
-        if step % self.every != 0 and step + 1 < total_steps:
-            return
         latent = _limit_latent(torch, _first_h3_latent(torch, x0, latent_shapes), self.max_resolution)
         decoder = self._load(torch, latent.device, latent.dtype)
         with torch.inference_mode():
@@ -192,6 +205,39 @@ class _PreviewWrapper:
             server.client_id,
         )
 
+    def _worker_loop(self, torch):
+        while True:
+            with self._worker_lock:
+                pending = self._pending
+                self._pending = None
+                if pending is None:
+                    self._worker = None
+                    return
+            try:
+                self._send(torch, *pending)
+            except Exception as error:
+                LOGGER.warning("H3 Studio TAEH3 preview skipped: %s", error)
+
+    def _enqueue(self, torch, step, x0, total_steps, latent_shapes, run_id):
+        if step % self.every != 0 and step + 1 < total_steps:
+            return
+        snapshot = x0.detach().clone()
+        with self._worker_lock:
+            self._pending = (step, snapshot, total_steps, latent_shapes, run_id)
+            if self._worker is None or not self._worker.is_alive():
+                self._worker = threading.Thread(target=self._worker_loop, args=(torch,), daemon=True)
+                self._worker.start()
+
+    def _reset_frontend(self, total_steps: int, run_id: str):
+        from server import PromptServer
+
+        server = PromptServer.instance
+        server.send_sync(
+            "h3studio-preview",
+            {"node_id": self.node_id, "run_id": run_id, "total": int(total_steps), "reset": True},
+            server.client_id,
+        )
+
     def __call__(self, executor, *args, **kwargs):
         import torch
 
@@ -204,14 +250,19 @@ class _PreviewWrapper:
             callback_index = 5
             callback = positional[callback_index]
         latent_shapes = kwargs.get("latent_shapes", positional[8] if len(positional) > 8 else None)
+        total_steps = len(positional[3]) - 1 if len(positional) > 3 and hasattr(positional[3], "__len__") else 0
+        try:
+            self._reset_frontend(total_steps, run_id)
+        except Exception as error:
+            LOGGER.debug("H3 Studio preview reset event skipped: %s", error)
 
         def preview_callback(step, x0, x, total_steps):
-            try:
-                self._send(torch, step, x0, total_steps, latent_shapes, run_id)
-            except Exception as error:
-                LOGGER.warning("H3 Studio TAEH3 preview skipped: %s", error)
             if callback is not None:
                 callback(step, x0, x, total_steps)
+            try:
+                self._enqueue(torch, step, x0, total_steps, latent_shapes, run_id)
+            except Exception as error:
+                LOGGER.warning("H3 Studio TAEH3 preview enqueue skipped: %s", error)
 
         if callback_index is None:
             kwargs["callback"] = preview_callback
@@ -240,8 +291,8 @@ class H3StudioTAEH3Preview:
                 "model": ("MODEL",),
                 "enabled": ("BOOLEAN", {"default": False}),
                 "tiny_vae": (_vae_choices(), {"default": DEFAULT_TAEH3}),
-                "max_resolution": ("INT", {"default": 512, "min": 256, "max": 1024, "step": 64}),
-                "jpeg_quality": ("INT", {"default": 80, "min": 40, "max": 95, "step": 1}),
+                "max_resolution": ("INT", {"default": 768, "min": 256, "max": 1024, "step": 64}),
+                "jpeg_quality": ("INT", {"default": 90, "min": 40, "max": 95, "step": 1}),
                 "preview_every_n_steps": ("INT", {"default": 1, "min": 1, "max": 20, "step": 1}),
             },
             "hidden": {"unique_id": "UNIQUE_ID"},

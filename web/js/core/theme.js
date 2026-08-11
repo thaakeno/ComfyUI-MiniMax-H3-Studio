@@ -71,15 +71,16 @@ export function installTheme() {
     .h3s-resolution-preview { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; padding: 5px 7px; border-radius: 6px; color: var(--h3s-muted); background: var(--h3s-bg); font-size: 10px; }
     .h3s-reference-list { display: flex; flex-direction: column; gap: 6px; padding: 2px; border: 1px dashed transparent; border-radius: 7px; transition: border-color 120ms ease, background 120ms ease; }
     .h3s-reference-list.is-dragging { border-color: var(--h3s-accent); background: color-mix(in srgb, var(--h3s-accent) 8%, transparent); }
-    .h3s-reference-card { display: grid; grid-template-columns: 48px minmax(0,1fr); gap: 7px; padding: 6px; border: 1px solid var(--h3s-border); border-radius: 6px; background: var(--h3s-bg); }
+    .h3s-reference-card { display: grid; grid-template-columns: 64px minmax(0,1fr); align-items: start; gap: 7px; padding: 6px; border: 1px solid var(--h3s-border); border-radius: 6px; background: var(--h3s-bg); }
     .h3s-reference-card-auto { border-color: color-mix(in srgb, var(--h3s-accent) 45%, var(--h3s-border)); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--h3s-accent) 75%, transparent); }
-    .h3s-reference-thumb { position: relative; width: 48px; height: 48px; overflow: hidden; border-radius: 5px; background: var(--h3s-raised); }
-    .h3s-reference-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .h3s-reference-thumb { --h3s-reference-ratio: 1; position: relative; width: 64px; aspect-ratio: var(--h3s-reference-ratio); overflow: hidden; border-radius: 5px; background: var(--h3s-raised); }
+    .h3s-reference-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; cursor: zoom-in; }
     .h3s-thumb-placeholder { display: grid; place-items: center; width: 100%; height: 100%; color: var(--h3s-muted); font-size: 9px; font-weight: 750; letter-spacing: .08em; }
     .h3s-reference-index { position: absolute; left: 4px; top: 4px; padding: 2px 4px; border-radius: 4px; color: #07120f; background: var(--h3s-accent); font-size: 9px; font-weight: 800; }
     .h3s-reference-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
     .h3s-reference-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
     .h3s-reference-name { overflow: hidden; color: var(--h3s-text); font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .h3s-reference-source { color: var(--h3s-muted); font-size: 8px; font-variant-numeric: tabular-nums; }
     .h3s-reference-actions { display: flex; flex: none; gap: 3px; }
     .h3s-icon-button { display: inline-grid; place-items: center; width: 23px; height: 23px; padding: 0; border: 1px solid var(--h3s-border); border-radius: 5px; color: var(--h3s-muted); background: var(--h3s-surface); cursor: pointer; font: 600 11px/1 ui-sans-serif, system-ui; }
     .h3s-icon-button:hover { color: var(--h3s-text); border-color: color-mix(in srgb, var(--h3s-accent) 35%, var(--h3s-border)); }
@@ -106,8 +107,8 @@ export function installTheme() {
     .h3s-advanced-toggle:hover { color: var(--h3s-text); }
     .h3s-advanced-content[hidden] { display: none; }
     .h3s-warning { color: var(--h3s-warning); }
-    .h3s-live-preview { position: relative; display: grid; place-items: center; width: 100%; height: 220px; overflow: hidden; border: 1px solid rgba(255,255,255,.13); border-radius: 8px; background: #17191d; color: #9ca3af; font: 11px/1.4 ui-sans-serif, system-ui; }
-    .h3s-live-preview img { width: 100%; height: 100%; object-fit: contain; cursor: zoom-in; }
+    .h3s-live-preview { position: relative; display: grid; place-items: center; width: 100%; min-height: 260px; height: min(52vh, 520px); overflow: hidden; border: 1px solid rgba(255,255,255,.13); border-radius: 8px; background: #111317; color: #9ca3af; font: 11px/1.4 ui-sans-serif, system-ui; }
+    .h3s-live-preview img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; cursor: zoom-in; }
     .h3s-live-preview img:not([src]) { display: none; }
     .h3s-live-preview-empty { max-width: 220px; padding: 18px; text-align: center; }
     .h3s-live-preview-status { position: absolute; right: 7px; bottom: 7px; padding: 3px 7px; border-radius: 999px; background: rgba(0,0,0,.68); color: #e5e7eb; font-size: 9px; }

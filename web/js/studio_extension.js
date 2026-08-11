@@ -21,10 +21,12 @@ import {
 } from "./core/state.js";
 import { element, field, iconButton, numberControl, rangeControl, selectControl } from "./core/dom.js";
 import { STUDIO_PANEL_HEIGHT, initialStudioNodeSize, studioPanelSize } from "./core/layout.js";
+import { openImageLightbox } from "./core/lightbox.js";
 import { installTheme } from "./core/theme.js";
 import {
   chooseImageFiles,
   imageFilesFromTransfer,
+  mediaUrlForStorage,
   previewUrlForStorage,
   uploadImages,
 } from "./features/image_upload.js";
@@ -121,6 +123,15 @@ function sourcePreview(source) {
   const subfolder = typeof widgetValue === "object" ? widgetValue.subfolder || "" : "";
   const query = new URLSearchParams({ filename, type, subfolder, preview: "webp;90" });
   return `/view?${query.toString()}`;
+}
+
+function sourceMedia(source) {
+  const widgetValue = source?.widgets?.find((candidate) => String(candidate.name).toLowerCase() === "image")?.value;
+  const filename = typeof widgetValue === "object" ? widgetValue?.filename || widgetValue?.name : widgetValue;
+  if (!filename || typeof filename !== "string") return source?.imgs?.[0]?.src || source?.image?.src || "";
+  const type = typeof widgetValue === "object" ? widgetValue.type || "input" : "input";
+  const subfolder = typeof widgetValue === "object" ? widgetValue.subfolder || "" : "";
+  return `/view?${new URLSearchParams({ filename, type, subfolder }).toString()}`;
 }
 
 function persistentThumbnail(value) {
@@ -520,10 +531,29 @@ function referenceCard(node, state, reference, index, refresh) {
   const preview = reference.storage_name
     ? previewUrlForStorage(reference.storage_name)
     : sourcePreview(source) || reference.thumbnail;
+  const fullImage = reference.storage_name ? mediaUrlForStorage(reference.storage_name) : sourceMedia(source) || preview;
+  const ratio = Number(reference.width) > 0 && Number(reference.height) > 0
+    ? Number(reference.width) / Number(reference.height)
+    : null;
   const thumb = element("div", { className: "h3s-reference-thumb" }, [
-    preview ? element("img", { src: preview, alt: "" }) : element("span", { className: "h3s-thumb-placeholder", text: "IMG" }),
+    preview ? element("img", {
+      src: preview,
+      alt: `Preview of @Image${index + 1}`,
+      title: "Click to expand",
+      on: {
+        load: (event) => {
+          const naturalRatio = event.target.naturalWidth / Math.max(1, event.target.naturalHeight);
+          event.target.parentElement?.style.setProperty("--h3s-reference-ratio", String(ratio || naturalRatio));
+        },
+        click: (event) => {
+          event.stopPropagation();
+          openImageLightbox(fullImage, `${reference.filename} · @Image${index + 1}`);
+        },
+      },
+    }) : element("span", { className: "h3s-thumb-placeholder", text: "IMG" }),
     element("span", { className: "h3s-reference-index", text: `@Image${index + 1}` }),
   ]);
+  if (ratio) thumb.style.setProperty("--h3s-reference-ratio", String(ratio));
   const mutate = (patch) => {
     state.references[index] = { ...state.references[index], ...patch };
     if (node.__h3studioAutoChanges) delete node.__h3studioAutoChanges[index];
@@ -560,6 +590,9 @@ function referenceCard(node, state, reference, index, refresh) {
   const title = element("div", { className: "h3s-reference-top" }, [
     element("span", { className: "h3s-reference-name", text: reference.filename, title: reference.filename }), actions,
   ]);
+  const sourceDetails = Number(reference.width) > 0 && Number(reference.height) > 0
+    ? element("div", { className: "h3s-reference-source", text: `${reference.width} × ${reference.height} · ${(reference.width / reference.height).toFixed(3)}:1` })
+    : null;
   const role = selectControl(reference.role, ROLES, `Role for Image ${index + 1}`, (value) => mutate({ role: value, role_auto: value === "auto" }));
   const retentionHelp = {
     attribute_transfer: "Transfer only the assigned trait, such as clothing or style; do not copy unrelated source content.",
@@ -586,7 +619,7 @@ function referenceCard(node, state, reference, index, refresh) {
     : null;
   return element("article", { className: `h3s-reference-card${autoChange ? " h3s-reference-card-auto" : ""}` }, [
     thumb,
-    element("div", { className: "h3s-reference-body" }, [title, controls, roleHint, retentionHint, description].filter(Boolean)),
+    element("div", { className: "h3s-reference-body" }, [title, sourceDetails, controls, roleHint, retentionHint, description].filter(Boolean)),
   ]);
 }
 

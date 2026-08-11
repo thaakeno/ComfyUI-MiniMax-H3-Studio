@@ -531,7 +531,7 @@ def build_workflow():
                 socket("preview_every_n_steps", "INT", widget="preview_every_n_steps"),
             ],
             outputs=[output("model", "MODEL", [l_preview_sub])],
-            widgets=[False, "taeh3.safetensors", 512, 80, 1],
+            widgets=[False, "taeh3.safetensors", 768, 90, 1],
             color="#31475c",
             bgcolor="#202e3c",
         ),

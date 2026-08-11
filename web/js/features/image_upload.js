@@ -26,6 +26,12 @@ export function previewUrlForStorage(storageName) {
   return `/h3studio/thumbnail?${query.toString()}`;
 }
 
+export function mediaUrlForStorage(storageName) {
+  const { filename, subfolder, type } = parseStorageName(storageName);
+  if (!filename) return "";
+  return `/view?${new URLSearchParams({ filename, subfolder, type }).toString()}`;
+}
+
 export async function uploadImage(api, file, subfolder = "h3studio") {
   if (!(file instanceof File) || !String(file.type || "").startsWith("image/")) {
     throw new Error(`${file?.name || "Selected file"} is not a supported image.`);
