@@ -42,7 +42,7 @@ Auto selects the valid route from your requested mode and enabled references. Im
     </td>
     <td width="50%" valign="top">
       <h3>🧠 Analyze once, reuse the facts</h3>
-      Optional Qwen3-VL pixel analysis produces factual source records. Fingerprinted records persist with the workflow, while prompt-dependent reasoning stays separate. Detailed prompt expansion is deterministic and does not stage a second writer model.
+      Optional Qwen3-VL pixel analysis produces factual source records. A separate cached text-only Qwen pass enhances the prompt. The default reuses the same 4B checkpoint; 4B, 8B, and mixed analyzer/writer choices remain available.
     </td>
   </tr>
   <tr>
@@ -98,7 +98,7 @@ git log -1 --format='Updated H3 Studio %h · %s'
 | FL2VA and REF2VA diffusion models | `models/diffusion_models/` | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
 | MiniMax H3 32B conditioning encoder | `models/text_encoders/` | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
 | H3 video VAE | `models/vae/` | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
-| Qwen3-VL 4B analyzer, optional | `models/text_encoders/` | [Comfy-Org/Qwen3-VL](https://huggingface.co/Comfy-Org/Qwen3-VL) |
+| Qwen3-VL 4B/8B analyzer and prompt writer, optional | `models/text_encoders/` | [Comfy-Org/Qwen3-VL](https://huggingface.co/Comfy-Org/Qwen3-VL) |
 | LightX v0.1 LoRA, optional | `models/loras/` | [Kijai/MiniMax-H3_comfy](https://huggingface.co/Kijai/MiniMax-H3_comfy) |
 | TAEH3 approximate preview, optional | `models/vae_approx/` | [Kijai/MiniMax-H3-TAE](https://huggingface.co/Kijai/MiniMax-H3-TAE) |
 | PDD LoRA + heads, optional | `models/loras/`, `models/pdd_heads/` | [Mamad8 PDD](https://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8) |
@@ -129,6 +129,15 @@ The Director offers two explicit planning modes:
 
 The slider labels draft, recommended, extended, experimental, and extreme ranges and always shows the real aligned dimensions. Direct 2/4/8 MP generation is available for experimentation, but H3 Base is not a dedicated super-resolution model. Very large canvases can raise attention cost, decode time, RAM, VRAM, and failure risk without proportional detail gains.
 
+## Decode choices
+
+The Director exposes the decoder separately from sampling speed:
+
+- **Original H3 Video VAE:** the quality/default path. Choose 5, 9, 13, or 20 temporal frames; more candidates increase sampling and decoding work.
+- **T=1 Image VAE:** the fastest decode path. It samples and decodes one still latent through Mamad8's optional experimental image VAE, but may soften typography, hair, fine contours, and microtexture.
+
+Current ComfyUI automatically uses its upstream chunked H3 VAE path when available. That path sharply lowers peak decode memory with output-identical pixels, but upstream measurements show approximately unchanged decode speed. H3 Studio therefore reports it as a memory optimization and logs the actual decode duration instead of presenting it as a speed switch.
+
 ## Benchmark Lab
 
 Benchmark Lab is a guarded matrix, not a hard-coded A/B node. Two profiles still make a simple comparison; additional Base, LightX, or PDD profiles expand it. Resolution targets and repeats form the other axes.
@@ -143,7 +152,10 @@ H3 Studio keeps three things separate:
 
 1. **Factual pixel analysis** describes visible reference content and is cached by image fingerprint.
 2. **Reference ownership** assigns identity, character, style, composition, pose, outfit, object, environment, and other narrow responsibilities.
-3. **Prompt compilation** converts friendly `@ImageN` mentions into H3's model-facing `<Picture N>` form deterministically.
+3. **Generative prompt direction** uses the selected Qwen3-VL writer to create a compact production instruction. `Same as image analyzer` reuses one checkpoint; selecting another 4B/8B file intentionally stages two.
+4. **Prompt compilation** converts friendly `@ImageN` mentions into H3's model-facing `<Picture N>` form deterministically.
+
+The maintained workflow uses Auto Qwen3-VL 4B for analysis and `Same as image analyzer` for writing. Writer output is capped to a compact 120–220-word target instead of the former 900-token ceiling, validated for reference assignments and hard visible constraints, and cached independently from factual image analysis.
 
 Malformed or truncated analyzer JSON is repaired/retried and useful fallback text is preserved. Legacy mention forms such as `@Image 1` remain accepted, but saved state is canonicalized to `@Image1`.
 
