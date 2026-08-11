@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 from .acceleration import PDDBackendError, _load_model_lora
 
