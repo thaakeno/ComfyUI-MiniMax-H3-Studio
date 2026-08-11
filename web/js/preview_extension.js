@@ -8,6 +8,16 @@ const MAX_HISTORY = 40;
 function installPreview(node) {
   if (node.__h3studioPreviewInstalled || typeof node.addDOMWidget !== "function") return;
   node.__h3studioPreviewInstalled = true;
+  const labels = {
+    enabled: "Live previews",
+    tiny_vae: "Preview decoder",
+    max_resolution: "Preview resolution",
+    jpeg_quality: "Preview clarity",
+    preview_every_n_steps: "Update every N steps",
+  };
+  for (const control of node.widgets || []) {
+    if (labels[control.name]) control.label = labels[control.name];
+  }
   const root = document.createElement("div");
   root.className = "h3s-live-preview";
   const images = [document.createElement("img"), document.createElement("img")];

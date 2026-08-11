@@ -141,12 +141,13 @@ export function installTheme() {
     .h3s-advanced-content[hidden] { display: none; }
     .h3s-warning { color: var(--h3s-warning); }
     .h3s-state-warning { padding: 7px 8px; border: 1px solid color-mix(in srgb, var(--h3s-warning) 45%, var(--h3s-border)); border-radius: 6px; color: var(--h3s-warning); background: color-mix(in srgb, var(--h3s-warning) 7%, var(--h3s-surface)); font-size: 9px; line-height: 1.45; }
-    .h3s-live-preview { position: relative; display: grid; place-items: center; width: 100%; min-height: 360px; height: min(62vh, 640px); overflow: hidden; border: 1px solid rgba(255,255,255,.13); border-radius: 8px; background: #111317; color: #9ca3af; font: 11px/1.4 ui-sans-serif, system-ui; }
+    .h3s-live-preview { position: relative; display: grid; place-items: center; box-sizing: border-box; width: 100%; min-height: 0; max-height: 100%; height: 100%; overflow: hidden; border: 1px solid rgba(255,255,255,.13); border-radius: 8px; background: #111317; color: #9ca3af; font: 11px/1.4 ui-sans-serif, system-ui; }
     .h3s-live-preview-frame { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; opacity: 0; cursor: zoom-in; transition: opacity 110ms ease; pointer-events: none; }
     .h3s-live-preview-frame.is-visible { z-index: 1; opacity: 1; pointer-events: auto; }
     .h3s-live-preview-empty { max-width: 220px; padding: 18px; text-align: center; }
     .h3s-live-preview-status { position: absolute; z-index: 2; right: 7px; bottom: 7px; max-width: calc(100% - 100px); overflow: hidden; padding: 3px 7px; border-radius: 999px; background: rgba(0,0,0,.68); color: #e5e7eb; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
     .h3s-live-preview-navigation { position: absolute; z-index: 2; left: 7px; bottom: 7px; display: flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; background: rgba(0,0,0,.72); backdrop-filter: blur(6px); }
+    .h3s-live-preview-navigation[hidden] { display: none; }
     .h3s-live-preview-button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 999px; color: #f3f4f6; background: rgba(255,255,255,.1); cursor: pointer; font: 18px/1 ui-sans-serif, system-ui; }
     .h3s-live-preview-button:hover:not(:disabled) { background: rgba(52,211,181,.28); }
     .h3s-live-preview-button:disabled { cursor: default; opacity: .3; }
