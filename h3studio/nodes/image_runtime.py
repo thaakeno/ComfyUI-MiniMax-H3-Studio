@@ -1937,7 +1937,7 @@ class H3StudioSamplingPreset:
     """Small, safe image-mode sampling UI built from official H3 settings."""
 
     DESCRIPTION = (
-        "Applies explicit H3 image recipes: base RES Multistep profiles and the published LightX v0.1 "
+        "Applies explicit H3 image recipes: base RES Multistep profiles and Kijai's empirical LightX v0.1 "
         "four-step ER-SDE / SA-Solver profiles. The LoRA itself must be loaded upstream."
     )
 
@@ -1951,8 +1951,8 @@ class H3StudioSamplingPreset:
                     {
                         "default": "base quality | RES 20 steps",
                         "tooltip": (
-                            "Base profiles use RES Multistep. LightX v0.1 profiles reproduce Kijai's published "
-                            "four-step ER-SDE or SA-Solver recipe and expect the matching LightX LoRA upstream."
+                            "Base profiles use RES Multistep. LightX v0.1 profiles reproduce Kijai's empirical "
+                            "four-step ER-SDE or SA-Solver recipe and expect the matching resized rank-21 LoRA upstream."
                         ),
                     },
                 ),

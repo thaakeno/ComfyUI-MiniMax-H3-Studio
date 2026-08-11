@@ -6,6 +6,9 @@ from types import ModuleType
 import pytest
 
 from h3studio.acceleration import (
+    LIGHTX_LORA_FILENAME,
+    LIGHTX_MODEL_REPOSITORY,
+    LIGHTX_PROFILES,
     PDD_PROFILES,
     PDDBackendError,
     build_pdd_backend,
@@ -13,6 +16,27 @@ from h3studio.acceleration import (
     resolve_artifact,
     route_for_profile,
 )
+
+
+def test_lightx_profiles_pin_kijai_resized_artifact_and_empirical_strength() -> None:
+    assert set(LIGHTX_PROFILES) == {"lightx_er_sde_4", "lightx_sa_solver_4"}
+    assert {profile.sampler for profile in LIGHTX_PROFILES.values()} == {"er_sde", "sa_solver"}
+    for profile in LIGHTX_PROFILES.values():
+        assert profile.lora_filename == LIGHTX_LORA_FILENAME
+        assert profile.lora_strength == 0.75
+
+
+def test_lightx_resized_profile_never_falls_back_to_original_adapter() -> None:
+    original = "minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors"
+    profile = LIGHTX_PROFILES["lightx_er_sde_4"]
+    with pytest.raises(PDDBackendError, match="resized rank-21"):
+        resolve_artifact(
+            [original],
+            expected=profile.lora_filename,
+            tokens=profile.artifact_tokens,
+            kind="LightX v0.1 resized rank-21 LoRA",
+            repository=LIGHTX_MODEL_REPOSITORY,
+        )
 
 
 def test_pdd_profiles_keep_checkpoint_artifacts_paired() -> None:

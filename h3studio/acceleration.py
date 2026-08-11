@@ -30,6 +30,37 @@ class PDDBackendError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class LightXProfile:
+    """One exact Kijai adapter plus its empirical ComfyUI sampling recipe."""
+
+    key: str
+    runtime_profile: str
+    sampler: str
+    lora_filename: str = LIGHTX_LORA_FILENAME
+    lora_strength: float = 0.75
+
+    @property
+    def artifact_tokens(self) -> tuple[str, ...]:
+        # The repository also contains a much larger original conversion.  The
+        # two artifacts must not be substituted under the same profile.
+        return ("minimax", "h3", "lightx", "4step", "resized", "avg", "rank", "21", "bf16")
+
+
+LIGHTX_PROFILES: Mapping[str, LightXProfile] = {
+    "lightx_er_sde_4": LightXProfile(
+        key="lightx_er_sde_4",
+        runtime_profile="LightX v0.1 | ER-SDE 4 steps",
+        sampler="er_sde",
+    ),
+    "lightx_sa_solver_4": LightXProfile(
+        key="lightx_sa_solver_4",
+        runtime_profile="LightX v0.1 | SA-Solver 4 steps",
+        sampler="sa_solver",
+    ),
+}
+
+
+@dataclass(frozen=True, slots=True)
 class PDDProfile:
     key: str
     label: str
@@ -183,10 +214,11 @@ def _load_model_lora(
 
 
 def build_lightx_backend(model: Any, profile_key: str):
-    """Apply Kijai's actual LightX v0.1 adapter and its selected solver."""
+    """Apply Kijai's resized LightX adapter and empirical ComfyUI recipe."""
 
-    if profile_key not in {"lightx_er_sde_4", "lightx_sa_solver_4"}:
+    if profile_key not in LIGHTX_PROFILES:
         raise PDDBackendError(f"Unknown LightX profile: {profile_key}")
+    profile = LIGHTX_PROFILES[profile_key]
 
     import folder_paths
     import nodes
@@ -194,26 +226,25 @@ def build_lightx_backend(model: Any, profile_key: str):
     choices = folder_paths.get_filename_list("loras")
     lora_name = resolve_artifact(
         choices,
-        expected=LIGHTX_LORA_FILENAME,
-        tokens=("minimax", "h3", "lightx", "4step"),
-        kind="LightX v0.1 LoRA",
+        expected=profile.lora_filename,
+        tokens=profile.artifact_tokens,
+        kind="LightX v0.1 resized rank-21 LoRA",
         repository=LIGHTX_MODEL_REPOSITORY,
     )
-    strength = 0.8
     patched_model, patch_backend = _load_model_lora(
         model,
         lora_name,
-        strength,
+        profile.lora_strength,
         getattr(nodes, "NODE_CLASS_MAPPINGS", {}),
     )
 
     from .nodes.image_runtime import H3StudioSamplingPreset
 
-    runtime_profile = (
-        "LightX v0.1 | ER-SDE 4 steps" if profile_key == "lightx_er_sde_4" else "LightX v0.1 | SA-Solver 4 steps"
+    built_model, sampler, sigmas, base_info = H3StudioSamplingPreset().build(patched_model, profile.runtime_profile)
+    info = (
+        f"{base_info} | adapter=LightX v0.1 resized rank-21 | lora={lora_name} @ {profile.lora_strength:g} | "
+        f"recipe=Kijai empirical ComfyUI | lora_backend={patch_backend}"
     )
-    built_model, sampler, sigmas, base_info = H3StudioSamplingPreset().build(patched_model, runtime_profile)
-    info = f"{base_info} | adapter=LightX v0.1 | lora={lora_name} @ {strength:g} | lora_backend={patch_backend}"
     return built_model, sampler, sigmas, info
 
 

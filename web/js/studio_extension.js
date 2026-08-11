@@ -372,8 +372,8 @@ function samplingHelp(profile) {
     return "PDD checkpoint 900: Mamad8's later four-step REF2VA student and the recommended PDD starting point. H3 Studio loads its matching LoRA and heads automatically and uses ComfyUI's bypass adapter path to avoid slow quantized-weight merging.";
   }
   if (String(profile).startsWith("lightx")) {
-    if (String(profile).includes("sa_solver")) return "LightX SA-Solver 4: H3 Studio loads the real LightX v0.1 LoRA automatically. SA-Solver is a stochastic Adams multistep method: it reuses earlier model evaluations and can produce smoother, more stable structure at very low step counts. It is not deterministic.";
-    return "LightX ER-SDE 4: H3 Studio loads the real LightX v0.1 LoRA automatically. ER-SDE follows an extended reverse-time stochastic equation with a short-step solver; it can give a different texture/detail balance from SA-Solver. Neither is universally better, so compare them with the same prompt and seed.";
+    if (String(profile).includes("sa_solver")) return "LightX SA-Solver 4 (empirical): H3 Studio loads Kijai's resized rank-21 LightX v0.1 LoRA at the card's 0.75 strength. This is Kijai's tested ComfyUI recipe, not an official LightX guarantee. SA-Solver is stochastic and is not deterministic.";
+    return "LightX ER-SDE 4 (empirical): H3 Studio loads Kijai's resized rank-21 LightX v0.1 LoRA at the card's 0.75 strength. This is Kijai's tested ComfyUI recipe, not an official LightX guarantee. Compare it with SA-Solver using the same prompt and seed.";
   }
   if (profile === "base_balanced_12") return "Base Balanced: native H3 at 12 RES steps. No LoRA or external package; faster than Base Quality with a smaller quality margin.";
   return "Base Quality: native H3 at 20 RES steps. No LoRA or external package; slowest sampling but the safest quality baseline.";

@@ -47,8 +47,8 @@ export const RETENTION = Object.freeze([
 export const SAMPLING_PROFILES = Object.freeze([
   ["base_quality_20", "Base Quality · RES 20"],
   ["base_balanced_12", "Base Balanced · RES 12"],
-  ["lightx_er_sde_4", "LightX v0.1 · ER-SDE 4"],
-  ["lightx_sa_solver_4", "LightX v0.1 · SA-Solver 4"],
+  ["lightx_er_sde_4", "LightX v0.1 · ER-SDE 4 · empirical"],
+  ["lightx_sa_solver_4", "LightX v0.1 · SA-Solver 4 · empirical"],
   ["pdd_ref2va_4_600", "PDD REF2VA · 4-step · ckpt 600"],
   ["pdd_ref2va_4_900", "PDD REF2VA · 4-step · ckpt 900"],
 ]);
