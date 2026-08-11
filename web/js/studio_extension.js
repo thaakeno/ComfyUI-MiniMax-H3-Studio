@@ -28,6 +28,7 @@ import { openImageLightbox } from "./core/lightbox.js";
 import { installTheme } from "./core/theme.js";
 import {
   chooseImageFiles,
+  fullMediaUrl,
   imageFilesFromTransfer,
   mediaUrlForStorage,
   previewUrlForStorage,
@@ -176,7 +177,9 @@ for (const eventName of ["execution_error", "execution_interrupted"]) {
 function sourceMedia(source) {
   const widgetValue = source?.widgets?.find((candidate) => String(candidate.name).toLowerCase() === "image")?.value;
   const filename = typeof widgetValue === "object" ? widgetValue?.filename || widgetValue?.name : widgetValue;
-  if (!filename || typeof filename !== "string") return source?.imgs?.[0]?.src || source?.image?.src || "";
+  if (!filename || typeof filename !== "string") {
+    return fullMediaUrl(source?.imgs?.[0]?.src || source?.image?.src || "");
+  }
   const type = typeof widgetValue === "object" ? widgetValue.type || "input" : "input";
   const subfolder = typeof widgetValue === "object" ? widgetValue.subfolder || "" : "";
   return `/view?${new URLSearchParams({ filename, type, subfolder }).toString()}`;
@@ -631,7 +634,9 @@ function referenceCard(node, state, reference, index, refresh) {
   const preview = reference.storage_name
     ? previewUrlForStorage(reference.storage_name)
     : sourcePreview(source) || reference.thumbnail;
-  const fullImage = reference.storage_name ? mediaUrlForStorage(reference.storage_name) : sourceMedia(source) || preview;
+  const fullImage = reference.storage_name
+    ? mediaUrlForStorage(reference.storage_name)
+    : sourceMedia(source) || fullMediaUrl(reference.thumbnail || preview);
   const ratio = Number(reference.width) > 0 && Number(reference.height) > 0
     ? Number(reference.width) / Number(reference.height)
     : null;

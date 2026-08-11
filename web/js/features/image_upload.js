@@ -32,6 +32,26 @@ export function mediaUrlForStorage(storageName) {
   return `/view?${new URLSearchParams({ filename, subfolder, type }).toString()}`;
 }
 
+export function fullMediaUrl(value) {
+  const source = String(value || "").trim();
+  if (!source || /^(data:|blob:)/i.test(source)) return source;
+  try {
+    const url = new URL(source, globalThis.location?.origin || "http://localhost");
+    if (url.pathname === "/h3studio/thumbnail") {
+      const storage = url.searchParams.get("storage");
+      return storage ? mediaUrlForStorage(storage) : source;
+    }
+    if (url.pathname === "/view") {
+      url.searchParams.delete("preview");
+      url.searchParams.delete("size");
+      return `${url.pathname}?${url.searchParams.toString()}`;
+    }
+  } catch {
+    return source;
+  }
+  return source;
+}
+
 export async function uploadImage(api, file, subfolder = "h3studio") {
   if (!(file instanceof File) || !String(file.type || "").startsWith("image/")) {
     throw new Error(`${file?.name || "Selected file"} is not a supported image.`);

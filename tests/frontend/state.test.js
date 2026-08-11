@@ -45,7 +45,12 @@ import {
   initialStudioNodeSize,
   studioPanelSize,
 } from "../../web/js/core/layout.js";
-import { parseStorageName, previewUrlForStorage, storageNameFromUpload } from "../../web/js/features/image_upload.js";
+import {
+  fullMediaUrl,
+  parseStorageName,
+  previewUrlForStorage,
+  storageNameFromUpload,
+} from "../../web/js/features/image_upload.js";
 
 test("default state is an immediately usable text-to-image request", () => {
   const state = defaultState();
@@ -291,4 +296,15 @@ test("upload responses produce loadable storage names and previews", () => {
   assert.match(preview, /^\/h3studio\/thumbnail\?/);
   assert.match(preview, /storage=h3studio%2Fface.png/);
   assert.match(preview, /size=112/);
+});
+
+test("full image expansion removes preview transforms and resolves Studio thumbnails", () => {
+  assert.equal(
+    fullMediaUrl("/view?filename=source.png&type=input&subfolder=refs&preview=webp%3B90"),
+    "/view?filename=source.png&type=input&subfolder=refs",
+  );
+  assert.equal(
+    fullMediaUrl("/h3studio/thumbnail?storage=refs%2Fsource.png&size=112"),
+    "/view?filename=source.png&subfolder=refs&type=input",
+  );
 });
