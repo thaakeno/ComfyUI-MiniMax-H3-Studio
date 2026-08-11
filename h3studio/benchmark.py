@@ -9,12 +9,13 @@ PROFILE_CHOICES = {
     "Director selected profile": "director",
     "Base Quality - RES 20": "base_quality_20",
     "Base Balanced - RES 12": "base_balanced_12",
+    "LightX v1.0 - FL2V 8": "lightx_v1_fl2v_8",
     "LightX v0.1 - ER-SDE 4": "lightx_er_sde_4",
     "LightX v0.1 - SA-Solver 4": "lightx_sa_solver_4",
     "PDD REF2VA - 4-step - ckpt 600": "pdd_ref2va_4_600",
     "PDD REF2VA - 4-step - ckpt 900": "pdd_ref2va_4_900",
 }
-DEFAULT_MATRIX_PROFILES = ("base_quality_20", "lightx_er_sde_4")
+DEFAULT_MATRIX_PROFILES = ("base_quality_20", "lightx_v1_fl2v_8")
 DEFAULT_MATRIX_MEGAPIXELS = AB_MEGAPIXELS
 MAX_MATRIX_GENERATIONS = 128
 
@@ -132,7 +133,15 @@ def build_matrix_plan(
             f"This benchmark will run {generation_count} generations, above your {guard}-generation guard. "
             "Reduce the matrix or enable 'allow large matrix' after checking the count."
         )
-    if any(profile.startswith("pdd_ref2va_") for profile in resolved_profiles):
+
+    has_pdd = any(profile.startswith("pdd_ref2va_") for profile in resolved_profiles)
+    has_lightx = any(profile.startswith("lightx_") for profile in resolved_profiles)
+    if has_pdd and has_lightx:
+        raise ValueError(
+            "LightX and PDD cannot share one benchmark matrix: LightX uses FL2VA while PDD uses REF2VA. "
+            "Run separate Base-vs-LightX and Base-vs-PDD matrices so every cell uses the model route its adapter was trained for."
+        )
+    if has_pdd:
         if reference_count < 1:
             raise ValueError("PDD benchmark profiles require at least one reference image; no generation was started.")
         if selected_route != "ref2va":
@@ -140,6 +149,11 @@ def build_matrix_plan(
                 "PDD benchmark profiles require a REF2VA Director context. Select a PDD profile with Auto route "
                 "in the Director, or force REF2VA, then rebuild the context."
             )
+    if has_lightx and selected_route != "fl2va":
+        raise ValueError(
+            "LightX benchmark profiles require an FL2VA Director context. Use T2I or a single-source edit, then run "
+            "Base-vs-LightX separately from REF2VA/PDD benchmarks."
+        )
 
     variants: list[ABVariantSpec] = []
     cell = 0
@@ -198,6 +212,7 @@ def build_ab_variants(
 
     profile_a = resolve_profile(profile_a_choice, director_profile)
     profile_b = resolve_profile(profile_b_choice, director_profile)
+    has_pdd = profile_a.startswith("pdd_") or profile_b.startswith("pdd_")
     return build_matrix_plan(
         f"{profile_a},{profile_b}",
         ",".join(str(value) for value in AB_MEGAPIXELS),
@@ -207,8 +222,8 @@ def build_ab_variants(
         seed_step=seed_step,
         max_generations=6,
         allow_large_matrix=True,
-        reference_count=1 if profile_a.startswith("pdd_") or profile_b.startswith("pdd_") else 0,
-        selected_route="ref2va" if profile_a.startswith("pdd_") or profile_b.startswith("pdd_") else "fl2va",
+        reference_count=1 if has_pdd else 0,
+        selected_route="ref2va" if has_pdd else "fl2va",
     ).variants
 
 
@@ -216,8 +231,9 @@ def short_profile_label(profile: str, accelerated: bool | None = None) -> str:
     labels = {
         "base_quality_20": "No LoRA - Base RES20",
         "base_balanced_12": "No LoRA - Base RES12",
-        "lightx_er_sde_4": "LoRA - LightX ER-SDE 4",
-        "lightx_sa_solver_4": "LoRA - LightX SA-Solver 4",
+        "lightx_v1_fl2v_8": "LoRA - LightX v1.0 FL2V 8",
+        "lightx_er_sde_4": "LoRA - LightX v0.1 ER-SDE 4",
+        "lightx_sa_solver_4": "LoRA - LightX v0.1 SA-Solver 4",
         "pdd_ref2va_4_600": "LoRA - PDD REF2VA 4 - ckpt 600",
         "pdd_ref2va_4_900": "LoRA - PDD REF2VA 4 - ckpt 900",
     }
