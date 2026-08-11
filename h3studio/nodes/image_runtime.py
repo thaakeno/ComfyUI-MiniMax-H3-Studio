@@ -25,6 +25,8 @@ except Exception as exc:  # pragma: no cover - only reached outside ComfyUI
         "Update ComfyUI before loading this extension."
     ) from exc
 
+from ..vae_io import detect_vae_io
+
 
 CATEGORY = "H3 Studio/Runtime"
 CANVAS_MULTIPLE = 32
@@ -1310,7 +1312,11 @@ class H3StudioDecode:
             latent = latent.unbind()[0]
 
         latent_batch = int(latent.shape[0]) if hasattr(latent, "shape") and len(latent.shape) > 0 else 1
+        # Do not fork or tile H3 decode here. Current ComfyUI selects its
+        # output-identical chunked path inside VAE.decode when advertised by
+        # first_stage_model.comfy_has_chunked_io.
         images = vae.decode(latent)
+        vae_io = detect_vae_io(vae)
 
         profile_frames = max(
             1,
@@ -1368,7 +1374,7 @@ class H3StudioDecode:
         info = (
             f"{packet_note} Batch items={batch_size}; emitted images={decoded_frames}. "
             f"Preferred still(s) via {output_strategy}: {preferred_text}. "
-            "No requested profile frames were discarded before Single Image Output."
+            f"No requested profile frames were discarded before Single Image Output. VAE I/O: {vae_io.label}."
         )
         return images_out, decoded_frames, info, preferred_indices[0]
 

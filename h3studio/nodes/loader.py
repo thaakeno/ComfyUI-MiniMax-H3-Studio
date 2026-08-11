@@ -17,6 +17,8 @@ from typing import Any
 import folder_paths
 import nodes
 
+from ..vae_io import detect_vae_io
+
 try:
     import comfy.model_management
 except Exception:  # pragma: no cover - ComfyUI always provides this at runtime
@@ -274,12 +276,13 @@ class H3StudioBundle:
                 comfy.model_management.soft_empty_cache()
 
     def summary(self) -> str:
+        vae_io = detect_vae_io(self.video_vae)
         return (
             f"FL2VA={self.fl2va_name} | REF2VA={self.ref2va_name} | "
             f"CLIP={self.clip_name} | Video VAE={self.video_vae_name} | "
             f"Image VAE={self.image_vae_name or 'disabled'} | "
             f"Image analyzer={self.analyzer_name or 'disabled/missing'} | "
-            f"Prompt writer={self.prompt_writer_name or 'disabled/missing'}"
+            f"Prompt writer={self.prompt_writer_name or 'disabled/missing'} | VAE I/O={vae_io.label}"
         )
 
 
@@ -367,5 +370,10 @@ class H3StudioLoader:
             clip=clip,
             video_vae=vae,
         )
+        vae_io = detect_vae_io(vae)
+        if vae_io.chunked:
+            LOGGER.info("[H3 Studio] %s", vae_io.detail)
+        else:
+            LOGGER.warning("[H3 Studio] %s", vae_io.detail)
         LOGGER.info("\n[H3 Studio] Model bundle\n  %s", bundle.summary())
         return bundle, clip, vae, bundle.summary()
