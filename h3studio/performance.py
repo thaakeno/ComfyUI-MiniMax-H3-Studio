@@ -17,10 +17,11 @@ from __future__ import annotations
 import logging
 import os
 import time
-from contextlib import contextmanager
+from collections.abc import Iterable
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 LOGGER = logging.getLogger(__name__)
 GIB = 1024**3
@@ -126,10 +127,8 @@ def force_full_residency(patcher: Any, *, label: str, nonfatal: bool = True) -> 
     except Exception as exc:
         elapsed = time.perf_counter() - started
         is_oom = False
-        try:
+        with suppress(Exception):
             is_oom = bool(mm.is_oom(exc))
-        except Exception:
-            pass
         if not nonfatal and not is_oom:
             raise
         LOGGER.warning(
@@ -138,10 +137,8 @@ def force_full_residency(patcher: Any, *, label: str, nonfatal: bool = True) -> 
             elapsed,
             exc,
         )
-        try:
+        with suppress(Exception):
             mm.soft_empty_cache()
-        except Exception:
-            pass
         return ResidencyResult(
             label,
             "dynamic-fallback",
