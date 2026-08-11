@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from h3studio.acceleration import PDDBackendError
+from h3studio.acceleration import PDDBackendError, _restore_stacked_bypass_injections
 from h3studio.lora_stack import (
     MAX_CUSTOM_LORAS,
     CustomLoraSpec,
@@ -70,3 +70,21 @@ def test_acceleration_lora_cannot_be_stacked_twice() -> None:
             specs,
             reserved_artifacts=("lightx.safetensors",),
         )
+
+
+def test_bypass_injections_are_additive_instead_of_last_lora_wins() -> None:
+    class FakePatcher:
+        def __init__(self):
+            self.injections = {"bypass_lora": ["custom-new"]}
+
+        def get_injections(self, key):
+            return self.injections.get(key)
+
+        def set_injections(self, key, value):
+            self.injections[key] = list(value)
+
+    patcher = FakePatcher()
+    count = _restore_stacked_bypass_injections(patcher, ("lightx", "style-a"))
+
+    assert count == 3
+    assert patcher.injections["bypass_lora"] == ["lightx", "style-a", "custom-new"]
