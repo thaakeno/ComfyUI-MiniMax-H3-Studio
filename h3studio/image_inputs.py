@@ -2,10 +2,31 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from .constants import MAX_REFERENCE_IMAGES
 from .references import clean_filename, clean_storage_name
+
+
+def image_metadata(image: Any) -> tuple[int | None, int | None, str]:
+    """Return stable dimensions and a content fingerprint for a ComfyUI image tensor."""
+
+    shape = tuple(getattr(image, "shape", ()))
+    height = int(shape[-3]) if len(shape) >= 3 and int(shape[-3]) > 0 else None
+    width = int(shape[-2]) if len(shape) >= 2 and int(shape[-2]) > 0 else None
+    try:
+        value = image.detach().to(device="cpu").contiguous()
+        try:
+            payload = value.numpy().tobytes()
+        except (TypeError, RuntimeError):
+            payload = value.float().numpy().tobytes()
+        fingerprint = hashlib.blake2b(payload, digest_size=16).hexdigest()
+    except (AttributeError, RuntimeError, TypeError, ValueError):
+        pointer = getattr(image, "data_ptr", None)
+        identity = pointer() if callable(pointer) else id(image)
+        fingerprint = f"opaque:{type(image).__name__}:{identity}"
+    return width, height, fingerprint
 
 
 def load_uploaded_image(storage_name: str, ordinal: int) -> Any:

@@ -54,6 +54,11 @@ test("state round-trips without losing reference metadata", () => {
     role: "identity",
     retention: "fully_preserved",
     description: "The exact person",
+    width: 1080,
+    height: 1920,
+    fingerprint: "blake2-person",
+    thumbnail: "/h3studio/thumbnail?storage=face.png",
+    tags: ["visually_analyzed", "role_origin:vision"],
     source_node_id: "42",
     source_slot: 0,
   }];
@@ -62,6 +67,22 @@ test("state round-trips without losing reference metadata", () => {
   assert.equal(restored.references[0].filename, "face.png");
   assert.equal(restored.references[0].role, "identity");
   assert.equal(restored.references[0].retention, "fully_preserved");
+  assert.deepEqual(
+    {
+      width: restored.references[0].width,
+      height: restored.references[0].height,
+      fingerprint: restored.references[0].fingerprint,
+      thumbnail: restored.references[0].thumbnail,
+      tags: restored.references[0].tags,
+    },
+    {
+      width: 1080,
+      height: 1920,
+      fingerprint: "blake2-person",
+      thumbnail: "/h3studio/thumbnail?storage=face.png",
+      tags: ["visually_analyzed", "role_origin:vision"],
+    },
+  );
 });
 
 test("schema one settings migrate into their typed sections", () => {
@@ -131,6 +152,28 @@ test("prompt inference updates auto-managed role and retention but preserves man
   assert.deepEqual(changes[0], { role: "face", retention: "fully_preserved" });
   assert.equal(state.references[1].role, "style");
   assert.equal(state.references[1].retention, "reference_only");
+});
+
+test("reference inference does not discard content identity or preview metadata", () => {
+  const value = defaultState();
+  value.references = [{
+    filename: "source.png",
+    role: "auto",
+    role_auto: true,
+    retention_auto: true,
+    width: 720,
+    height: 1280,
+    fingerprint: "pixels-123",
+    thumbnail: "/view?filename=source.png",
+    tags: ["visually_analyzed"],
+  }];
+  const { state } = applyReferenceInferences(value, ["character"], ["fully_preserved"], ["Visible person"]);
+
+  assert.equal(state.references[0].width, 720);
+  assert.equal(state.references[0].height, 1280);
+  assert.equal(state.references[0].fingerprint, "pixels-123");
+  assert.equal(state.references[0].thumbnail, "/view?filename=source.png");
+  assert.deepEqual(state.references[0].tags, ["visually_analyzed"]);
 });
 
 test("mention rewriting changes only actual friendly image references", () => {

@@ -147,6 +147,11 @@ export function normalizeReference(value, ordinal) {
     description: String(source.description || ""),
     description_auto: source.description_auto == null ? !String(source.description || "").trim() : source.description_auto === true,
     enabled: source.enabled !== false,
+    width: Number.isFinite(Number(source.width)) && Number(source.width) > 0 ? Math.round(Number(source.width)) : null,
+    height: Number.isFinite(Number(source.height)) && Number(source.height) > 0 ? Math.round(Number(source.height)) : null,
+    fingerprint: String(source.fingerprint || "").trim() || null,
+    thumbnail: String(source.thumbnail || "").trim(),
+    tags: Array.isArray(source.tags) ? [...new Set(source.tags.map((tag) => String(tag).trim()).filter(Boolean))] : [],
     source_node_id: source.source_node_id == null ? null : String(source.source_node_id),
     source_slot: Math.max(0, Number(source.source_slot) || 0),
   };

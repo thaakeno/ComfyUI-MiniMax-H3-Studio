@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import re
@@ -14,6 +13,7 @@ from dataclasses import replace
 from typing import Any
 
 from ..constants import REFERENCE_ROLES
+from ..image_inputs import image_metadata
 from ..references import ReferenceImage, mention_ordinals
 
 LOGGER = logging.getLogger(__name__)
@@ -49,27 +49,14 @@ For a named style, retain its canonical name and translate it into concrete trai
 Write connected production prose, not tag salad. Do not add audio, soundscape, music, motion, or video instructions. Output compact valid JSON only and silently check every @Image tag and requested constraint before answering."""
 
 
-def _tensor_fingerprint(image: Any) -> str:
-    try:
-        value = image.detach().to(device="cpu").contiguous()
-        try:
-            payload = value.numpy().tobytes()
-        except (TypeError, RuntimeError):
-            payload = value.float().numpy().tobytes()
-        return hashlib.blake2b(payload, digest_size=16).hexdigest()
-    except (AttributeError, RuntimeError, TypeError, ValueError):
-        pointer = getattr(image, "data_ptr", None)
-        identity = pointer() if callable(pointer) else id(image)
-        return f"opaque:{type(image).__name__}:{identity}"
-
-
 def _image_key(reference: ReferenceImage, image: Any) -> tuple[Any, ...]:
     shape = tuple(getattr(image, "shape", ()))
+    fingerprint = image_metadata(image)[2]
     if reference.fingerprint:
-        return "declared", reference.fingerprint, _tensor_fingerprint(image), shape
+        return "declared", reference.fingerprint, fingerprint, shape
     if reference.storage_name:
-        return "storage", reference.storage_name, _tensor_fingerprint(image), shape
-    return "pixels", reference.filename, _tensor_fingerprint(image), shape
+        return "storage", reference.storage_name, fingerprint, shape
+    return "pixels", reference.filename, fingerprint, shape
 
 
 def _analysis_cache_key(identity: str, max_image_edge: int, reference: ReferenceImage, image: Any) -> tuple[Any, ...]:

@@ -22,7 +22,7 @@ from ..constants import (
     SAMPLING_PROFILES,
 )
 from ..context import H3StudioContext, H3StudioGeneration
-from ..image_inputs import collect_images
+from ..image_inputs import collect_images, image_metadata
 from ..prompting.compiler import PromptCompiler
 from ..prompting.vlm import compile_with_optional_vlm
 from ..references import ReferenceImage, stable_reference_id
@@ -107,21 +107,41 @@ def _state_from_widgets(
     for ordinal, filename in enumerate(filenames, start=1):
         existing = existing_by_ordinal.get(ordinal)
         storage_name = storage_names[ordinal - 1] if ordinal <= len(storage_names) else None
+        width, height, fingerprint = image_metadata(images[ordinal - 1])
         role = str(kwargs.get(f"role_{ordinal}") or (existing.role if existing else "auto"))
         retention = str(
             kwargs.get(f"retention_{ordinal}") or (existing.retention if existing else "attribute_transfer")
         )
         description = str(kwargs.get(f"description_{ordinal}") or (existing.description if existing else ""))
+        content_changed = bool(existing and existing.fingerprint and existing.fingerprint != fingerprint)
+        if content_changed and existing.description_auto:
+            description = ""
+        if content_changed and "role_origin:vision" in existing.tags:
+            role = "auto"
+        tags = existing.tags if existing else ()
+        if content_changed:
+            tags = tuple(
+                tag
+                for tag in tags
+                if tag != "visually_analyzed" and not tag.startswith(("role_origin:", "retention_origin:"))
+            )
         references.append(
             ReferenceImage(
                 id=existing.id if existing else stable_reference_id(filename, ordinal),
                 filename=filename,
                 ordinal=ordinal,
-                storage_name=storage_name,
+                storage_name=storage_name or (existing.storage_name if existing and existing.filename == filename else None),
                 role=role if role in REFERENCE_ROLES else "auto",
                 retention=retention,
                 description=description,
-                enabled=True,
+                enabled=existing.enabled if existing else True,
+                source_node_id=existing.source_node_id if existing else None,
+                source_slot=existing.source_slot if existing else 0,
+                width=width,
+                height=height,
+                fingerprint=fingerprint,
+                thumbnail=existing.thumbnail if existing else None,
+                tags=tags,
                 role_auto=existing.role_auto if existing else role == "auto",
                 retention_auto=existing.retention_auto if existing else role == "auto",
                 description_auto=existing.description_auto if existing else not description.strip(),

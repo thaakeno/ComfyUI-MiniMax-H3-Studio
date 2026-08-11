@@ -31,6 +31,26 @@ def test_reference_round_trip() -> None:
     assert restored.references[0].description == "a woman"
 
 
+def test_reference_content_identity_and_thumbnail_round_trip() -> None:
+    reference = ReferenceImage(
+        "ref",
+        "portrait.png",
+        1,
+        width=1080,
+        height=1920,
+        fingerprint="pixels-abc",
+        thumbnail="/view?filename=portrait.png",
+        tags=("visually_analyzed", "role_origin:vision"),
+    )
+    restored = StudioState.from_json(StudioState(references=(reference,)).to_json()).references[0]
+
+    assert restored.width == 1080
+    assert restored.height == 1920
+    assert restored.fingerprint == "pixels-abc"
+    assert restored.thumbnail == "/view?filename=portrait.png"
+    assert restored.tags == ("visually_analyzed", "role_origin:vision")
+
+
 def test_uploaded_reference_storage_round_trip() -> None:
     state = StudioState(
         references=(ReferenceImage("ref", "portrait.png", 1, storage_name="h3studio/portrait.png"),),

@@ -123,6 +123,11 @@ function sourcePreview(source) {
   return `/view?${query.toString()}`;
 }
 
+function persistentThumbnail(value) {
+  const url = String(value || "").trim();
+  return url.startsWith("/") ? url : "";
+}
+
 function normalizedLinks(node) {
   const raw = Array.isArray(node.properties?.[LINKS_PROPERTY]) ? node.properties[LINKS_PROPERTY] : [];
   const seen = new Set();
@@ -158,17 +163,25 @@ function referenceForLink(previous, link, ordinal) {
   );
   const byOrdinal = previous.references[ordinal - 1];
   const inherited = bySource || byOrdinal || {};
+  const sameSource = Boolean(bySource);
+  const liveThumbnail = persistentThumbnail(sourcePreview(sourceNode(link)));
   return {
+    ...inherited,
     id: inherited.id || `node_${link.source_id}_${link.source_slot}`,
     filename: sourceFilename(sourceNode(link), ordinal),
     storage_name: "",
+    thumbnail: liveThumbnail || (sameSource ? inherited.thumbnail || "" : ""),
+    width: sameSource ? inherited.width ?? null : null,
+    height: sameSource ? inherited.height ?? null : null,
+    fingerprint: sameSource ? inherited.fingerprint ?? null : null,
+    tags: sameSource ? inherited.tags || [] : [],
     ordinal,
     role: inherited.role || "auto",
     retention: inherited.retention || "attribute_transfer",
     role_auto: inherited.role_auto ?? (inherited.role || "auto") === "auto",
     retention_auto: inherited.retention_auto ?? (inherited.role || "auto") === "auto",
-    description: inherited.description || "",
-    description_auto: inherited.description_auto ?? !String(inherited.description || "").trim(),
+    description: sameSource ? inherited.description || "" : "",
+    description_auto: sameSource ? inherited.description_auto ?? !String(inherited.description || "").trim() : true,
     enabled: true,
     source_node_id: String(link.source_id),
     source_slot: link.source_slot,
@@ -504,7 +517,9 @@ function referenceCard(node, state, reference, index, refresh) {
       && Number(candidate.source_slot) === Number(reference.source_slot || 0),
   );
   const source = sourceNode(link);
-  const preview = reference.storage_name ? previewUrlForStorage(reference.storage_name) : sourcePreview(source);
+  const preview = reference.storage_name
+    ? previewUrlForStorage(reference.storage_name)
+    : sourcePreview(source) || reference.thumbnail;
   const thumb = element("div", { className: "h3s-reference-thumb" }, [
     preview ? element("img", { src: preview, alt: "" }) : element("span", { className: "h3s-thumb-placeholder", text: "IMG" }),
     element("span", { className: "h3s-reference-index", text: `@Image${index + 1}` }),
@@ -598,6 +613,7 @@ async function addImages(node, state, refresh, providedFiles = null) {
         id: `upload_${globalThis.crypto?.randomUUID?.() || `${Date.now()}_${index}`}`,
         filename: uploaded.filename,
         storage_name: uploaded.storage_name,
+        thumbnail: previewUrlForStorage(uploaded.storage_name),
         ordinal: state.references.length + 1,
         role: "auto",
         retention: "attribute_transfer",

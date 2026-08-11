@@ -83,6 +83,7 @@ class ReferenceImage:
     width: int | None = None
     height: int | None = None
     fingerprint: str | None = None
+    thumbnail: str | None = None
     tags: tuple[str, ...] = field(default_factory=tuple)
     role_auto: bool = False
     retention_auto: bool = False
@@ -128,7 +129,7 @@ class ReferenceImage:
         }
         if self.storage_name:
             payload["storage_name"] = self.storage_name
-        for key in ("source_node_id", "width", "height", "fingerprint"):
+        for key in ("source_node_id", "width", "height", "fingerprint", "thumbnail"):
             value = getattr(self, key)
             if value is not None:
                 payload[key] = value
@@ -159,6 +160,7 @@ class ReferenceImage:
             width=_optional_positive_int(value.get("width")),
             height=_optional_positive_int(value.get("height")),
             fingerprint=_optional_string(value.get("fingerprint")),
+            thumbnail=_optional_string(value.get("thumbnail")),
             tags=tags,
             role_auto=bool(value.get("role_auto", canonical_role(value.get("role")) == "auto")),
             retention_auto=bool(value.get("retention_auto", canonical_role(value.get("role")) == "auto")),
