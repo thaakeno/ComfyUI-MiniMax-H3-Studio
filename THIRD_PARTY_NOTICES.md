@@ -38,6 +38,16 @@ https://github.com/madebyollin/taehv
 
 No ComfyUI-KJNodes source code is copied into this MIT-licensed repository.
 
+## Optional LightX2V acceleration
+
+The official MiniMax-H3 Turbo v1.0 adapters are distributed separately by LightX2V under the terms published with their model repository:
+https://huggingface.co/lightx2v/Minimax-h3-Turbo
+
+H3 Studio does not bundle those weights. Its v1.0 ComfyUI profile resolves the external FL2V adapter by exact filename and applies it through ComfyUI's LoRA loading surface. LightX2V's implementation and model artifacts remain separate works under their own published terms.
+
+The older v0.1 resized rank-21 ComfyUI adapter remains a separate Kijai artifact and is also not bundled:
+https://huggingface.co/Kijai/MiniMax-H3_comfy
+
 ## Optional Mamad8 PDD backend
 
 The optional REF2VA PDD profiles interoperate with `mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8`, distributed under GPL-3.0:
