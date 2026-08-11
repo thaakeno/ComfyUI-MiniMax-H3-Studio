@@ -139,7 +139,7 @@ def test_native_analyzer_uses_pixels_and_returns_card_descriptions() -> None:
     assert "black eyeglass frames" in analyzed[1].description
     assert "@Image1" in enhanced
     assert "@Image2" in enhanced
-    assert "smile visibly" in enhanced
+    assert "look to the right" in enhanced
     assert "2 actual reference image" in note
     compiled = PromptCompiler().compile(
         StudioState(
@@ -149,7 +149,7 @@ def test_native_analyzer_uses_pixels_and_returns_card_descriptions() -> None:
     )
     assert compiled.references[0].role == "character"
     assert compiled.references[1].role == "object"
-    assert "smile visibly" in compiled.native_prompt
+    assert "look to the right" in compiled.native_prompt
 
 
 def test_inference_tensor_without_version_counter_is_cacheable() -> None:
@@ -170,8 +170,7 @@ def test_inference_tensor_without_version_counter_is_cacheable() -> None:
 def test_seed_only_queue_reuses_analysis_across_recreated_runtime_objects(monkeypatch) -> None:
     import h3studio.prompting.comfy_analyzer as analyzer_module
 
-    monkeypatch.setattr(analyzer_module, "_CACHE_KEY", None)
-    monkeypatch.setattr(analyzer_module, "_CACHE_VALUE", None)
+    analyzer_module._ANALYSIS_CACHE.clear()
     references = (
         ReferenceImage("one", "person.jpg", 1, storage_name="h3studio/person.jpg"),
         ReferenceImage("two", "glasses.png", 2, storage_name="h3studio/glasses.png"),
@@ -205,8 +204,7 @@ def test_seed_only_queue_reuses_analysis_across_recreated_runtime_objects(monkey
 def test_analyzer_rewrite_that_drops_an_image_falls_back_to_original(monkeypatch) -> None:
     import h3studio.prompting.comfy_analyzer as analyzer_module
 
-    monkeypatch.setattr(analyzer_module, "_CACHE_KEY", None)
-    monkeypatch.setattr(analyzer_module, "_CACHE_VALUE", None)
+    analyzer_module._ANALYSIS_CACHE.clear()
     clip = FakeClip()
     clip.decode = lambda *_args, **_kwargs: (
         """{"instruction":"Only use @Image1.","references":[
@@ -225,8 +223,7 @@ def test_analyzer_rewrite_that_drops_an_image_falls_back_to_original(monkeypatch
 def test_native_analyzer_detail_keeps_original_image_objects(monkeypatch) -> None:
     import h3studio.prompting.comfy_analyzer as analyzer_module
 
-    monkeypatch.setattr(analyzer_module, "_CACHE_KEY", None)
-    monkeypatch.setattr(analyzer_module, "_CACHE_VALUE", None)
+    analyzer_module._ANALYSIS_CACHE.clear()
     clip = FakeClip()
     image = FakeImage(909)
     reference = ReferenceImage("one", "one.png", 1)
@@ -236,27 +233,23 @@ def test_native_analyzer_detail_keeps_original_image_objects(monkeypatch) -> Non
     assert clip.seen_images == [image]
 
 
-def test_analyzer_requires_named_styles_to_be_expanded_into_rendering_traits(monkeypatch) -> None:
+def test_factual_analyzer_instruction_is_independent_of_named_style_request(monkeypatch) -> None:
     import h3studio.prompting.comfy_analyzer as analyzer_module
 
-    monkeypatch.setattr(analyzer_module, "_CACHE_KEY", None)
-    monkeypatch.setattr(analyzer_module, "_CACHE_VALUE", None)
+    analyzer_module._ANALYSIS_CACHE.clear()
     clip = FakeClip()
     reference = ReferenceImage("one", "person.png", 1)
 
     analyze_references(clip, "Turn @Image1 into JoJo anime style", (reference,), (FakeImage(111),))
 
-    assert "Translate every user-requested named style" in clip.instruction
-    assert "JoJo's Bizarre Adventure-inspired anime" in clip.instruction
-    assert "angular facial anatomy" in clip.instruction
-    assert "replace the source photograph's rendering medium" in clip.instruction
+    assert "Turn @Image1 into JoJo anime style" not in clip.instruction
+    assert "Describe only immutable visible source facts" in clip.instruction
 
 
-def test_prompt_or_uploaded_image_change_invalidates_analysis(monkeypatch) -> None:
+def test_prompt_change_reuses_facts_but_uploaded_image_change_invalidates_analysis(monkeypatch) -> None:
     import h3studio.prompting.comfy_analyzer as analyzer_module
 
-    monkeypatch.setattr(analyzer_module, "_CACHE_KEY", None)
-    monkeypatch.setattr(analyzer_module, "_CACHE_VALUE", None)
+    analyzer_module._ANALYSIS_CACHE.clear()
     clip = FakeClip()
     first = (
         ReferenceImage("one", "person.jpg", 1, storage_name="h3studio/person.jpg"),
@@ -268,18 +261,36 @@ def test_prompt_or_uploaded_image_change_invalidates_analysis(monkeypatch) -> No
     )
     base = "Show @Image1 looking to the right with glasses from @Image2"
 
-    analyze_references(clip, base, first, (FakeImage(1), FakeImage(2)), analyzer_name="qwen")
-    analyze_references(clip, f"{base} outdoors", first, (FakeImage(3), FakeImage(4)), analyzer_name="qwen")
-    analyze_references(clip, f"{base} outdoors", changed, (FakeImage(5), FakeImage(6)), analyzer_name="qwen")
+    analyze_references(
+        clip,
+        base,
+        first,
+        (FakeStableImage(1, b"person"), FakeStableImage(2, b"glasses")),
+        analyzer_name="qwen",
+    )
+    analyze_references(
+        clip,
+        f"{base} outdoors",
+        first,
+        (FakeStableImage(3, b"person"), FakeStableImage(4, b"glasses")),
+        analyzer_name="qwen",
+    )
+    analyze_references(
+        clip,
+        f"{base} outdoors",
+        changed,
+        (FakeStableImage(5, b"person"), FakeStableImage(6, b"new glasses")),
+        analyzer_name="qwen",
+    )
 
-    assert clip.generate_calls == 3
+    assert clip.generate_calls == 2
+    assert len(clip.seen_images) == 1
 
 
 def test_analyzer_detail_change_invalidates_analysis(monkeypatch) -> None:
     import h3studio.prompting.comfy_analyzer as analyzer_module
 
-    monkeypatch.setattr(analyzer_module, "_CACHE_KEY", None)
-    monkeypatch.setattr(analyzer_module, "_CACHE_VALUE", None)
+    analyzer_module._ANALYSIS_CACHE.clear()
     clip = FakeClip()
     references = (ReferenceImage("one", "person.jpg", 1, storage_name="h3studio/person.jpg"),)
     images = (FakeStableImage(701, b"person pixels"),)
@@ -291,11 +302,24 @@ def test_analyzer_detail_change_invalidates_analysis(monkeypatch) -> None:
     assert clip.generate_calls == 2
 
 
+def test_alternating_reference_sets_remain_cached(monkeypatch) -> None:
+    import h3studio.prompting.comfy_analyzer as analyzer_module
+
+    analyzer_module._ANALYSIS_CACHE.clear()
+    clip = FakeClip()
+    first = (ReferenceImage("one", "person.jpg", 1, storage_name="h3studio/person.jpg"),)
+    second = (ReferenceImage("two", "other.jpg", 1, storage_name="h3studio/other.jpg"),)
+    analyze_references(clip, "Use @Image1", first, (FakeStableImage(1, b"person"),), analyzer_name="qwen")
+    analyze_references(clip, "Use @Image1", second, (FakeStableImage(2, b"other"),), analyzer_name="qwen")
+    analyze_references(clip, "Change the prompt for @Image1", first, (FakeStableImage(3, b"person"),), analyzer_name="qwen")
+
+    assert clip.generate_calls == 2
+
+
 def test_two_pass_writer_is_text_only_validated_and_cached(monkeypatch) -> None:
     import h3studio.prompting.comfy_analyzer as analyzer_module
 
-    monkeypatch.setattr(analyzer_module, "_CACHE_KEY", None)
-    monkeypatch.setattr(analyzer_module, "_CACHE_VALUE", None)
+    analyzer_module._ANALYSIS_CACHE.clear()
     monkeypatch.setattr(analyzer_module, "_WRITER_CACHE_KEY", None)
     monkeypatch.setattr(analyzer_module, "_WRITER_CACHE_VALUE", None)
     analyzer = FakeClip()

@@ -8,6 +8,7 @@ import logging
 import re
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Sequence
 from dataclasses import replace
 from typing import Any
@@ -17,24 +18,22 @@ from ..references import ReferenceImage, mention_ordinals
 
 LOGGER = logging.getLogger(__name__)
 _CACHE_LOCK = threading.RLock()
-_CACHE_KEY: tuple[Any, ...] | None = None
-_CACHE_VALUE: tuple[dict[str, Any], str] | None = None
+_ANALYSIS_SCHEMA_VERSION = 1
+_ANALYSIS_CACHE_LIMIT = 64
+_ANALYSIS_CACHE: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
 _WRITER_CACHE_KEY: tuple[Any, ...] | None = None
 _WRITER_CACHE_VALUE: tuple[str, str] | None = None
 _RETENTIONS = {"attribute_transfer", "fully_preserved", "partially_preserved", "reference_only"}
 
-SYSTEM_INSTRUCTION = """You are the visual reference analyst for MiniMax H3 image generation.
-Study every attached image pixel-by-pixel and use the user's exact request only to decide what each source contributes.
+SYSTEM_INSTRUCTION = """You are the factual visual reference analyst for MiniMax H3 image generation.
+Study every attached image pixel-by-pixel. Do not infer how a later creative prompt might use it.
 Return JSON only with this exact shape:
-{"instruction":"one improved image-generation instruction using @Image1 tags","references":[{"ordinal":1,"role":"character","retention":"fully_preserved","description":"concise factual source-pixel observation"}]}
+{"references":[{"ordinal":1,"role":"character","description":"concise factual source-pixel observation"}]}
 
 Allowed roles: auto, identity, face, character, style, composition, pose, outfit, object, environment, layout, typography, color_palette, lighting, texture, reference.
-Allowed retention: attribute_transfer, fully_preserved, partially_preserved, reference_only.
 Each description must contain only independently visible source facts in 8-24 words. Never copy a requested new action, prop, pose, gaze, clothing change, style, environment, or edit into a source description unless it is already visible in that image. Never write generic phrases such as 'visible information requested by the user'.
-Rewrite the request into one precise 40-90 word instruction. Preserve every action, direction, expression, object, setting, assignment, exact text, and negative constraint. Use @Image1, @Image2 exactly; never use Picture, Subject, filenames, Markdown, headings, or newlines.
-Translate every user-requested named style into concrete traits while retaining its canonical name. A JoJo request must say "JoJo's Bizarre Adventure-inspired anime" and include angular facial anatomy, bold black contours, cel shading, dense cross-hatched shadows, dramatic contrast, dynamic posing, and saturated colors. Explicitly replace the source photograph's rendering medium when another medium is requested.
-Turn behavioral edits into visible constraints. Resolve pronouns. Use character or identity plus fully_preserved for identity; use object plus attribute_transfer for glasses and props. The requested changes override source pose, gaze, expression, clothing, or background.
-Before answering, silently verify every @Image assignment and requested change. Do not emit prose outside JSON."""
+Choose role only as a conservative visible-content category, never as ownership or retention reasoning for a future request.
+Do not emit prose outside JSON."""
 
 WRITER_SYSTEM_INSTRUCTION = """You are the senior image prompt director for MiniMax H3.
 You receive the user's exact request and factual source-image observations from a separate vision pass. You are not viewing pixels now. Expand them into one precise 200-450 word production instruction inside JSON: {"instruction":"..."}.
@@ -67,20 +66,21 @@ def _tensor_fingerprint(image: Any) -> str:
 def _image_key(reference: ReferenceImage, image: Any) -> tuple[Any, ...]:
     shape = tuple(getattr(image, "shape", ()))
     if reference.fingerprint:
-        return "declared", reference.fingerprint, shape
+        return "declared", reference.fingerprint, _tensor_fingerprint(image), shape
     if reference.storage_name:
         return "storage", reference.storage_name, _tensor_fingerprint(image), shape
     return "pixels", reference.filename, _tensor_fingerprint(image), shape
 
 
-def _cache_miss_reason(previous: tuple[Any, ...] | None, current: tuple[Any, ...]) -> str:
-    if previous is None:
-        return "cold cache"
-    labels = ("analyzer changed", "prompt changed", "analyzer detail changed", "reference images changed")
-    for index, label in enumerate(labels):
-        if previous[index] != current[index]:
-            return label
-    return "cache state changed"
+def _analysis_cache_key(identity: str, max_image_edge: int, reference: ReferenceImage, image: Any) -> tuple[Any, ...]:
+    return (_ANALYSIS_SCHEMA_VERSION, str(identity), int(max_image_edge), _image_key(reference, image))
+
+
+def _store_analysis_record(key: tuple[Any, ...], record: dict[str, Any]) -> None:
+    _ANALYSIS_CACHE[key] = dict(record)
+    _ANALYSIS_CACHE.move_to_end(key)
+    while len(_ANALYSIS_CACHE) > _ANALYSIS_CACHE_LIMIT:
+        _ANALYSIS_CACHE.popitem(last=False)
 
 
 def _json_object(text: str) -> dict[str, Any]:
@@ -260,33 +260,28 @@ def analyze_references(
 ) -> tuple[tuple[ReferenceImage, ...], str, str]:
     """Inspect pixels once, then optionally run a cached text-only writing pass."""
 
-    global _CACHE_KEY, _CACHE_VALUE
     max_image_edge = int(max_image_edge)
     if max_image_edge != 0:
         max_image_edge = max(256, min(1024, max_image_edge))
     if not images or not references:
         return tuple(references), str(prompt), "Image analysis: no references to inspect."
     identity = analyzer_name or (type(clip).__name__ if clip is not None else "default")
-    key = (
-        str(identity),
-        str(prompt),
-        int(max_image_edge),
-        tuple(_image_key(reference, image) for reference, image in zip(references, images, strict=False)),
-    )
+    paired = list(zip(references, images, strict=False))
+    keys = [_analysis_cache_key(identity, max_image_edge, reference, image) for reference, image in paired]
     with _CACHE_LOCK:
-        cache_hit = key == _CACHE_KEY and _CACHE_VALUE is not None
-        cached = _CACHE_VALUE if cache_hit else None
-        miss_reason = _cache_miss_reason(_CACHE_KEY, key)
-    if cached is not None:
-        analyzed = _apply_payload(references, cached[0])
-        enhanced = _enhanced_instruction(cached[0], prompt)
-        note = f"{cached[1]} Cache: HIT; vision generation skipped because prompt, images, and detail are unchanged."
-        LOGGER.info("[H3 Studio - Vision] Cache HIT | reused %d source descriptions", len(analyzed))
-    else:
+        cached_records = [_ANALYSIS_CACHE.get(key) for key in keys]
+        for key, record in zip(keys, cached_records, strict=True):
+            if record is not None:
+                _ANALYSIS_CACHE.move_to_end(key)
+    missing = [index for index, record in enumerate(cached_records) if record is None]
+    if missing:
         detail_label = "native original pixels" if max_image_edge == 0 else f"max edge {max_image_edge}px"
         started = time.perf_counter()
         LOGGER.info(
-            "[H3 Studio - Vision] Cache MISS (%s) | %d reference(s) | %s", miss_reason, len(images), detail_label
+            "[H3 Studio - Vision] Cache MISS | %d new of %d reference(s) | %s",
+            len(missing),
+            len(paired),
+            detail_label,
         )
         if clip is None and callable(clip_loader):
             LOGGER.info("[H3 Studio - Vision] Loading analyzer: %s", identity)
@@ -296,22 +291,21 @@ def analyze_references(
                 "Visual analysis requires a full Qwen3-VL checkpoint in ComfyUI/models/text_encoders. "
                 "Select it in H3 Studio Loader; the H3 ConvRot encoder cannot generate descriptions."
             )
-        numbered = "\n".join(
-            f"Image {item.ordinal}: filename={item.filename}; current role={item.role}; current retention={item.retention}"
-            for item in references
-        )
+        missing_pairs = [paired[index] for index in missing]
+        numbered = "\n".join(f"Image {item.ordinal}: filename={item.filename}" for item, _image in missing_pairs)
         instruction = (
-            f"{SYSTEM_INSTRUCTION}\n\nUSER REQUEST:\n{prompt}\n\nREFERENCE ORDER:\n{numbered}\n\n"
-            f"Analyze exactly {len(images)} attached images and return exactly {len(images)} reference records."
+            f"{SYSTEM_INSTRUCTION}\n\nUSER REQUEST:\nDescribe only immutable visible source facts.\n\n"
+            f"REFERENCE ORDER:\n{numbered}\n\nAnalyze exactly {len(missing_pairs)} attached images and return "
+            f"exactly {len(missing_pairs)} reference records using the listed ordinals."
         )
-        analysis_images = [_prepare_image(image, max_image_edge) for image in images]
+        analysis_images = [_prepare_image(image, max_image_edge) for _reference, image in missing_pairs]
         LOGGER.info("[H3 Studio - Vision] Prepared %d analysis copies | H3 originals untouched", len(analysis_images))
         tokens = clip.tokenize(instruction, images=analysis_images, thinking=False)
         LOGGER.info("[H3 Studio - Vision] Inspecting pixels and writing factual source records...")
         generated = clip.generate(
             tokens,
             do_sample=False,
-            max_length=min(768, 96 + len(images) * 72),
+            max_length=min(768, 96 + len(missing_pairs) * 72),
             temperature=1.0,
             top_k=0,
             top_p=1.0,
@@ -324,19 +318,37 @@ def analyze_references(
         if isinstance(decoded, (tuple, list)):
             decoded = decoded[0] if decoded else ""
         payload = _extract_analysis(str(decoded))
-        analyzed = _apply_payload(references, payload)
-        enhanced = _enhanced_instruction(payload, prompt)
-        note = (
-            f"Image analysis: Qwen3-VL inspected {len(analyzed)} actual reference image(s) at {detail_label}; "
-            "H3 originals were preserved."
-        )
+        generated_by_ordinal = {
+            int(item.get("ordinal", 0)): item
+            for item in payload["references"]
+            if isinstance(item, dict) and str(item.get("ordinal", "")).isdigit()
+        }
         with _CACHE_LOCK:
-            _CACHE_KEY, _CACHE_VALUE = key, (payload, note)
+            for index in missing:
+                reference = paired[index][0]
+                record = generated_by_ordinal.get(reference.ordinal)
+                if record is not None:
+                    _store_analysis_record(keys[index], record)
+                    cached_records[index] = record
         LOGGER.info(
-            "[H3 Studio - Vision] Complete in %.2fs | %d factual source record(s)",
+            "[H3 Studio - Vision] Complete in %.2fs | %d new factual source record(s)",
             time.perf_counter() - started,
-            len(analyzed),
+            sum(record is not None for record in cached_records),
         )
+    else:
+        detail_label = "native original pixels" if max_image_edge == 0 else f"max edge {max_image_edge}px"
+        LOGGER.info("[H3 Studio - Vision] Cache HIT | reused %d source descriptions", len(cached_records))
+
+    records = [record for record in cached_records if record is not None]
+    analyzed = _apply_payload(references, {"references": records})
+    enhanced = str(prompt)
+    hit_count = len(cached_records) - len(missing)
+    note = (
+        f"Image analysis: {len(analyzed)} actual reference image(s) at {detail_label}; "
+        f"{hit_count} factual record(s) reused and {len(missing)} inspected. Prompt wording does not invalidate facts."
+    )
+    if not missing:
+        note += " Cache: HIT."
     if deep_enhancement:
         enhanced, writer_note = _run_prompt_writer(
             writer_clip,
