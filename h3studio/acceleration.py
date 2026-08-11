@@ -194,6 +194,43 @@ def _first_output(result: Any, *, node_name: str) -> Any:
     return values[0]
 
 
+def _existing_bypass_injections(model: Any) -> tuple[Any, ...]:
+    getter = getattr(model, "get_injections", None)
+    if not callable(getter):
+        return ()
+    try:
+        return tuple(getter("bypass_lora") or ())
+    except Exception:
+        return ()
+
+
+def _restore_stacked_bypass_injections(model: Any, previous: tuple[Any, ...]) -> int:
+    """Preserve previous bypass LoRAs when Comfy's loader replaces its shared key.
+
+    ComfyUI's public bypass loader stores every call under the fixed
+    ``bypass_lora`` injection key. ModelPatcher clones inherit previous
+    injections, but a second loader call replaces that key. Combining the old
+    and newly-created injection lists makes ordered LightX + custom LoRA stacks
+    additive without ever merging/requantizing the H3 base weights.
+    """
+
+    if not previous:
+        return 0
+    getter = getattr(model, "get_injections", None)
+    setter = getattr(model, "set_injections", None)
+    if not callable(getter) or not callable(setter):
+        return 0
+    try:
+        current = tuple(getter("bypass_lora") or ())
+        if not current:
+            return 0
+        combined = [*previous, *current]
+        setter("bypass_lora", combined)
+        return len(combined)
+    except Exception:
+        return 0
+
+
 def _load_model_lora(
     model: Any,
     lora_name: str,
@@ -204,8 +241,9 @@ def _load_model_lora(
 
     Current ComfyUI exposes a bypass adapter path which performs the LoRA
     contribution during each layer's forward pass. This avoids the very slow
-    merge -> requantize cycle seen with INT8/FP8 H3 checkpoints. Older ComfyUI
-    builds retain the normal node-loader fallback for compatibility.
+    merge -> requantize cycle seen with INT8/FP8 H3 checkpoints. Existing bypass
+    injections are preserved so multiple user LoRAs can be stacked on LightX.
+    Older ComfyUI builds retain the normal node-loader fallback for compatibility.
     """
 
     try:
@@ -217,8 +255,11 @@ def _load_model_lora(
         if bypass_loader is not None:
             path = folder_paths.get_full_path_or_raise("loras", lora_name)
             weights = comfy.utils.load_torch_file(path, safe_load=True)
+            previous = _existing_bypass_injections(model)
             patched, _clip = bypass_loader(model, None, weights, float(strength), 0.0)
-            return patched, "bypass-forward"
+            combined = _restore_stacked_bypass_injections(patched, previous)
+            backend = "bypass-forward-stacked" if combined else "bypass-forward"
+            return patched, backend
     except Exception as exc:
         # Keep an actionable fallback on older ComfyUI rather than making every
         # acceleration profile unavailable. The caller prints the backend so
