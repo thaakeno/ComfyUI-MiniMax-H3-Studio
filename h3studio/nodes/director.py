@@ -26,7 +26,7 @@ from ..image_inputs import collect_images
 from ..prompting.compiler import PromptCompiler
 from ..prompting.vlm import compile_with_optional_vlm
 from ..references import ReferenceImage, stable_reference_id
-from ..routing import choose_route
+from ..routing import choose_route, validate_generation_contract
 from ..state import StudioState
 from .loader import H3StudioBundle
 
@@ -287,6 +287,12 @@ class H3StudioDirector:
             filenames,
             storage_names,
             kwargs,
+        )
+        validate_generation_contract(
+            state.generation.mode,
+            state.generation.route,
+            state.generation.sampling_profile,
+            state.reference_count,
         )
         compiler = PromptCompiler()
         enhanced_prompt = state.prompt

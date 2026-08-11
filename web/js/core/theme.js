@@ -38,6 +38,7 @@ export function installTheme() {
     .h3s-section-description { margin: -1px 0 1px; color: var(--h3s-muted); font-size: 10px; line-height: 1.45; }
     .h3s-section-stack { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
     .h3s-context-help { margin: 0; color: color-mix(in srgb, var(--h3s-muted) 90%, var(--h3s-text) 10%); font-size: 9px; line-height: 1.45; }
+    .h3s-validation-error { margin: 0; padding: 6px 7px; border: 1px solid color-mix(in srgb, #ff7f7f 45%, var(--h3s-border)); border-radius: 5px; color: #ffb0b0; background: color-mix(in srgb, #ff6b6b 9%, var(--h3s-bg)); font-size: 9px; line-height: 1.4; }
     .h3s-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px; }
     .h3s-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
     .h3s-field-label { color: var(--h3s-muted); font-size: 10px; font-weight: 600; }

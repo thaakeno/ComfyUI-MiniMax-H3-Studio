@@ -15,6 +15,7 @@ import {
   planResolution,
   rewriteMentions,
   serializeState,
+  validateGenerationContract,
 } from "../../web/js/core/state.js";
 import {
   STUDIO_NODE_HEIGHT,
@@ -92,6 +93,25 @@ test("single-line prompt shaping survives state normalization", () => {
   const state = normalizeState({ prompt_options: { enhance_mode: "single_prompt" } });
   assert.equal(state.prompt_options.enhance_mode, "single_prompt");
   assert.equal(parseState(serializeState(state)).prompt_options.enhance_mode, "single_prompt");
+});
+
+test("generation validation rejects impossible requests before queueing", () => {
+  assert.match(validateGenerationContract({ generation: { mode: "reference_edit" } }), /requires at least one/);
+  assert.match(validateGenerationContract({
+    generation: { mode: "auto", sampling_profile: "pdd_ref2va_4_900" },
+  }), /PDD REF2VA requires/);
+  assert.match(validateGenerationContract({
+    generation: { mode: "reference_edit", route: "fl2va" },
+    references: [{ filename: "face.png" }],
+  }), /incompatible/);
+});
+
+test("generation validation accepts normal and PDD reference requests", () => {
+  assert.equal(validateGenerationContract({ generation: { mode: "auto" } }), null);
+  assert.equal(validateGenerationContract({
+    generation: { mode: "auto", sampling_profile: "pdd_ref2va_4_900" },
+    references: [{ filename: "face.png" }],
+  }), null);
 });
 
 test("prompt inference updates auto-managed role and retention but preserves manual choices", () => {

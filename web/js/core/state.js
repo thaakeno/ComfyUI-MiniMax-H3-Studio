@@ -269,6 +269,31 @@ export function serializeState(state) {
   return JSON.stringify(normalizeState(state));
 }
 
+export function validateGenerationContract(value) {
+  const state = normalizeState(value);
+  const { mode, route, sampling_profile: profile } = state.generation;
+  const referenceCount = state.references.filter((reference) => reference.enabled !== false).length;
+  const isPdd = String(profile).startsWith("pdd_ref2va_");
+  if (mode === "image_to_image" && referenceCount === 0) return "Image-to-image requires at least one enabled reference image.";
+  if (mode === "reference_edit" && referenceCount === 0) return "Reference mix/edit requires at least one enabled reference image.";
+  if (isPdd && referenceCount === 0) return "PDD REF2VA requires at least one enabled reference image.";
+  if (isPdd && ["text_to_image", "image_to_image"].includes(mode)) {
+    return "PDD REF2VA supports reference mix/edit; use Auto or Reference mix/edit mode.";
+  }
+  if (isPdd && route === "fl2va") return "PDD is trained for REF2VA and cannot run on a forced FL2VA route.";
+  let effectiveMode = mode;
+  if (mode === "auto") {
+    effectiveMode = referenceCount === 0
+      ? "text_to_image"
+      : referenceCount === 1 && !isPdd ? "image_to_image" : "reference_edit";
+  }
+  const expectedRoute = effectiveMode === "reference_edit" ? "ref2va" : "fl2va";
+  if (route !== "auto" && route !== expectedRoute) {
+    return `Forced ${route.toUpperCase()} is incompatible with ${effectiveMode.replaceAll("_", " ")} mode; use Auto.`;
+  }
+  return null;
+}
+
 export function rewriteMentions(prompt, ordinalMap) {
   return String(prompt || "").replace(/(^|[^\w@])@Image\s*([1-9]\d*)\b/gi, (whole, prefix, ordinal) => {
     const mapped = ordinalMap[Number(ordinal)] ?? Number(ordinal);

@@ -17,6 +17,7 @@ import {
   parseState,
   planResolution,
   serializeState,
+  validateGenerationContract,
 } from "./core/state.js";
 import { element, field, iconButton, numberControl, rangeControl, selectControl } from "./core/dom.js";
 import { STUDIO_PANEL_HEIGHT, initialStudioNodeSize, studioPanelSize } from "./core/layout.js";
@@ -421,7 +422,11 @@ function generationSection(node, state, refresh) {
     reference_edit: "Reference mix/edit · REF2VA: combines one or more independent references by their @Image roles, without treating any image as the locked canvas.",
   };
   const modeDescription = element("p", { className: "h3s-context-help", text: modeHelp[generation.mode] || modeHelp.auto });
-  return section("Generation", element("div", { className: "h3s-section-stack" }, [grid, modeDescription, sizeHelp, preview, help]));
+  const validationMessage = validateGenerationContract(state);
+  const validation = validationMessage
+    ? element("p", { className: "h3s-validation-error", text: validationMessage, attrs: { role: "alert" } })
+    : null;
+  return section("Generation", element("div", { className: "h3s-section-stack" }, [grid, validation, modeDescription, sizeHelp, preview, help].filter(Boolean)));
 }
 
 function promptSection(node, state, refresh) {
@@ -733,6 +738,26 @@ function installPanel(node) {
   // positive resize-feedback loop and makes the node grow forever.
   panelWidget.computeSize = studioPanelSize;
   panelWidget.computedHeight = STUDIO_PANEL_HEIGHT;
+
+  const stateWidget = widget(node, "studio_state");
+  if (stateWidget && !stateWidget.__h3studioQueueValidation) {
+    stateWidget.__h3studioQueueValidation = true;
+    const originalBeforeQueued = stateWidget.beforeQueued;
+    stateWidget.beforeQueued = async function h3studioBeforeQueued() {
+      const result = await originalBeforeQueued?.apply(this, arguments);
+      const message = validateGenerationContract(stateFromNode(node));
+      if (message) {
+        app.extensionManager?.toast?.add?.({
+          severity: "error",
+          summary: "H3 Studio configuration",
+          detail: message,
+          life: 7000,
+        });
+        throw new Error(message);
+      }
+      return result;
+    };
+  }
 
   const originalSerialize = node.onSerialize;
   node.onSerialize = function h3studioSerialize(data) {
