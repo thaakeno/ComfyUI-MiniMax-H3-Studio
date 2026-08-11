@@ -54,7 +54,13 @@ def main():
     for subgraph in subgraphs:
         errors.extend(validate_graph(subgraph, f"subgraph:{subgraph.get('name')}", subgraph=True))
     node_types = {node.get("type") for node in workflow.get("nodes", [])}
-    required = {"H3StudioDirector", "H3StudioLoader", "H3StudioCondition", "PreviewImage", "SaveImage"}
+    required = {
+        "H3StudioDirector",
+        "H3StudioLoader",
+        "H3StudioCondition",
+        "PreviewImage",
+        "H3StudioSaveImage",
+    }
     missing = required - node_types
     if missing:
         errors.append(f"{path.name}: missing required nodes {sorted(missing)}")

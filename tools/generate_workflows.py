@@ -400,6 +400,7 @@ def build_workflow():
     l_normal_switch = links.add(13, 0, 19, 1, "IMAGE")
     l_bundle_ab = links.add(11, 0, 17, 0, "H3_STUDIO_BUNDLE")
     l_context_ab = links.add(10, 0, 17, 1, "H3_STUDIO_CONTEXT")
+    l_context_save = links.add(10, 0, 15, 1, "H3_STUDIO_CONTEXT")
     l_ab_switch = links.add(17, 0, 19, 2, "IMAGE")
     l_selected_preview = links.add(19, 0, 14, 0, "IMAGE")
     l_selected_save = links.add(19, 0, 15, 0, "IMAGE")
@@ -440,7 +441,11 @@ def build_workflow():
             order=0,
             inputs=director_inputs,
             outputs=[
-                output("studio_context", "H3_STUDIO_CONTEXT", [l_context_condition, l_context_sub, l_context_ab]),
+                output(
+                    "studio_context",
+                    "H3_STUDIO_CONTEXT",
+                    [l_context_condition, l_context_sub, l_context_ab, l_context_save],
+                ),
                 output("compiled_prompt", "STRING", None),
                 output("state_json", "STRING", None),
                 output("width", "INT", None),
@@ -576,13 +581,14 @@ def build_workflow():
         ),
         node(
             15,
-            "SaveImage",
-            "Final still · save",
+            "H3StudioSaveImage",
+            "Final still · restorable PNG",
             [1030, 750],
             [440, 190],
             order=5,
             inputs=[
                 socket("images", "IMAGE", l_selected_save),
+                socket("studio_context", "H3_STUDIO_CONTEXT", l_context_save),
                 socket("filename_prefix", "STRING", widget="filename_prefix"),
             ],
             outputs=[],

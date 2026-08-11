@@ -15,6 +15,8 @@ from .nodes.image_runtime import NODE_CLASS_MAPPINGS as IMAGE_NODE_CLASS_MAPPING
 from .nodes.image_runtime import NODE_DISPLAY_NAME_MAPPINGS as IMAGE_NODE_DISPLAY_NAME_MAPPINGS
 from .nodes.loader import H3StudioLoader
 from .nodes.preview import H3StudioTAEH3Preview
+from .nodes.save import NODE_CLASS_MAPPINGS as SAVE_NODE_CLASS_MAPPINGS
+from .nodes.save import NODE_DISPLAY_NAME_MAPPINGS as SAVE_NODE_DISPLAY_NAME_MAPPINGS
 from .web_routes import register_routes
 
 register_routes()
@@ -29,6 +31,7 @@ NODE_CLASS_MAPPINGS = {
     "H3StudioTAEH3Preview": H3StudioTAEH3Preview,
     **BENCHMARK_NODE_CLASS_MAPPINGS,
     **IMAGE_NODE_CLASS_MAPPINGS,
+    **SAVE_NODE_CLASS_MAPPINGS,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -41,4 +44,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "H3StudioTAEH3Preview": "H3 Studio · Live Preview (TAEH3)",
     **BENCHMARK_NODE_DISPLAY_NAME_MAPPINGS,
     **IMAGE_NODE_DISPLAY_NAME_MAPPINGS,
+    **SAVE_NODE_DISPLAY_NAME_MAPPINGS,
 }

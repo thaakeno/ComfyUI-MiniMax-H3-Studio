@@ -58,6 +58,14 @@ def test_primary_graph_has_one_conditioning_pass():
     assert not any(node["type"] == "CLIPTextEncode" for node in workflow["nodes"])
 
 
+def test_final_png_save_receives_completed_studio_context():
+    workflow = load_workflow()
+    saver = next(node for node in workflow["nodes"] if node["type"] == "H3StudioSaveImage")
+    context_input = next(input_slot for input_slot in saver["inputs"] if input_slot["name"] == "studio_context")
+    link = next(link for link in workflow["links"] if link[0] == context_input["link"])
+    assert link[1] == 10
+
+
 def test_no_dead_context_inspector_is_bundled():
     workflow = load_workflow()
     assert not any(node["type"] == "H3StudioContextInspector" for node in workflow["nodes"])

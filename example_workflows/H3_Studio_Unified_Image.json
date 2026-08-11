@@ -2,7 +2,7 @@
   "id": "51ffc0bb-1b7a-4a1c-a183-1ce99edb4e5e",
   "revision": 0,
   "last_node_id": 29,
-  "last_link_id": 16,
+  "last_link_id": 17,
   "nodes": [
     {
       "id": 10,
@@ -214,7 +214,8 @@
           "links": [
             1,
             10,
-            13
+            13,
+            14
           ]
         },
         {
@@ -707,7 +708,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 15
+          "link": 16
         }
       ],
       "outputs": [],
@@ -721,7 +722,7 @@
     },
     {
       "id": 15,
-      "type": "SaveImage",
+      "type": "H3StudioSaveImage",
       "pos": [
         1030,
         750
@@ -737,7 +738,12 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 16
+          "link": 17
+        },
+        {
+          "name": "studio_context",
+          "type": "H3_STUDIO_CONTEXT",
+          "link": 14
         },
         {
           "name": "filename_prefix",
@@ -749,9 +755,9 @@
         }
       ],
       "outputs": [],
-      "title": "Final still · save",
+      "title": "Final still · restorable PNG",
       "properties": {
-        "Node name for S&R": "SaveImage"
+        "Node name for S&R": "H3StudioSaveImage"
       },
       "widgets_values": [
         "H3Studio/%date:yyyy-MM-dd%/H3_%seed%"
@@ -838,7 +844,7 @@
           "name": "comparison_grid",
           "type": "IMAGE",
           "links": [
-            14
+            15
           ]
         },
         {
@@ -893,7 +899,7 @@
         {
           "name": "benchmark_image",
           "type": "IMAGE",
-          "link": 14
+          "link": 15
         }
       ],
       "outputs": [
@@ -901,8 +907,8 @@
           "name": "image",
           "type": "IMAGE",
           "links": [
-            15,
-            16
+            16,
+            17
           ]
         },
         {
@@ -1479,6 +1485,14 @@
     ],
     [
       14,
+      10,
+      0,
+      15,
+      1,
+      "H3_STUDIO_CONTEXT"
+    ],
+    [
+      15,
       17,
       0,
       19,
@@ -1486,7 +1500,7 @@
       "IMAGE"
     ],
     [
-      15,
+      16,
       19,
       0,
       14,
@@ -1494,7 +1508,7 @@
       "IMAGE"
     ],
     [
-      16,
+      17,
       19,
       0,
       15,
