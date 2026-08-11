@@ -94,6 +94,30 @@ def test_functional_nodes_do_not_overlap():
             assert not overlap, f"{left['title']} overlaps {right['title']}"
 
 
+def test_nodes_are_fully_contained_by_their_intended_groups():
+    workflow = load_workflow()
+    nodes = {node["id"]: node for node in workflow["nodes"]}
+    groups = {group["id"]: group for group in workflow["groups"]}
+    membership = {
+        1: (10,),
+        2: (11, 12),
+        3: (16, 13),
+        4: (14, 15),
+        5: (25, 26, 28, 29),
+        6: (20, 21, 22, 23, 24),
+        7: (17, 19, 27),
+    }
+    for group_id, node_ids in membership.items():
+        gx, gy, gw, gh = groups[group_id]["bounding"]
+        for node_id in node_ids:
+            node = nodes[node_id]
+            nx, ny = node["pos"]
+            nw, nh = node["size"]
+            assert gx <= nx and gy <= ny and nx + nw <= gx + gw and ny + nh <= gy + gh, (
+                f"{node['title']} is detached from {groups[group_id]['title']}"
+            )
+
+
 def test_prompt_editor_and_empty_result_regression_contract():
     source = STUDIO_FRONTEND.read_text(encoding="utf-8")
     layout = (ROOT / "web" / "js" / "core" / "layout.js").read_text(encoding="utf-8")

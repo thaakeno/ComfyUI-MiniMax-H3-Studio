@@ -664,7 +664,7 @@ def build_workflow():
             19,
             "H3StudioLazyImageSwitch",
             "Run mode - normal or A/B only",
-            [820, 1140],
+            [820, 1200],
             [420, 180],
             order=7,
             inputs=[
@@ -766,7 +766,7 @@ def build_workflow():
             "Upscaling, outpainting, and inpainting",
             "optional / experimental",
             "Upscaling is safest after H3's selected still: use ComfyUI's built-in Upscale Model Loader + Image Upscale With Model and a trusted image upscaler. H3 semantic outpainting works by increasing the target aspect ratio and explicitly placing the original reference within the new frame. Exact mask inpainting is not implemented here: H3 Studio has no verified mask-conditioned H3 route, and ComfyUI's VAE Encode for Inpainting requires a model trained for that contract. The node will not pretend semantic reference editing is pixel-locked inpainting.",
-            [2040, 260],
+            [1560, 1720],
             [480, 390],
             19,
         ),
@@ -791,7 +791,7 @@ def build_workflow():
         {
             "id": 3,
             "title": "03 · SAMPLE AND EXTRACT STILL",
-            "bounding": [160, 280, 740, 570],
+            "bounding": [160, 190, 740, 970],
             "color": "#6b5937",
             "font_size": 26,
             "flags": {},
@@ -807,7 +807,7 @@ def build_workflow():
         {
             "id": 5,
             "title": "REFERENCE GUIDE",
-            "bounding": [1500, 190, 530, 1510],
+            "bounding": [1500, 190, 540, 1950],
             "color": "#5c5243",
             "font_size": 24,
             "flags": {},

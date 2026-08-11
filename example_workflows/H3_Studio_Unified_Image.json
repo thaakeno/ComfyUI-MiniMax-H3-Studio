@@ -873,7 +873,7 @@
       "type": "H3StudioLazyImageSwitch",
       "pos": [
         820,
-        1140
+        1200
       ],
       "size": [
         420,
@@ -1336,8 +1336,8 @@
       "id": 29,
       "type": "H3StudioWorkflowNote",
       "pos": [
-        2040,
-        260
+        1560,
+        1720
       ],
       "size": [
         480,
@@ -1548,9 +1548,9 @@
       "title": "03 · SAMPLE AND EXTRACT STILL",
       "bounding": [
         160,
-        280,
+        190,
         740,
-        570
+        970
       ],
       "color": "#6b5937",
       "font_size": 26,
@@ -1575,8 +1575,8 @@
       "bounding": [
         1500,
         190,
-        530,
-        1510
+        540,
+        1950
       ],
       "color": "#5c5243",
       "font_size": 24,
