@@ -48,6 +48,25 @@ def _thumbnail_bytes(path: Path, size: int) -> bytes:
     return payload
 
 
+def _lora_catalog() -> list[dict[str, object]]:
+    """Return installed LoRA names without exposing absolute server paths."""
+
+    import folder_paths
+
+    result: list[dict[str, object]] = []
+    for name in sorted(folder_paths.get_filename_list("loras"), key=str.casefold):
+        normalized = str(name).replace("\\", "/")
+        size_bytes = 0
+        try:
+            path = folder_paths.get_full_path("loras", name)
+            if path:
+                size_bytes = Path(path).stat().st_size
+        except OSError:
+            pass
+        result.append({"name": normalized, "size_bytes": int(size_bytes)})
+    return result
+
+
 def register_routes() -> None:
     try:
         from aiohttp import web
@@ -73,3 +92,18 @@ def register_routes() -> None:
             )
         except (OSError, ValueError):
             return web.Response(status=400)
+
+    @server.routes.get("/h3studio/loras")
+    async def h3studio_loras(_request):
+        try:
+            items = _lora_catalog()
+            return web.json_response(
+                {"items": items, "count": len(items)},
+                headers={"Cache-Control": "no-store"},
+            )
+        except Exception as exc:
+            return web.json_response(
+                {"items": [], "count": 0, "error": f"Could not enumerate ComfyUI LoRAs: {exc}"},
+                status=500,
+                headers={"Cache-Control": "no-store"},
+            )
