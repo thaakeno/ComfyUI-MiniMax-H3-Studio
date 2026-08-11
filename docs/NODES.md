@@ -18,7 +18,11 @@ Consumes the model bundle and Studio context. It selects the route, encodes the 
 
 ### H3 Studio · Sampling Preset
 
-Builds model sampling, sampler, and sigma values for conservative base profiles or explicitly labeled experimental acceleration profiles. Base Quality (`RES 20`) is the default. Mamad8 PDD checkpoint-600/900 profiles are REF2VA-only: the preset detects the separately installed GPL node package, pairs the matching local student LoRA and heads bank, and delegates patching and trained-block scheduling to those registered nodes. Missing dependencies fail with corrective instructions and never alter Base behavior.
+Builds model sampling, sampler, and sigma values for conservative base profiles or explicitly labeled acceleration profiles. Base Quality (`RES 20`) is the default.
+
+The current LightX profile resolves the official `minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors` adapter from `models/loras/` and uses its eight-step FL2V/FL2VA path. The older Kijai LightX v0.1 ER-SDE and SA-Solver four-step recipes remain available for reproducibility. LightX profiles are rejected when the Studio request resolves to REF2VA so an FL2V adapter cannot be silently applied to the wrong transformer route.
+
+Mamad8 PDD checkpoint-600/900 profiles are REF2VA-only: the preset detects the separately installed GPL node package, pairs the matching local student LoRA and heads bank, and delegates patching and trained-block scheduling to those registered nodes. Missing dependencies fail with corrective instructions and never alter Base behavior.
 
 ### H3 Studio · Exact Frame Decode
 
@@ -38,10 +42,14 @@ Separate Text to Image, Image to Image, Reference Edit, and Combined Prepare nod
 
 ### H3 Studio · Benchmark Lab
 
-Compares any two sampling profiles across 0.40, 1.00, and 2.00 MP, including direct LightX-vs-PDD tests. The fixed-seed strategy is the fair default; per-image seeds are explicitly a diversity sweep. The node reports actual aligned dimensions, seed, selected profile, and CUDA-synchronized sampling time. Native-capped duplicate variants are reused only when profile, seed, dimensions, and prompt are identical.
+Builds a guarded **profile × resolution × repeat** matrix rather than a fixed A/B. Two profiles still make a simple comparison; additional same-route profiles widen the matrix. Resolution targets accept direct values from 0.20 to 8.50 MP, repeats are explicit, and a generation-count guard rejects accidental large runs before conditioning or model patching.
+
+The fixed-seed strategy is the fair default; row/image seed modes are explicitly diversity sweeps. Each cell reports the actual aligned dimensions, seed, selected profile, and CUDA-synchronized sampling time. Native-capped duplicate variants are reused only when profile, seed, dimensions, and prompt are identical.
+
+Acceleration families must stay on compatible routes. Base-vs-LightX runs use an FL2VA Director context. Base-vs-PDD runs use REF2VA. LightX-vs-PDD in one matrix is rejected because their adapters target different H3 routes.
 
 Its VAE mode samples one T=1 latent once and decodes that exact latent through the original H3 video VAE and optional Image VAE. This isolates decoder behavior instead of mixing sampling variance into the result.
 
 ### H3 Studio · Lazy output switch
 
-Selects normal or benchmark output using ComfyUI lazy inputs. Only the chosen branch is requested, so benchmark mode cannot accidentally schedule a seventh normal generation.
+Selects normal or benchmark output using ComfyUI lazy inputs. Only the chosen branch is requested, so benchmark mode cannot accidentally schedule the normal generation too.
