@@ -19,4 +19,4 @@ Thumbs.db
 *.log
 test-results/
 playwright-report/
-
+.h3studio-telemetry-disabled

@@ -26,6 +26,7 @@ except Exception as exc:  # pragma: no cover - only reached outside ComfyUI
     ) from exc
 
 from ..vae_io import detect_vae_io
+from ..telemetry import record_generation_success
 
 
 CATEGORY = "H3 Studio/Runtime"
@@ -1657,6 +1658,7 @@ class H3StudioFrameSelector:
                 report += " recommended_index was not connected, so frame 0 was used."
             if emit_candidate_batch:
                 report += f" selected_image emits the complete {n}-frame batch; candidate_batch_debug contains the chosen frame."
+            record_generation_success()
             return primary, debug, selected_index, 1.0, report
 
         start = max(int(skip_first_frames), int(math.floor(max(0.0, min(1.0, candidate_start)) * n)))
@@ -1746,6 +1748,7 @@ class H3StudioFrameSelector:
             )
         else:
             report += " Candidate batch suppressed."
+        record_generation_success()
         return primary_output, candidate_output, selected_index, selected_score, report
 
 

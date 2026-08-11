@@ -11,6 +11,7 @@ Build text-to-image, anchored edits, multi-reference compositions, and controlle
   <img alt="ComfyUI custom nodes" src="https://img.shields.io/badge/ComfyUI-Custom%20Nodes-0EA5E9?style=for-the-badge&labelColor=171B1F">
   <img alt="MiniMax H3 profiles" src="https://img.shields.io/badge/H3-Base%20%C2%B7%20LightX%20%C2%B7%20PDD-A855F7?style=for-the-badge&labelColor=171B1F">
   <img alt="Project status alpha" src="https://img.shields.io/badge/Status-Alpha-F59E0B?style=for-the-badge&labelColor=171B1F">
+  <img alt="Reported images generated" src="https://h3-studio-counter.thaakeno.workers.dev/badge.svg">
   <a href="#license"><img alt="MIT license" src="https://img.shields.io/badge/License-MIT-22C55E?style=for-the-badge&labelColor=171B1F"></a>
 </p>
 
@@ -153,6 +154,12 @@ Reference editing is semantic regeneration, not pixel-locked compositing or mask
 Local checks cover Python and frontend syntax, deterministic compilation, state migration, workflow regeneration/schema, node registration, route validation, PNG metadata restoration, and artifact consistency. CUDA speed, peak memory, model availability, and visual quality still require a real GPU run with the exact installed ComfyUI build.
 
 If generation fails, open an [issue](https://github.com/thaakeno/ComfyUI-MiniMax-H3-Studio/issues) with the full traceback, ComfyUI version, GPU/VRAM, selected model filenames, route, profile, resolution, and a workflow JSON or metadata PNG when safe.
+
+## Aggregate generation counter
+
+After a still is successfully selected, H3 Studio adds one integer to an in-memory batch. Every ten images—or after five minutes—it sends only `{ "count": N, "schema": 1 }` in a background thread. It never sends prompts, images, references, filenames, workflows, seeds, hardware, usernames, paths, or installation identifiers. Failures are silent and cannot delay generation.
+
+To opt out, set `H3STUDIO_TELEMETRY=0` before starting ComfyUI, or create an empty `.h3studio-telemetry-disabled` file in this repository. The endpoint can be self-hosted with the deployable [Cloudflare Worker](telemetry/README.md).
 
 <details>
 <summary><strong>Development checks</strong></summary>
