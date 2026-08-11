@@ -11,7 +11,6 @@ import base64
 import io
 import logging
 import math
-import threading
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -19,9 +18,6 @@ from typing import Any
 LOGGER = logging.getLogger(__name__)
 WRAPPER_KEY = "h3studio_taeh3_preview"
 DEFAULT_TAEH3 = "taeh3.safetensors"
-_PREVIEW_MODEL_CACHE_LOCK = threading.RLock()
-_PREVIEW_MODEL_CACHE_KEY = None
-_PREVIEW_MODEL_CACHE_VALUE = None
 
 
 def _conv(torch, channels_in: int, channels_out: int, *, bias: bool = True):
@@ -251,29 +247,38 @@ class _PreviewWrapper:
             server.client_id,
         )
 
-    def __call__(self, executor, *args, **kwargs):
+    def __call__(
+        self,
+        executor,
+        noise,
+        latent_image,
+        sampler,
+        sigmas,
+        denoise_mask,
+        callback,
+        disable_pbar,
+        seed,
+        latent_shapes,
+    ):
         import torch
 
         self.run_serial += 1
         self.first_frame_reported = False
         run_id = f"{self.node_id}:{self.run_serial}"
-        positional = list(args)
-        callback = kwargs.get("callback")
-        callback_index = None
-        if callback is None and len(positional) > 5:
-            callback_index = 5
-            callback = positional[callback_index]
-        latent_shapes = kwargs.get("latent_shapes", positional[8] if len(positional) > 8 else None)
-        total_steps = len(positional[3]) - 1 if len(positional) > 3 and hasattr(positional[3], "__len__") else 0
+        total_steps = max(0, len(sigmas) - 1) if sigmas is not None and hasattr(sigmas, "__len__") else 0
         sampling_started = time.perf_counter()
+        LOGGER.info(
+            "[H3 Studio] TAEH3 sampler wrapper entered | node=%s | steps=%d | latent_shapes=%s",
+            self.node_id,
+            total_steps,
+            latent_shapes,
+        )
         try:
             self._reset_frontend(total_steps, run_id)
         except Exception as error:
             LOGGER.debug("H3 Studio preview reset event skipped: %s", error)
 
         def preview_callback(step, x0, x, total_steps):
-            if callback is not None:
-                callback(step, x0, x, total_steps)
             try:
                 elapsed_seconds = time.perf_counter() - sampling_started
                 completed_steps = max(1, int(step) + 1)
@@ -290,15 +295,23 @@ class _PreviewWrapper:
             except Exception as error:
                 LOGGER.warning("H3 Studio TAEH3 preview enqueue skipped: %s", error)
                 self._report_error(error, run_id)
+            if callback is not None:
+                callback(step, x0, x, total_steps)
 
-        if callback_index is None:
-            kwargs["callback"] = preview_callback
-        else:
-            positional[callback_index] = preview_callback
         # A Comfy wrapper must call the executor object so it advances to the
         # next wrapper. Calling executor.execute() restarts the current index
         # and recursively invokes this same wrapper until Python overflows.
-        return executor(*positional, **kwargs)
+        return executor(
+            noise,
+            latent_image,
+            sampler,
+            sigmas,
+            denoise_mask,
+            preview_callback,
+            disable_pbar,
+            seed,
+            latent_shapes=latent_shapes,
+        )
 
 
 class H3StudioTAEH3Preview:
@@ -327,11 +340,7 @@ class H3StudioTAEH3Preview:
 
     @staticmethod
     def attach(model, enabled, tiny_vae, max_resolution, jpeg_quality, preview_every_n_steps, unique_id=None):
-        global _PREVIEW_MODEL_CACHE_KEY, _PREVIEW_MODEL_CACHE_VALUE
         if not enabled:
-            with _PREVIEW_MODEL_CACHE_LOCK:
-                _PREVIEW_MODEL_CACHE_KEY = None
-                _PREVIEW_MODEL_CACHE_VALUE = None
             return (model,)
 
         import comfy.patcher_extension
@@ -342,31 +351,24 @@ class H3StudioTAEH3Preview:
             raise FileNotFoundError(
                 f"TAEH3 preview file '{tiny_vae}' was not found. Put it in ComfyUI/models/vae_approx/."
             )
-        cache_key = (
-            id(model),
-            checkpoint_path,
+        patched = model.clone()
+        patched.remove_wrappers_with_key(comfy.patcher_extension.WrappersMP.OUTER_SAMPLE, WRAPPER_KEY)
+        patched.add_wrapper_with_key(
+            comfy.patcher_extension.WrappersMP.OUTER_SAMPLE,
+            WRAPPER_KEY,
+            _PreviewWrapper(
+                checkpoint_path=checkpoint_path,
+                node_id=str(unique_id or ""),
+                max_resolution=int(max_resolution),
+                jpeg_quality=int(jpeg_quality),
+                every=max(1, int(preview_every_n_steps)),
+            ),
+        )
+        LOGGER.info(
+            "[H3 Studio] TAEH3 wrapper attached | node=%s | decoder=%s | max=%d | every=%d",
             str(unique_id or ""),
+            tiny_vae,
             int(max_resolution),
-            int(jpeg_quality),
             max(1, int(preview_every_n_steps)),
         )
-        with _PREVIEW_MODEL_CACHE_LOCK:
-            if cache_key == _PREVIEW_MODEL_CACHE_KEY and _PREVIEW_MODEL_CACHE_VALUE is not None:
-                LOGGER.info("[H3 Studio] TAEH3 wrapper cache hit; reused the single preview-enabled model")
-                return (_PREVIEW_MODEL_CACHE_VALUE,)
-            patched = model.clone()
-            patched.remove_wrappers_with_key(comfy.patcher_extension.WrappersMP.OUTER_SAMPLE, WRAPPER_KEY)
-            patched.add_wrapper_with_key(
-                comfy.patcher_extension.WrappersMP.OUTER_SAMPLE,
-                WRAPPER_KEY,
-                _PreviewWrapper(
-                    checkpoint_path=checkpoint_path,
-                    node_id=str(unique_id or ""),
-                    max_resolution=int(max_resolution),
-                    jpeg_quality=int(jpeg_quality),
-                    every=max(1, int(preview_every_n_steps)),
-                ),
-            )
-            _PREVIEW_MODEL_CACHE_KEY = cache_key
-            _PREVIEW_MODEL_CACHE_VALUE = patched
-            return (patched,)
+        return (patched,)
