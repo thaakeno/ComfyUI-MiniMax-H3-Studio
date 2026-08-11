@@ -826,10 +826,12 @@ function installPanel(node) {
     };
   }
 
-  const originalSerialize = node.onSerialize;
-  node.onSerialize = function h3studioSerialize(data) {
-    const state = applyState(this, stateFromNode(this), false);
-    const result = originalSerialize?.apply(this, arguments);
+  node.__h3studioBeforeSerialize = function h3studioBeforeSerialize() {
+    this.__h3studioSerializedState = applyState(this, stateFromNode(this), false);
+  };
+  node.__h3studioAfterSerialize = function h3studioAfterSerialize(data) {
+    const state = this.__h3studioSerializedState || stateFromNode(this);
+    this.__h3studioSerializedState = null;
     if (data) {
       data.properties ||= {};
       data.properties[STATE_PROPERTY] = serializeState(state);
@@ -838,13 +840,9 @@ function installPanel(node) {
         data.properties[STATE_RECOVERY_PROPERTY] = this.properties[STATE_RECOVERY_PROPERTY];
       }
     }
-    return result;
   };
-  const originalConfigure = node.onConfigure;
-  node.onConfigure = function h3studioConfigure(data) {
-    const result = originalConfigure?.apply(this, arguments);
+  node.__h3studioConfigured = function h3studioConfigured() {
     queueMicrotask(() => renderPanel(this));
-    return result;
   };
   const originalExecuted = node.onExecuted;
   node.onExecuted = function h3studioExecuted(message) {
@@ -878,15 +876,10 @@ function installPanel(node) {
     }, 50);
     return result;
   };
-  const originalConnectionsChange = node.onConnectionsChange;
-  node.onConnectionsChange = function h3studioConnectionsChange() {
-    const result = originalConnectionsChange?.apply(this, arguments);
+  node.__h3studioConnectionsChanged = function h3studioConnectionsChanged() {
     queueMicrotask(() => renderPanel(this));
-    return result;
   };
-  const originalForeground = node.onDrawForeground;
-  node.onDrawForeground = function h3studioForeground(context) {
-    originalForeground?.apply(this, arguments);
+  node.__h3studioDrawForeground = function h3studioDrawForeground() {
     enforceNativeWidgetVisibility(this);
     const signature = linkSignature(this);
     if (signature !== this.__h3studioLinkSignature && !this.__h3studioRenderQueued) {

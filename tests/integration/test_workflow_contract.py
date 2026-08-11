@@ -106,3 +106,14 @@ def test_prompt_editor_and_empty_result_regression_contract():
     assert "Path to an instruction-capable local VLM" not in source
     assert "Image-analysis model" not in source
     assert "__H3STUDIO_REF_" not in source
+
+
+def test_director_lifecycle_has_one_dispatcher_and_one_state_serializer():
+    modular = STUDIO_FRONTEND.read_text(encoding="utf-8")
+    legacy = (ROOT / "web" / "h3studio_ui.js").read_text(encoding="utf-8")
+    for assignment in ("node.onConfigure =", "node.onSerialize =", "node.onConnectionsChange =", "node.onDrawForeground ="):
+        assert assignment not in modular
+    assert "this.__h3studioBeforeSerialize?.(info)" in legacy
+    assert "this.__h3studioAfterSerialize?.(info)" in legacy
+    assert "node.__h3studioBeforeSerialize" in modular
+    assert "node.__h3studioAfterSerialize" in modular

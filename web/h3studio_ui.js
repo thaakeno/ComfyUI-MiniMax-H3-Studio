@@ -3930,6 +3930,7 @@ function installNode(nodeType, nodeData) {
         if (mediaInputIndex >= 0 && this.inputs?.[mediaInputIndex]?.link != null) {
             scheduleNativeMediaConnectionConversion(this, mediaInputIndex);
         }
+        this.__h3studioConfigured?.(info);
         return result;
     };
 
@@ -3941,17 +3942,20 @@ function installNode(nodeType, nodeData) {
         if (connected && !this.__h3sVirtualWireClearing && String(input?.name || "") === "media") {
             scheduleNativeMediaConnectionConversion(this, inputIndex, linkInfo);
         }
+        this.__h3studioConnectionsChanged?.(type, index, connected, linkInfo);
         return result;
     };
 
     const originalSerialize = nodeType.prototype.onSerialize;
     nodeType.prototype.onSerialize = function onSerializeH3Easy(info) {
         if (this.__h3sEditor) syncPromptFromEditor(this, false);
+        this.__h3studioBeforeSerialize?.(info);
         const result = originalSerialize?.apply(this, arguments);
         if (info && this.properties?.[PROMPT_DOC_PROP]) {
             info.properties ||= {};
             info.properties[PROMPT_DOC_PROP] = this.properties[PROMPT_DOC_PROP];
         }
+        this.__h3studioAfterSerialize?.(info);
         return result;
     };
 
@@ -3959,6 +3963,7 @@ function installNode(nodeType, nodeData) {
     nodeType.prototype.onDrawForeground = function onDrawForegroundH3Easy(ctx) {
         const result = originalDraw?.apply(this, arguments);
         if (!this.__h3sEditor && !this.__h3sPromptInstallPending && !this.__h3sPromptInstallRetry) installPromptEditorSoon(this);
+        this.__h3studioDrawForeground?.(ctx);
         return result;
     };
 
