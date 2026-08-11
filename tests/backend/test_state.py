@@ -64,6 +64,7 @@ def test_v1_settings_are_migrated() -> None:
     migrated = migrate_state_dict(old)
     assert migrated["schema_version"] == STATE_SCHEMA_VERSION
     assert migrated["generation"]["seed"] == 9
+    assert migrated["generation"]["cap_native_resolution"] is False
     assert migrated["prompt_options"]["enhance_mode"] == "off"
 
 
@@ -72,6 +73,15 @@ def test_generation_options_clamp_values() -> None:
     assert options.seed == 0
     assert options.megapixels == 2.0
     assert options.custom_width == 32
+
+
+def test_schema8_native_cap_migrates_to_direct_two_megapixel_canvas() -> None:
+    state = StudioState.from_dict({
+        "schema_version": 8,
+        "generation": {"aspect_ratio": "1:1", "megapixels": 2.0, "cap_native_resolution": True},
+    })
+    assert state.generation.cap_native_resolution is False
+    assert (state.generation.resolution().width, state.generation.resolution().height) == (1408, 1408)
 
 
 def test_prompt_options_clamp_and_validate() -> None:

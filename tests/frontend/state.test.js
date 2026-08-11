@@ -25,8 +25,9 @@ import { parseStorageName, previewUrlForStorage, storageNameFromUpload } from ".
 
 test("default state is an immediately usable text-to-image request", () => {
   const state = defaultState();
-  assert.equal(state.schema_version, 8);
+  assert.equal(state.schema_version, 9);
   assert.equal(state.generation.mode, "auto");
+  assert.equal(state.generation.cap_native_resolution, false);
   assert.equal(state.prompt_options.analyzer_resolution, 512);
   assert.deepEqual(state.references, []);
 });
@@ -65,7 +66,7 @@ test("schema one settings migrate into their typed sections", () => {
     schema_version: 1,
     settings: { mode: "reference_edit", megapixels: 1.4, enhance_mode: "vlm", adherence: 0.7 },
   });
-  assert.equal(state.schema_version, 8);
+  assert.equal(state.schema_version, 9);
   assert.equal(state.generation.mode, "reference_edit");
   assert.equal(state.generation.megapixels, 1.4);
   assert.equal(state.prompt_options.enhance_mode, "compile_only");
@@ -116,14 +117,12 @@ test("mention rewriting changes only actual friendly image references", () => {
   assert.equal(result, "Use @Image 3, @Image 1, email x@Image3.test, and @@Image 4");
 });
 
-test("resolution planner aligns dimensions and respects the native cap", () => {
-  for (const ratio of ["1:1", "4:5", "9:16", "16:9", "21:9"]) {
-    const plan = planResolution(ratio, 2);
-    assert.equal(plan.width % 32, 0);
-    assert.equal(plan.height % 32, 0);
-    assert.ok(plan.width * plan.height <= 768 * 1344);
-    assert.equal(plan.capped, true);
-  }
+test("resolution planner keeps one and two megapixel requests distinct", () => {
+  const one = planResolution("1:1", 1);
+  const two = planResolution("1:1", 2);
+  assert.deepEqual([one.width, one.height], [992, 992]);
+  assert.deepEqual([two.width, two.height], [1408, 1408]);
+  assert.equal(two.capped, false);
 });
 
 test("megapixel display exposes stable minimum and maximum limits", () => {

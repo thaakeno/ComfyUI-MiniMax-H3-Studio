@@ -60,6 +60,15 @@ def test_native_cap_can_be_disabled() -> None:
     assert not plan.capped
 
 
+def test_direct_two_megapixel_resolution_is_the_default() -> None:
+    one_mp = plan_resolution("1:1", 1.0)
+    two_mp = plan_resolution("1:1", 2.0)
+    assert (one_mp.width, one_mp.height) == (992, 992)
+    assert (two_mp.width, two_mp.height) == (1408, 1408)
+    assert two_mp.actual_megapixels == pytest.approx(2.0, abs=0.05)
+    assert not two_mp.capped
+
+
 def test_plan_preserves_orientation() -> None:
     assert plan_resolution("9:16").orientation == "portrait"
     assert plan_resolution("16:9").orientation == "landscape"

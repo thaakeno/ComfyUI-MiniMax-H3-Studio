@@ -362,7 +362,13 @@ function generationSection(node, state, refresh) {
   const seed = numberControl(generation.seed, { min: 0, max: Number.MAX_SAFE_INTEGER, step: 1 }, "Seed", (value) => update({ seed: Math.max(0, Math.trunc(value)) }));
   const random = iconButton("Randomize seed", "↻", () => update({ seed: randomSeed() }));
   const seedWrap = element("div", { className: "h3s-seed-row" }, [seed, random]);
-  const plan = planResolution(generation.aspect_ratio, generation.megapixels, generation.custom_width, generation.custom_height, true);
+  const plan = planResolution(
+    generation.aspect_ratio,
+    generation.megapixels,
+    generation.custom_width,
+    generation.custom_height,
+    generation.cap_native_resolution,
+  );
   const preview = element("div", { className: "h3s-resolution-preview" }, [
     element("span", { text: `${plan.width} × ${plan.height}` }),
     element("span", { text: `${plan.actualMegapixels.toFixed(2)} MP${plan.capped ? " · native cap" : ""}` }),
@@ -383,7 +389,7 @@ function generationSection(node, state, refresh) {
         value,
         state.generation.custom_width,
         state.generation.custom_height,
-        true,
+        state.generation.cap_native_resolution,
       );
       megapixelValue.textContent = formatMegapixels(value);
       preview.children[0].textContent = `${next.width} × ${next.height}`;
@@ -405,7 +411,7 @@ function generationSection(node, state, refresh) {
   ]);
   const sizeHelp = element("p", {
     className: "h3s-context-help",
-    text: "Target size controls the requested image area from 0.20 MP (faster) to 2.00 MP (larger). H3's native safety cap can reduce the final area; the exact aligned dimensions and actual MP are shown directly below.",
+    text: "Target size controls the actual requested H3 canvas from 0.20 MP to 2.00 MP. Exact aligned dimensions and actual MP are shown directly below; larger experimental canvases remain outside this stabilization pass.",
   });
   const help = element("p", { className: "h3s-context-help", text: samplingHelp(generation.sampling_profile) });
   const modeHelp = {

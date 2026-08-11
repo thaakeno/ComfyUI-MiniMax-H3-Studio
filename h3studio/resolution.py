@@ -120,7 +120,7 @@ def plan_resolution(
     *,
     custom_width: int = DEFAULT_WIDTH,
     custom_height: int = DEFAULT_HEIGHT,
-    cap_native: bool = True,
+    cap_native: bool = False,
     cap_pixels: int | None = NATIVE_MAX_PIXELS,
     multiple: int = CANVAS_MULTIPLE,
 ) -> ResolutionPlan:

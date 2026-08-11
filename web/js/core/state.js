@@ -1,4 +1,4 @@
-export const STATE_SCHEMA_VERSION = 8;
+export const STATE_SCHEMA_VERSION = 9;
 export const MAX_REFERENCES = 9;
 export const MIN_MEGAPIXELS = 0.2;
 export const MAX_MEGAPIXELS = 2;
@@ -107,7 +107,7 @@ export function defaultState() {
       megapixels: 1,
       custom_width: 1024,
       custom_height: 1024,
-      cap_native_resolution: true,
+      cap_native_resolution: false,
       sampling_profile: "base_quality_20",
       frame_profile: "recommended_5",
       frame_selection: "decode_recommended",
@@ -165,6 +165,7 @@ export function migrateState(value) {
   for (const key of ["enhance_mode", "adherence", "detail_level", "analyzer_model"]) {
     if (key in settings && !(key in promptOptions)) promptOptions[key] = settings[key];
   }
+  generation.cap_native_resolution = false;
   migrated.schema_version = STATE_SCHEMA_VERSION;
   migrated.generation = generation;
   migrated.prompt_options = promptOptions;
@@ -273,7 +274,7 @@ export function rewriteMentions(prompt, ordinalMap) {
   });
 }
 
-export function planResolution(aspectRatio, megapixels, customWidth = 1024, customHeight = 1024, capNative = true) {
+export function planResolution(aspectRatio, megapixels, customWidth = 1024, customHeight = 1024, capNative = false) {
   const ratioPair = ASPECT_RATIOS[aspectRatio] || ASPECT_RATIOS["1:1"];
   const ratio = aspectRatio === "custom"
     ? clamp(customWidth, 32, 16384, 1024) / clamp(customHeight, 32, 16384, 1024)
