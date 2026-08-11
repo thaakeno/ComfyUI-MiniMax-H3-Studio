@@ -7,6 +7,7 @@ from h3studio.benchmark import (
     resolve_accelerator,
     short_profile_label,
 )
+from h3studio.nodes.lazy_switch import H3StudioLazyImageSwitch
 
 
 def test_ab_matrix_builds_resolution_rows_with_baseline_then_accelerator() -> None:
@@ -58,3 +59,14 @@ def test_ab_variants_store_the_seed_shown_for_each_cell() -> None:
         5,
     )
     assert [item.seed for item in variants] == [100, 100, 105, 105, 110, 110]
+
+
+def test_lazy_switch_validates_only_the_selected_connected_branch() -> None:
+    inputs = H3StudioLazyImageSwitch.INPUT_TYPES()
+    assert set(inputs["required"]) == {"benchmark_enabled"}
+    assert inputs["optional"]["normal_image"][1]["lazy"] is True
+    assert inputs["optional"]["benchmark_image"][1]["lazy"] is True
+
+    switch = H3StudioLazyImageSwitch()
+    assert switch.check_lazy_status(False) == ["normal_image"]
+    assert switch.check_lazy_status(True) == ["benchmark_image"]
