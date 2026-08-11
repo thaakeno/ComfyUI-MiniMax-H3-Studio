@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .constants import CONTEXT_SCHEMA_VERSION
-from .prompting.compiler import CompileResult
+from .constants import CONTEXT_SCHEMA_VERSION, ENHANCE_COMPILE, MODE_REFERENCE_EDIT
+from .prompting.compiler import CompileResult, _single_prompt, normalize_user_prompt
+from .references import compile_mentions
 from .resolution import ResolutionPlan
 from .routing import RouteDecision
 from .state import StudioState
@@ -36,6 +37,17 @@ class H3StudioContext:
 
     @property
     def prompt(self) -> str:
+        # Compile-only keeps the full four-section production brief available
+        # for inspection, but the 32B H3 text encoder should not pay to encode
+        # duplicated user text and generic report boilerplate on every edit.
+        if self.state.prompt_options.enhance_mode == ENHANCE_COMPILE:
+            prompt = normalize_user_prompt(self.state.prompt)
+            compact = _single_prompt(prompt, self.compile_result.references, self.compile_result.resolved_mode)
+            return compile_mentions(
+                compact,
+                self.compile_result.references,
+                tag="subject" if self.compile_result.resolved_mode == MODE_REFERENCE_EDIT else "picture",
+            )
         return self.compile_result.native_prompt
 
     @property
