@@ -11,7 +11,6 @@ Build text-to-image, anchored edits, multi-reference compositions, and controlle
   <img alt="ComfyUI custom nodes" src="https://img.shields.io/badge/ComfyUI-Custom%20Nodes-0EA5E9?style=for-the-badge&labelColor=171B1F">
   <img alt="MiniMax H3 profiles" src="https://img.shields.io/badge/H3-Base%20%C2%B7%20LightX%20%C2%B7%20PDD-A855F7?style=for-the-badge&labelColor=171B1F">
   <img alt="Project status alpha" src="https://img.shields.io/badge/Status-Alpha-F59E0B?style=for-the-badge&labelColor=171B1F">
-  <img alt="Reported images generated" src="https://h3-studio-counter.thaakeno.workers.dev/badge.svg">
   <a href="#license"><img alt="MIT license" src="https://img.shields.io/badge/License-MIT-22C55E?style=for-the-badge&labelColor=171B1F"></a>
 </p>
 
@@ -21,6 +20,9 @@ Build text-to-image, anchored edits, multi-reference compositions, and controlle
 
 > [!IMPORTANT]
 > H3 Studio is alpha software built around an evolving audio-video model. Keep working workflow copies when updating ComfyUI, checkpoints, or acceleration nodes. High-resolution generation is experimental; more pixels do not guarantee more learned detail.
+
+> [!NOTE]
+> **An official image-specific H3 descendant is planned.** In the MiniMax H3 team AMA, H3 researcher Kiro Song said the team is deriving a dedicated image model from a common ancestor in the H3 lineage. It is expected to reuse H3's VAE encoder through weight slicing and receive a dedicated image-generation VAE decoder. MiniMax did not announce a release date or measured quality improvement, so H3 Studio's current still-image and experimental T=1 paths remain community solutions for now. [Read the team response.](https://www.reddit.com/r/StableDiffusion/comments/1vh9rtw/comment/p23ecga/)
 
 ## One Studio, three generation paths
 
@@ -172,6 +174,8 @@ If generation fails, open an [issue](https://github.com/thaakeno/ComfyUI-MiniMax
 After a still is successfully selected, H3 Studio adds one integer to an in-memory batch. Every ten images—or after five minutes—it sends only `{ "count": N, "schema": 1 }` in a background thread. It never sends prompts, images, references, filenames, workflows, seeds, hardware, usernames, paths, or installation identifiers. Failures are silent and cannot delay generation.
 
 To opt out, set `H3STUDIO_TELEMETRY=0` before starting ComfyUI, or create an empty `.h3studio-telemetry-disabled` file in this repository. The endpoint can be self-hosted with the deployable [Cloudflare Worker](telemetry/README.md).
+
+The client, tests, and Worker are included, but the public Worker is not deployed yet because this project has no authenticated Cloudflare deployment. The dead README badge has therefore been removed; it should return only after the endpoint resolves and reports a real aggregate count.
 
 <details>
 <summary><strong>Development checks</strong></summary>
