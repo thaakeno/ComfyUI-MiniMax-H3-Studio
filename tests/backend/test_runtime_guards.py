@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from h3studio.runtime_guards import _lean_analyze_references, install_runtime_guards
 from h3studio.prompting import comfy_analyzer
+from h3studio.runtime_guards import _lean_analyze_references, install_runtime_guards
 
 
 def test_zero_image_t2i_never_loads_optional_prompt_writer() -> None:
