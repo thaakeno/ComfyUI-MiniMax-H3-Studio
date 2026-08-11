@@ -95,6 +95,25 @@ def test_functional_nodes_do_not_overlap():
             assert not overlap, f"{left['title']} overlaps {right['title']}"
 
 
+def test_nodes_within_each_layout_group_do_not_overlap():
+    workflow = load_workflow()
+    nodes = {node["id"]: node for node in workflow["nodes"]}
+    memberships = [
+        (10,), (11, 12), (16, 13), (14, 15),
+        (25, 26, 28, 29), (20, 21, 22, 23, 24), (17, 19, 27),
+    ]
+    for node_ids in memberships:
+        group_nodes = [nodes[node_id] for node_id in node_ids]
+        for index, left in enumerate(group_nodes):
+            lx, ly = left["pos"]
+            lw, lh = left["size"]
+            for right in group_nodes[index + 1 :]:
+                rx, ry = right["pos"]
+                rw, rh = right["size"]
+                overlap = lx < rx + rw and lx + lw > rx and ly < ry + rh and ly + lh > ry
+                assert not overlap, f"{left['title']} overlaps {right['title']} inside its layout group"
+
+
 def test_nodes_are_fully_contained_by_their_intended_groups():
     workflow = load_workflow()
     nodes = {node["id"]: node for node in workflow["nodes"]}

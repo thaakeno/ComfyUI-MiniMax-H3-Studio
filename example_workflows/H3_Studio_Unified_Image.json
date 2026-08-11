@@ -926,8 +926,8 @@
       "id": 19,
       "type": "H3StudioLazyImageSwitch",
       "pos": [
-        820,
-        1440
+        340,
+        1500
       ],
       "size": [
         420,
@@ -1021,7 +1021,7 @@
       },
       "widgets_values": [
         "quick start",
-        "1. Write naturally in the Director.\n2. For references, click Add images inside the Director; each upload becomes an ordered @Image card.\n3. Set each image's role and retention policy, then type @ in the prompt to insert it.\n4. Choose aspect ratio, megapixels, and seed.\n5. Queue. Auto uses FL2VA for pure text and REF2VA for multi-reference work.\n\nThe workflow opens at 0/9 with no required files and runs text-to-image immediately."
+        "## Make an image\n\n1. Write naturally in the **Director**.\n2. Add references only when needed; they become ordered `@Image1`, `@Image2`, … cards.\n3. Choose the image role, retention, aspect, resolution, and seed.\n4. Queue the workflow.\n\n> [!TIP]\n> With no references, Auto uses FL2VA text-to-image immediately. Multi-reference work uses REF2VA."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1066,7 +1066,7 @@
       },
       "widgets_values": [
         "settings",
-        "Analyze image pixels uses one native ComfyUI Qwen3-VL checkpoint for factual source descriptions and then repairs auto roles from your @Image sentence. Fingerprinted descriptions survive workflow reloads and unchanged images skip analysis. Fast detailed expansion is deterministic and never stages a second 8B writer model. The selected H3 ConvRot file remains the conditioning encoder; it is not assumed to expose a chat-generation head. No model is downloaded automatically."
+        "## Two deliberate stages\n\n- **Analyze image pixels**: one native ComfyUI Qwen3-VL checkpoint creates factual source descriptions and repairs automatic roles.\n- **Detailed prompt**: a deterministic compiler expands those facts without staging a second 8B writer.\n\nFingerprints and descriptions survive workflow reloads, so unchanged references skip analysis. No model downloads automatically."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1111,7 +1111,7 @@
       },
       "widgets_values": [
         "settings",
-        "Auto route keeps both proven paths available. Zero references selects FL2VA text-to-image. One reference may use FL2VA as an image anchor depending on requested mode. Multi-reference work selects REF2VA. Forced routes are advanced controls and diagnostics state when images are ignored or a route is experimental. REF2VA-only text-to-image remains unproven and is not the default."
+        "## Auto is the safe default\n\n- **0 references:** FL2VA text-to-image\n- **1 anchor:** FL2VA image-to-image when requested\n- **Multiple references:** REF2VA\n\n> [!WARNING]\n> Forced routes are diagnostic controls. Invalid reference/route combinations are rejected before model work starts."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1156,7 +1156,7 @@
       },
       "widgets_values": [
         "troubleshooting",
-        "This repository is checked locally for Python/JavaScript syntax, state migration, prompt compilation, resolution math, route decisions, node registration, and workflow graph integrity. Actual CUDA generation, model filenames, VRAM behavior, visual quality, and your installed ComfyUI frontend build must be smoke-tested in the Lightning workspace. Follow docs/LIGHTNING_TEST_PLAN.md before calling a GPU path verified."
+        "## What local checks prove\n\nSyntax, state migration, prompt compilation, resolution math, routes, registration, and graph integrity are checked here.\n\n> [!IMPORTANT]\n> CUDA generation, installed model filenames, VRAM, speed, and visual quality require the real Lightning workspace. Follow `docs/LIGHTNING_TEST_PLAN.md`."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1201,7 +1201,7 @@
       },
       "widgets_values": [
         "optional / experimental",
-        "ComfyUI can promote native scalar widgets through subgraphs, but custom DOM controls and mention editors are not reliably promoted. The visible Director is therefore the stable product UI. Sampling and exact-frame decode live in the reusable subgraph because those are ordinary typed sockets. This preserves the polished @ tagging interface without repeating the old invisible-widget failure."
+        "## Why this layout is intentional\n\nThe visible **Director** owns rich Studio state, reference cards, and `@Image` editing. The reusable subgraph owns ordinary typed sampling and exact-frame decode sockets.\n\nKeeping that boundary avoids invisible promoted widgets and makes the main path readable."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1246,7 +1246,7 @@
       },
       "widgets_values": [
         "settings",
-        "identity or character + fully_preserved: keep the exact person or design.\nstyle + attribute_transfer: borrow rendering language without copying content.\ncomposition or layout + attribute_transfer: borrow placement and hierarchy.\noutfit, pose, typography, lighting, texture, object, and environment provide narrower controls.\n\nThe compiler can infer roles from nearby prompt text, but explicit card metadata wins."
+        "## Choose what each image contributes\n\n- `identity` / `character` + `fully_preserved`: keep the exact person or design.\n- `style` + `attribute_transfer`: borrow rendering language, not content.\n- `composition` / `layout`: borrow placement and hierarchy.\n- `outfit`, `pose`, `typography`, `lighting`, `texture`, `object`, and `environment`: narrow transfers.\n\n**Explicit card metadata always wins** over inference."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1291,7 +1291,7 @@
       },
       "widgets_values": [
         "models",
-        "H3 emits a short temporal latent even when the desired output is one image. The bundled subgraph samples that packet, decodes the exact requested profile, and selects the decoder-recommended stable frame. Base Quality needs no acceleration files. LightX profiles automatically apply Kijai's matching v0.1 LoRA. Mamad8 PDD profiles are REF2VA-only and pair the selected 600/900 student LoRA with its heads bank through the separately installed Mamad8 node package. Current ComfyUI uses bypass-forward adapters to avoid slow quantized weight merging."
+        "## Profiles\n\n- **Base Quality / Balanced:** native H3; no acceleration files.\n- **LightX v0.1:** Kijai's empirical four-step ComfyUI recipe.\n- **PDD 600 / 900:** four-step REF2VA students; requires references and Mamad8's node package.\n\nH3 samples a short temporal packet, then the subgraph decodes and selects the recommended stable still."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1300,12 +1300,12 @@
       "id": 27,
       "type": "H3StudioWorkflowNote",
       "pos": [
-        1040,
-        1500
+        820,
+        1460
       ],
       "size": [
         480,
-        360
+        400
       ],
       "flags": {},
       "order": 17,
@@ -1336,7 +1336,7 @@
       },
       "widgets_values": [
         "optional / experimental",
-        "Turn Benchmark ON only in the purple Run mode switch. ComfyUI lazy evaluation then requests the matrix and never schedules the normal sampler. Enter two profiles for simple A/B, or add more Base, LightX and PDD profile IDs. The node shows and guards the exact profile x resolution x repeat generation count before expensive work. PDD requires references and a REF2VA Director context. Same seed is the fair default; New seed every image is only a diversity sweep. VAE mode samples one T=1 latent once and decodes it through both available VAEs."
+        "## Compare two or many setups\n\n1. Enter Base, LightX, or PDD profiles and resolution targets.\n2. Check the exact generation count shown on the node.\n3. Turn **Benchmark ON** in the purple Run mode switch.\n\nNormal sampling stays lazy and is not scheduled. Same seed is the fairest comparison; new seeds are for diversity sweeps. Disable live cells for maximum throughput."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1381,7 +1381,7 @@
       },
       "widgets_values": [
         "models",
-        "Core MiniMax H3 models, 32B conditioning encoder, and video VAE:\nhttps://huggingface.co/Comfy-Org/MiniMax-H3\n\nQwen3-VL 4B image analyzer:\nhttps://huggingface.co/Comfy-Org/Qwen3-VL\n\nExperimental T=1 Image VAE:\nhttps://huggingface.co/Mamad8/MiniMax-H3-Image-VAE\n\nLightX:\nhttps://huggingface.co/Kijai/MiniMax-H3_comfy\n\nTAEH3 preview:\nhttps://huggingface.co/Kijai/MiniMax-H3-TAE\n\nPDD artifacts and required node:\nhttps://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8\nhttps://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8\n\nNothing downloads automatically."
+        "## Model sources\n\n- [MiniMax H3 models, 32B encoder, video VAE](https://huggingface.co/Comfy-Org/MiniMax-H3)\n- [Qwen3-VL image analyzer](https://huggingface.co/Comfy-Org/Qwen3-VL)\n- [Mamad8 experimental Image VAE](https://huggingface.co/Mamad8/MiniMax-H3-Image-VAE)\n- [Kijai LightX artifacts](https://huggingface.co/Kijai/MiniMax-H3_comfy)\n- [Kijai TAEH3 preview](https://huggingface.co/Kijai/MiniMax-H3-TAE)\n- [Mamad8 PDD artifacts](https://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8) and [required node](https://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8)\n\n> [!NOTE]\n> H3 Studio never downloads these automatically."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1655,8 +1655,8 @@
       "bounding": [
         -580,
         1400,
-        2140,
-        720
+        1940,
+        700
       ],
       "color": "#60467a",
       "font_size": 28,
@@ -2414,8 +2414,8 @@
     "frontendVersion": "1.30.0",
     "h3studio": {
       "schema_version": 8,
-      "template_version": "1.3.0",
-      "design_source": "Alier v1.3.7 geometry",
+      "template_version": "1.4.0",
+      "design_source": "H3 Studio maintained column layout",
       "audio_prompt_sections": false,
       "hub_included": false
     }
