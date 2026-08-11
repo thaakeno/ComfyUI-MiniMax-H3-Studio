@@ -18,6 +18,7 @@ import {
   normalizeState,
   planResolution,
   removeReferenceMentions,
+  resolutionTier,
   restorePersistedState,
   serializeState,
   validateGenerationContract,
@@ -560,9 +561,15 @@ function generationSection(node, state, refresh) {
     generation.custom_height,
     generation.cap_native_resolution,
   );
+  const initialTier = resolutionTier(generation.megapixels, generation.cap_native_resolution);
+  const tierBadge = element("span", { className: `h3s-resolution-tier is-${initialTier.key}`, text: initialTier.label });
+  const tierNote = element("span", { className: "h3s-resolution-note", text: initialTier.note });
   const preview = element("div", { className: "h3s-resolution-preview" }, [
-    element("span", { text: `${plan.width} × ${plan.height}` }),
-    element("span", { text: `${plan.actualMegapixels.toFixed(2)} MP${plan.capped ? " · conservative cap" : " · direct"}` }),
+    element("div", { className: "h3s-resolution-result" }, [
+      element("strong", { text: `${plan.width} × ${plan.height}` }),
+      element("span", { text: `${plan.actualMegapixels.toFixed(2)} MP actual · ${plan.capped ? "conservative" : "direct"}` }),
+    ]),
+    element("div", { className: "h3s-resolution-status" }, [tierBadge, tierNote]),
   ]);
   const megapixelValue = element("output", {
     className: "h3s-megapixel-value",
@@ -583,11 +590,26 @@ function generationSection(node, state, refresh) {
         state.generation.cap_native_resolution,
       );
       megapixelValue.textContent = formatMegapixels(value);
-      preview.children[0].textContent = `${next.width} × ${next.height}`;
-      preview.children[1].textContent = `${next.actualMegapixels.toFixed(2)} MP${next.capped ? " · conservative cap" : " · direct"}`;
+      preview.querySelector(".h3s-resolution-result strong").textContent = `${next.width} × ${next.height}`;
+      preview.querySelector(".h3s-resolution-result span").textContent = `${next.actualMegapixels.toFixed(2)} MP actual · ${next.capped ? "conservative" : "direct"}`;
+      const tier = resolutionTier(value, state.generation.cap_native_resolution);
+      tierBadge.className = `h3s-resolution-tier is-${tier.key}`;
+      tierBadge.textContent = tier.label;
+      tierNote.textContent = tier.note;
+      megapixelSlider.dataset.tier = tier.key;
       applyState(node, state);
     },
   );
+  megapixelSlider.dataset.tier = initialTier.key;
+  const presets = [
+    [0.4, "Draft"], [1, "Recommended"], [2, "2 MP"], [4, "4 MP"], [8.2944, "4K canvas"],
+  ].map(([value, label]) => element("button", {
+    className: `h3s-resolution-preset${Math.abs(generation.megapixels - value) < 0.03 ? " is-active" : ""}`,
+    type: "button",
+    text: label,
+    attrs: { "aria-label": `Set ${label}, ${formatMegapixels(value)}` },
+    on: { click: () => update({ megapixels: value }) },
+  }));
   const megapixelControl = element("div", { className: "h3s-megapixel-control" }, [
     element("div", { className: "h3s-megapixel-top" }, [
       element("span", { text: formatMegapixels(MIN_MEGAPIXELS) }),
@@ -595,6 +617,21 @@ function generationSection(node, state, refresh) {
       element("span", { text: formatMegapixels(MAX_MEGAPIXELS) }),
     ]),
     megapixelSlider,
+    element("div", { className: "h3s-resolution-presets" }, presets),
+  ]);
+  const resolutionModes = element("div", { className: "h3s-resolution-modes", attrs: { role: "group", "aria-label": "Resolution planning mode" } }, [
+    element("button", {
+      className: `h3s-resolution-mode${generation.cap_native_resolution ? " is-active" : ""}`,
+      type: "button", text: "Conservative · ~1 MP",
+      attrs: { "aria-pressed": String(generation.cap_native_resolution) },
+      on: { click: () => update({ cap_native_resolution: true }) },
+    }),
+    element("button", {
+      className: `h3s-resolution-mode${generation.cap_native_resolution ? "" : " is-active"}`,
+      type: "button", text: "Direct · honor target",
+      attrs: { "aria-pressed": String(!generation.cap_native_resolution) },
+      on: { click: () => update({ cap_native_resolution: false }) },
+    }),
   ]);
   const grid = element("div", { className: "h3s-grid" }, [
     controlRow("Mode", mode), controlRow("Aspect", ratio), controlRow("Target size", megapixelControl), controlRow("Seed", seedWrap),
@@ -616,7 +653,7 @@ function generationSection(node, state, refresh) {
   const validation = validationMessage
     ? element("p", { className: "h3s-validation-error", text: validationMessage, attrs: { role: "alert" } })
     : null;
-  return section("Generation", element("div", { className: "h3s-section-stack" }, [grid, validation, modeDescription, sizeHelp, preview, help].filter(Boolean)));
+  return section("Generation", element("div", { className: "h3s-section-stack" }, [grid, resolutionModes, validation, modeDescription, sizeHelp, preview, help].filter(Boolean)));
 }
 
 function promptSection(node, state, refresh) {
@@ -956,19 +993,12 @@ function advancedSection(node, state, refresh) {
     applyState(node, state);
     refresh();
   };
-  const resolutionMode = selectControl(
-    state.generation.cap_native_resolution ? "conservative" : "direct",
-    [["direct", "Direct · honor target"], ["conservative", "Conservative · ~1 MP cap"]],
-    "Resolution planning mode",
-    (value) => update({ cap_native_resolution: value === "conservative" }),
-  );
   content.append(element("div", { className: "h3s-grid" }, [
     controlRow("Model route", selectControl(state.generation.route, [
       ["auto", "Auto · choose for me"], ["fl2va", "Force FL2VA"], ["ref2va", "Force REF2VA"],
     ], "Conditioning route", (value) => update({ route: value }))),
-    controlRow("Resolution mode", resolutionMode),
   ]));
-  content.append(element("p", { className: "h3s-context-help", text: "Direct mode honors multi-megapixel targets. Conservative mode intentionally applies the older ~1 MP area cap. Model route normally follows Mode; force a route only for controlled comparisons." }));
+  content.append(element("p", { className: "h3s-context-help", text: "Resolution mode now lives beside the target-size control. Model route normally follows Mode; force a route only for controlled comparisons." }));
   const toggle = element("button", {
     className: "h3s-advanced-toggle", type: "button", attrs: { "aria-expanded": String(state.ui.advanced_open) },
     on: { click: () => { state.ui.advanced_open = !state.ui.advanced_open; applyState(node, state); refresh(); } },

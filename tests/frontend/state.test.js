@@ -18,6 +18,7 @@ import {
   planResolution,
   restorePersistedState,
   removeReferenceMentions,
+  resolutionTier,
   rewriteMentions,
   serializeState,
   validateGenerationContract,
@@ -264,6 +265,15 @@ test("megapixel display exposes stable minimum and maximum limits", () => {
   assert.equal(formatMegapixels(MIN_MEGAPIXELS), "0.20 MP");
   assert.equal(formatMegapixels(1), "1.00 MP");
   assert.equal(formatMegapixels(MAX_MEGAPIXELS), "8.50 MP");
+});
+
+test("resolution tiers label safe and experimental direct ranges honestly", () => {
+  assert.equal(resolutionTier(0.2).key, "fast");
+  assert.equal(resolutionTier(1).key, "recommended");
+  assert.equal(resolutionTier(2).key, "extended");
+  assert.equal(resolutionTier(4).key, "experimental");
+  assert.equal(resolutionTier(8.5).key, "extreme");
+  assert.equal(resolutionTier(8.5, true).key, "conservative");
 });
 
 test("studio layout cannot feed total node height back into panel height", () => {

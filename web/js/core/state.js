@@ -79,6 +79,16 @@ export function formatMegapixels(value) {
   return `${clamp(value, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1).toFixed(2)} MP`;
 }
 
+export function resolutionTier(value, conservative = false) {
+  const megapixels = clamp(value, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1);
+  if (conservative) return { key: "conservative", label: "RECOMMENDED CAP", note: "Plans near 1 MP for predictable memory use." };
+  if (megapixels <= 0.4) return { key: "fast", label: "FAST / LOW RES", note: "Fast drafts and composition checks." };
+  if (megapixels <= 1.2) return { key: "recommended", label: "RECOMMENDED", note: "The safest direct H3 working range." };
+  if (megapixels <= 2.2) return { key: "extended", label: "EXTENDED", note: "More pixels with higher time and VRAM cost." };
+  if (megapixels <= 4.2) return { key: "experimental", label: "EXPERIMENTAL", note: "High cost; extra pixels do not guarantee more detail." };
+  return { key: "extreme", label: "EXTREME / EXPERIMENTAL", note: "Very high cost and not a quality guarantee." };
+}
+
 export function defaultState() {
   return {
     schema_version: STATE_SCHEMA_VERSION,
