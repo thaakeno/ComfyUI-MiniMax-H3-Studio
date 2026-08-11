@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from h3studio.benchmark import (
     SEED_STRATEGIES,
     build_ab_variants,
@@ -31,19 +33,28 @@ def test_director_base_profile_is_valid_instead_of_crashing_after_analysis() -> 
     assert resolve_accelerator("Director selected accelerator", "base_quality_20") == "base_quality_20"
 
 
-def test_ab_supports_lora_against_lora() -> None:
+def test_ab_supports_lora_against_lora_on_the_same_route() -> None:
     variants = build_ab_variants(
+        "LightX v1.0 - FL2V 8",
         "LightX v0.1 - ER-SDE 4",
-        "PDD REF2VA - 4-step - ckpt 900",
         "base_quality_20",
     )
-    assert {item.profile for item in variants} == {"lightx_er_sde_4", "pdd_ref2va_4_900"}
+    assert {item.profile for item in variants} == {"lightx_v1_fl2v_8", "lightx_er_sde_4"}
     assert all(item.accelerated for item in variants)
+
+
+def test_ab_rejects_lightx_against_pdd_because_their_routes_differ() -> None:
+    with pytest.raises(ValueError, match="cannot share one benchmark matrix"):
+        build_ab_variants(
+            "LightX v1.0 - FL2V 8",
+            "PDD REF2VA - 4-step - ckpt 900",
+            "base_quality_20",
+        )
 
 
 def test_ab_labels_say_whether_a_lora_is_active() -> None:
     assert short_profile_label("base_quality_20", False).startswith("No LoRA")
-    assert short_profile_label("lightx_er_sde_4", True).startswith("LoRA")
+    assert short_profile_label("lightx_v1_fl2v_8", True).startswith("LoRA")
 
 
 def test_ab_seed_strategies_preserve_their_comparison_contracts() -> None:
@@ -55,7 +66,7 @@ def test_ab_seed_strategies_preserve_their_comparison_contracts() -> None:
 def test_ab_variants_store_the_seed_shown_for_each_cell() -> None:
     variants = build_ab_variants(
         "Base Quality - RES 20",
-        "LightX v0.1 - ER-SDE 4",
+        "LightX v1.0 - FL2V 8",
         "base_quality_20",
         100,
         SEED_STRATEGIES[1],
@@ -66,14 +77,14 @@ def test_ab_variants_store_the_seed_shown_for_each_cell() -> None:
 
 def test_matrix_accepts_more_than_two_profiles_and_reports_exact_launch_count() -> None:
     plan = build_matrix_plan(
-        "base_quality_20, lightx_er_sde_4, lightx_sa_solver_4",
+        "base_quality_20, lightx_v1_fl2v_8, lightx_er_sde_4",
         "0.4, 1.0",
         "base_quality_20",
         repeats=2,
         max_generations=12,
     )
 
-    assert plan.profiles == ("base_quality_20", "lightx_er_sde_4", "lightx_sa_solver_4")
+    assert plan.profiles == ("base_quality_20", "lightx_v1_fl2v_8", "lightx_er_sde_4")
     assert plan.megapixels == (0.4, 1.0)
     assert plan.generation_count == 12
     assert [item.repeat for item in plan.variants] == [1] * 6 + [2] * 6
@@ -82,7 +93,7 @@ def test_matrix_accepts_more_than_two_profiles_and_reports_exact_launch_count() 
 def test_matrix_guard_rejects_accidental_large_run_before_execution() -> None:
     try:
         build_matrix_plan(
-            "base_quality_20, lightx_er_sde_4, lightx_sa_solver_4",
+            "base_quality_20, lightx_v1_fl2v_8, lightx_er_sde_4",
             "0.4, 1.0, 2.0",
             "base_quality_20",
             repeats=2,
@@ -114,10 +125,21 @@ def test_matrix_pdd_requires_references_and_ref2va_context() -> None:
             raise AssertionError("invalid PDD matrix was not rejected")
 
 
+def test_matrix_lightx_requires_fl2va_context() -> None:
+    with pytest.raises(ValueError, match="FL2VA Director context"):
+        build_matrix_plan(
+            "base_quality_20, lightx_v1_fl2v_8",
+            "1.0",
+            "base_quality_20",
+            reference_count=2,
+            selected_route="ref2va",
+        )
+
+
 def test_matrix_parsers_accept_labels_ids_mp_suffixes_and_remove_duplicates() -> None:
     assert parse_profile_list(
-        "Base Quality - RES 20\nbase_quality_20\nLightX v0.1 - ER-SDE 4", "base_quality_20"
-    ) == ("base_quality_20", "lightx_er_sde_4")
+        "Base Quality - RES 20\nbase_quality_20\nLightX v1.0 - FL2V 8", "base_quality_20"
+    ) == ("base_quality_20", "lightx_v1_fl2v_8")
     assert parse_megapixel_list("0.4 MP, 1 megapixel, 1.0") == (0.4, 1.0)
 
 
