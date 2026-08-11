@@ -23,6 +23,7 @@ import {
   validateGenerationContract,
 } from "./core/state.js";
 import { element, field, iconButton, numberControl, rangeControl, selectControl } from "./core/dom.js";
+import { executedImageUrl, isNodeDownstream } from "./core/final_output.js";
 import { STUDIO_PANEL_HEIGHT, initialStudioNodeSize, studioPanelSize } from "./core/layout.js";
 import { openImageLightbox } from "./core/lightbox.js";
 import { installTheme } from "./core/theme.js";
@@ -398,6 +399,70 @@ function resultsSection(node) {
   }
   const details = element("details", { className: "h3s-result", attrs: { open: "" } }, children);
   return details;
+}
+
+async function queueDirectorWithSeed(node, seed) {
+  const state = stateFromNode(node);
+  state.generation = { ...state.generation, seed: Math.max(0, Math.trunc(seed)) };
+  applyState(node, state);
+  renderPanel(node);
+  try {
+    await app.queuePrompt(0);
+  } catch (error) {
+    app.extensionManager?.toast?.add?.({
+      severity: "error",
+      summary: "H3 Studio rerun failed",
+      detail: String(error?.message || error),
+      life: 6000,
+    });
+  }
+}
+
+function finalImageSection(node) {
+  const result = node.__h3studioFinalImage;
+  if (!result?.url) return null;
+  const metadata = element("div", {
+    className: "h3s-final-metadata",
+    text: `Seed ${result.seed} · ${result.profile}`,
+  });
+  const image = element("img", {
+    className: "h3s-final-image",
+    src: result.url,
+    alt: "Finished H3 Studio image",
+    title: "Click to expand",
+    on: {
+      load: (event) => {
+        result.width = event.target.naturalWidth;
+        result.height = event.target.naturalHeight;
+        metadata.textContent = `Seed ${result.seed} · ${result.width} × ${result.height} · ${result.profile}`;
+      },
+      click: (event) => {
+        event.stopPropagation();
+        openImageLightbox(result.url, metadata.textContent);
+      },
+    },
+  });
+  const different = () => {
+    let seed = randomSeed();
+    if (seed === result.seed) seed = (seed + 1) % Number.MAX_SAFE_INTEGER;
+    queueDirectorWithSeed(node, seed);
+  };
+  const same = () => queueDirectorWithSeed(node, result.seed);
+  const edit = () => {
+    const state = stateFromNode(node);
+    state.generation = { ...state.generation, seed: result.seed, seed_locked: true };
+    applyState(node, state);
+    renderPanel(node);
+    queueMicrotask(() => node.__h3sEditor?.focus?.({ preventScroll: false }));
+  };
+  const actions = element("div", { className: "h3s-final-actions" }, [
+    element("button", { className: "h3s-final-action", type: "button", text: "New seed", on: { click: different } }),
+    element("button", { className: "h3s-final-action", type: "button", text: "Same seed", on: { click: same } }),
+    element("button", {
+      className: "h3s-final-action", type: "button", text: "Edit prompt · lock seed", on: { click: edit },
+    }),
+  ]);
+  return section("Finished image", element("div", { className: "h3s-final-result" }, [image, metadata, actions]));
 }
 
 function controlRow(label, control) {
@@ -871,6 +936,7 @@ function renderPanel(node) {
     }) : null,
     generationSection(node, state, refresh),
     promptSection(node, state, refresh),
+    finalImageSection(node),
     resultsSection(node),
     referencesSection(node, state, refresh),
     advancedSection(node, state, refresh),
@@ -878,6 +944,26 @@ function renderPanel(node) {
   root.append(...children);
   node.__h3studioLinkSignature = linkSignature(node);
 }
+
+api.addEventListener("executed", ({ detail }) => {
+  const targetId = detail?.node;
+  const outputNode = app.graph?.getNodeById?.(Number(targetId));
+  if (!outputNode || !["PreviewImage", "H3StudioSaveImage"].includes(outputNode.comfyClass)) return;
+  const item = detail?.output?.images?.[0];
+  const url = executedImageUrl(item);
+  if (!url) return;
+  for (const node of app.graph?._nodes || []) {
+    if (node.comfyClass !== TARGET || !isNodeDownstream(app.graph?.links, node.id, targetId)) continue;
+    const state = stateFromNode(node);
+    node.__h3studioFinalImage = {
+      url,
+      seed: state.generation.seed,
+      profile: state.generation.sampling_profile,
+      promptId: promptId(detail),
+    };
+    queueMicrotask(() => renderPanel(node));
+  }
+});
 
 function installPanel(node) {
   if (node.__h3studioPanelInstalled || typeof node.addDOMWidget !== "function") return;
