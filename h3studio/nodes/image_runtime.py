@@ -1996,11 +1996,11 @@ class H3StudioSamplingPreset:
 
 
 class H3StudioWorkflowNote:
-    """Non-executing documentation card used by the bundled UI workflows."""
+    """Non-executing Markdown documentation card used by the bundled workflows."""
 
     DESCRIPTION = (
-        "A multiline documentation card for Image Studio workflows. It has no outputs and does not participate in "
-        "generation; edit or delete it freely."
+        "A sanitized Markdown documentation card with Preview/Edit modes. It has no outputs and does not participate "
+        "in generation; edit or delete it freely."
     )
 
     @classmethod
@@ -2017,7 +2017,7 @@ class H3StudioWorkflowNote:
                         "default": "Workflow guidance goes here.",
                         "multiline": True,
                         "dynamicPrompts": False,
-                        "tooltip": "Plain-text workflow instructions. This text is never sent to MiniMax H3.",
+                        "tooltip": "Markdown workflow instructions. This text is rendered safely and never sent to MiniMax H3.",
                     },
                 ),
             }
