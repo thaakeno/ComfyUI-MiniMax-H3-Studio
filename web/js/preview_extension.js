@@ -1,6 +1,7 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 import { openImageLightbox } from "./core/lightbox.js";
+import { previewViewportHeight, previewWidgetSizing } from "./core/preview_layout.js";
 
 const TARGET = "H3StudioTAEH3Preview";
 const MAX_HISTORY = 40;
@@ -112,8 +113,10 @@ function installPreview(node) {
   const widget = node.addDOMWidget("h3studio_live_preview", "h3studio_live_preview", root, {
     serialize: false,
     hideOnZoom: false,
+    ...previewWidgetSizing(node),
   });
-  widget.computeSize = (width) => [width, 440];
+  // Legacy frontend fallback. Nodes 2.0 reads the sizing callbacks above.
+  widget.computeSize = (width) => [width, previewViewportHeight(node.size?.[1])];
   node.setSize?.([Math.max(node.size?.[0] || 460, 460), Math.max(node.size?.[1] || 620, 620)]);
 }
 
