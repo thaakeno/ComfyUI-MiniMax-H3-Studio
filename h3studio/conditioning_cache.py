@@ -11,6 +11,8 @@ from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 from typing import Any
 
+from .performance import prewarm_vae, text_encoder_residency
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -150,15 +152,27 @@ def _encode_prompt(bundle: Any, key: Hashable, build_tokens: Callable[[], Any]):
     cached = _PROMPT_CACHE.get(key)
     if cached is not None:
         return cached, "HIT", 0.0, "warm-cache"
+
     started = time.perf_counter()
     tokens = build_tokens()
     tokenized = time.perf_counter()
-    conditioning = bundle.clip.encode_from_tokens_scheduled(tokens)
+    # The 32B H3 encoder fits by itself on the target 22 GiB L4. Materializing
+    # it for this cache-miss encode is dramatically faster than streaming its
+    # quantized layers through DynamicVRAM for every transformer block. Release
+    # it immediately afterwards so FL2VA/REF2VA gets the full VRAM budget.
+    with text_encoder_residency(bundle.clip) as residency:
+        encode_started = time.perf_counter()
+        conditioning = bundle.clip.encode_from_tokens_scheduled(tokens)
+        encode_finished = time.perf_counter()
     finished = time.perf_counter()
+
     _PROMPT_CACHE.put(key, conditioning)
     tokenize_seconds = tokenized - started
-    encode_seconds = finished - tokenized
-    runtime = f"native-comfy-manager; tokenize={tokenize_seconds:.3f}s; encode={encode_seconds:.3f}s"
+    encode_seconds = encode_finished - encode_started
+    runtime = (
+        f"{residency.summary()}; tokenize={tokenize_seconds:.3f}s; encode={encode_seconds:.3f}s; "
+        f"total_miss={finished - started:.3f}s"
+    )
     return conditioning, "MISS", finished - started, runtime
 
 
@@ -170,6 +184,7 @@ def _source_stage(bundle: Any, image: Any, image_id: Hashable, width: int, heigh
     if cached is not None:
         return (*cached, "HIT")
     fitted = _resize_image(image[:1], width, height, source_fit)
+    prewarm_vae(bundle.video_vae)
     latent = bundle.video_vae.encode(fitted)
     value = fitted, latent
     _SOURCE_VAE_CACHE.put(key, value)
@@ -195,6 +210,7 @@ def _reference_vae_stage(
         return (*cached, "HIT")
     if resized_image is None:
         resized_image, tw, th = _reference_resize(image, width, height, reference_size)
+    prewarm_vae(bundle.video_vae)
     latent = bundle.video_vae.encode(resized_image)
     value = latent, tw, th
     _REFERENCE_VAE_CACHE.put(key, value)
