@@ -1,6 +1,7 @@
 import { app } from "../../../scripts/app.js";
 
 import { parseInlineMarkdown, parseMarkdown } from "./core/markdown.js";
+import { noteViewportHeight } from "./core/note_layout.js";
 
 const TARGET = "H3StudioWorkflowNote";
 
@@ -86,7 +87,6 @@ function installNote(node) {
   const sectionWidget = widget(node, "section");
   const textWidget = widget(node, "text");
   if (!textWidget) return;
-  const initialHeight = Math.max(220, Number(node.size?.[1]) || 300);
   hideWidget(sectionWidget);
   hideWidget(textWidget);
 
@@ -153,7 +153,10 @@ function installNote(node) {
     serialize: false,
     hideOnZoom: false,
   });
-  display.computeSize = (width) => [width, initialHeight - 54];
+  // nodeCreated runs before a workflow's serialized node size is restored.
+  // Read the live height whenever ComfyUI lays out the widget instead of
+  // freezing the temporary constructor height and leaving most of the node blank.
+  display.computeSize = (width) => [width, noteViewportHeight(node.size?.[1])];
   render();
   setMode(false);
 }
