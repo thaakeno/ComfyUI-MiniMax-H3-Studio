@@ -1,58 +1,71 @@
-"""Small runtime guards for memory-constrained H3 generation paths.
+"""Runtime memory guards for optional Qwen helper models.
 
-These guards preserve optional analyzer/writer behavior for reference workflows
-while preventing legacy saved state from staging a helper Qwen model before a
-plain zero-image H3 text-to-image conditioning pass.
+Prompt enhancement must honor the Director toggle and selected Loader model.
+When it runs, release the optional analyzer/writer objects immediately after the
+analysis/writer pass so H3's 32B conditioning encoder does not compete with a
+resident helper model on memory-constrained hosts.
 """
 
 from __future__ import annotations
 
+import gc
 import logging
-from collections.abc import Sequence
-from typing import Any
+from contextlib import suppress
 
 from .prompting import comfy_analyzer
-from .references import ReferenceImage
 
 LOGGER = logging.getLogger(__name__)
 
 _ORIGINAL_ANALYZE_REFERENCES = comfy_analyzer.analyze_references
 
 
-def _lean_analyze_references(
-    clip: Any,
-    prompt: str,
-    references: Sequence[ReferenceImage],
-    images: Sequence[Any],
-    **kwargs,
-):
-    """Skip the optional prompt-writer model for zero-image T2I.
+def _helper_bundle(*loaders):
+    for loader in loaders:
+        owner = getattr(loader, "__self__", None)
+        if owner is not None and hasattr(owner, "analyzer_clip") and hasattr(owner, "prompt_writer_clip"):
+            return owner
+    return None
 
-    alpha.12 allowed ``deep_enhancement`` to enter the Qwen helper path even
-    when there were no reference images. On 32 GB hosts with model files in
-    ``/dev/shm`` that can stage the 4B helper immediately before H3's 32B text
-    encoder, recreating the host-memory pressure that the validated L4 path had
-    avoided. Reference workflows still use the configured analyzer/writer.
-    """
 
-    if not images and kwargs.get("deep_enhancement"):
-        LOGGER.info(
-            "[H3 Studio] Zero-image T2I: skipping optional Qwen prompt writer to preserve H3 encoder memory"
-        )
-        return (
-            tuple(references),
-            str(prompt),
-            "Image analysis: no references to inspect. "
-            "Prompt writer skipped for zero-image T2I to preserve H3 encoder memory.",
-        )
-    return _ORIGINAL_ANALYZE_REFERENCES(clip, prompt, references, images, **kwargs)
+def _release_optional_helpers(bundle) -> None:
+    if bundle is None:
+        return
+    analyzer = getattr(bundle, "analyzer_clip", None)
+    writer = getattr(bundle, "prompt_writer_clip", None)
+    if analyzer is None and writer is None:
+        return
+
+    bundle.analyzer_clip = None
+    bundle.prompt_writer_clip = None
+    del analyzer, writer
+    gc.collect()
+
+    # Comfy's loaded-model registry keeps weak references to model patchers.
+    # Once Studio drops the helper CLIP objects, ask Comfy to prune dead entries.
+    # Do not manually unload the H3 encoder/transformer or alter DynamicVRAM.
+    with suppress(Exception):
+        import comfy.model_management
+
+        comfy.model_management.cleanup_models_gc()
+
+    LOGGER.info("[H3 Studio] Released optional Qwen analyzer/writer before H3 conditioning")
+
+
+def _memory_safe_analyze_references(clip, prompt, references, images, **kwargs):
+    """Run the configured helper normally, then release it before H3 encode."""
+
+    bundle = _helper_bundle(kwargs.get("writer_loader"), kwargs.get("clip_loader"))
+    try:
+        return _ORIGINAL_ANALYZE_REFERENCES(clip, prompt, references, images, **kwargs)
+    finally:
+        _release_optional_helpers(bundle)
 
 
 def install_runtime_guards() -> None:
-    """Install idempotent compatibility guards before ComfyUI executes nodes."""
+    """Install the idempotent helper-release guard before ComfyUI executes nodes."""
 
     current = comfy_analyzer.analyze_references
-    if bool(getattr(current, "__h3studio_zero_image_guard__", False)):
+    if bool(getattr(current, "__h3studio_helper_release_guard__", False)):
         return
-    _lean_analyze_references.__h3studio_zero_image_guard__ = True
-    comfy_analyzer.analyze_references = _lean_analyze_references
+    _memory_safe_analyze_references.__h3studio_helper_release_guard__ = True
+    comfy_analyzer.analyze_references = _memory_safe_analyze_references
