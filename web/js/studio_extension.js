@@ -381,13 +381,36 @@ function resultsSection(node) {
       },
     },
   });
+  const edit = element("button", {
+    className: "h3s-copy-result",
+    type: "button",
+    text: "Edit result",
+    attrs: { "aria-label": "Use generated instruction as the editable prompt" },
+    on: {
+      click: (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const state = stateFromNode(node);
+        state.prompt = enhancedInstruction;
+        state.prompt_options = { ...state.prompt_options, deep_enhancement: false };
+        setWidget(node, "prompt", enhancedInstruction);
+        node.__h3sDomWidget?.setValue?.(enhancedInstruction);
+        applyState(node, state);
+        renderPanel(node);
+        queueMicrotask(() => node.__h3sEditor?.focus?.({ preventScroll: false }));
+      },
+    },
+  });
   const labels = element("div", { className: "h3s-result-labels" }, result.labels.map((label) => (
     element("span", { className: "h3s-result-label", text: label, title: label })
   )));
   const analyzed = stateFromNode(node).prompt_options.analyze_images;
   const resultTitle = analyzed ? "Qwen-enhanced instruction" : "Compiled prompt";
   const children = [
-    element("summary", {}, [element("span", { text: resultTitle }), copy]),
+    element("summary", {}, [
+      element("span", { text: resultTitle }),
+      element("span", { className: "h3s-result-actions" }, [edit, copy]),
+    ]),
     labels,
     element("pre", { className: "h3s-result-prompt", text: enhancedInstruction }),
   ];
@@ -397,8 +420,16 @@ function resultsSection(node) {
       element("pre", { className: "h3s-result-prompt", text: friendlyPrompt }),
     ]));
   }
-  const details = element("details", { className: "h3s-result", attrs: { open: "" } }, children);
-  return details;
+  if ((result.descriptions || []).some(Boolean)) {
+    const records = result.descriptions
+      .map((description, index) => `@Image${index + 1}: ${description || "No factual record"}`)
+      .join("\n\n");
+    children.push(element("details", { className: "h3s-runtime-prompt" }, [
+      element("summary", { text: "What the detailed compiler received" }),
+      element("pre", { className: "h3s-result-prompt", text: records }),
+    ]));
+  }
+  return element("details", { className: "h3s-result", attrs: { open: "" } }, children);
 }
 
 async function queueDirectorWithSeed(node, seed) {
@@ -622,11 +653,37 @@ function promptSection(node, state, refresh) {
       type: "checkbox",
       checked: options.deep_enhancement === true,
       disabled: options.analyze_images !== true || options.enhance_mode === "off",
-      attrs: { "aria-label": "Run a cached text-only detailed prompt-director pass" },
+      attrs: { "aria-label": "Build a fast deterministic detailed prompt" },
       on: { change: (event) => update({ deep_enhancement: event.target.checked }) },
     }),
     element("span", { className: "h3s-switch-track" }),
-    element("span", { className: "h3s-switch-label", text: "Detailed prompt expansion" }),
+    element("span", { className: "h3s-switch-label", text: "Fast detailed expansion" }),
+  ]);
+  const writerInstruction = element("textarea", {
+    className: "h3s-writer-instruction",
+    value: options.system_instruction,
+    placeholder: "Optional: extra creative direction for the detailed prompt compiler",
+    attrs: { maxlength: "4000", "aria-label": "Optional prompt writer instruction" },
+    on: {
+      input: (event) => {
+        state.prompt_options.system_instruction = event.target.value;
+        applyState(node, state);
+      },
+    },
+  });
+  const promptStudio = element("details", { className: "h3s-prompt-studio" }, [
+    element("summary", { text: "Prompt Studio · optional Qwen controls" }),
+    element("div", { className: "h3s-section-stack" }, [
+      element("p", {
+        className: "h3s-context-help",
+        text: node.__h3studioResult?.modelStatus || "Model status appears after the Director runs.",
+      }),
+      writerInstruction,
+      element("p", {
+        className: "h3s-context-help",
+        text: "This guides the fast detailed compiler. Factual pixel analysis keeps its fixed source-only contract.",
+      }),
+    ]),
   ]);
   const adherenceValue = element("span", { className: "h3s-inline-value", text: `${Math.round(options.adherence * 100)}%` });
   const adherence = rangeControl(options.adherence, { min: 0, max: 1, step: 0.05 }, "Reference adherence", (value) => {
@@ -685,7 +742,8 @@ function promptSection(node, state, refresh) {
       controlRow("Analyzer detail", analyzerResolution), controlRow("Prompt director", directorToggle),
       controlRow("Reference priority", adherenceWrap),
     ]),
-    element("p", { className: "h3s-context-help", text: `${explanations[options.enhance_mode]} ${analyzerHelp} ${options.deep_enhancement ? "Detailed expansion is ON: the cached text-only writer produces and validates a full 200-450 word production direction." : "Detailed expansion is OFF: pixel analysis still describes and assigns references, but the generated instruction stays intentionally short (about 40-90 words)."} Reference priority controls how strongly the written prompt tells H3 to preserve reference details; it is not a LoRA strength.` }),
+    element("p", { className: "h3s-context-help", text: `${explanations[options.enhance_mode]} ${analyzerHelp} ${options.deep_enhancement ? "Fast detailed expansion is ON: the deterministic compiler builds the full production direction without loading a second language model." : "Detailed expansion is OFF: pixel analysis still describes and assigns references, but the generated instruction stays intentionally short (about 40-90 words)."} Reference priority controls how strongly the written prompt tells H3 to preserve reference details; it is not a LoRA strength.` }),
+    promptStudio,
   ]);
   return section("Direction", body, null, "Choose how H3 Studio prepares your words before Qwen3-VL encodes them for H3.");
 }
@@ -1045,6 +1103,8 @@ function installPanel(node) {
       labels: executionValue(message, "reference_labels"),
       roles,
       retentions,
+      descriptions,
+      modelStatus: executionValue(message, "analyzer_status")[0] || "",
       diagnostics: executionValue(message, "diagnostics")[0] || "",
     };
     queueMicrotask(() => renderPanel(this));

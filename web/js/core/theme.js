@@ -108,6 +108,12 @@ export function installTheme() {
     .h3s-result-labels { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 8px 6px; }
     .h3s-result-label { max-width: 100%; overflow: hidden; padding: 2px 5px; border-radius: 4px; color: var(--h3s-muted); background: var(--h3s-bg); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
     .h3s-result-prompt { max-height: 138px; margin: 0; padding: 8px; overflow: auto; border-top: 1px solid var(--h3s-border); color: var(--h3s-text); background: var(--h3s-bg); font: 9px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
+    .h3s-result-actions { display: flex; align-items: center; gap: 4px; }
+    .h3s-prompt-studio { border: 1px solid var(--h3s-border); border-radius: 6px; background: var(--h3s-bg); }
+    .h3s-prompt-studio > summary { padding: 6px 7px; color: var(--h3s-muted); cursor: pointer; font-size: 9px; font-weight: 650; }
+    .h3s-prompt-studio > .h3s-section-stack { padding: 0 7px 7px; }
+    .h3s-writer-instruction { box-sizing: border-box; width: 100%; min-height: 72px; resize: vertical; padding: 6px 7px; border: 1px solid var(--h3s-border); border-radius: 5px; outline: none; color: var(--h3s-text); background: var(--h3s-surface); font: 9px/1.45 ui-sans-serif, system-ui; }
+    .h3s-writer-instruction:focus-visible { outline: 2px solid color-mix(in srgb, var(--h3s-accent) 70%, transparent); outline-offset: 1px; }
     .h3s-final-result { display: flex; flex-direction: column; gap: 6px; }
     .h3s-final-image { display: block; width: 100%; max-height: 420px; object-fit: contain; border: 1px solid var(--h3s-border); border-radius: 6px; background: #090b0f; cursor: zoom-in; }
     .h3s-final-metadata { color: var(--h3s-muted); font-size: 9px; font-variant-numeric: tabular-nums; }

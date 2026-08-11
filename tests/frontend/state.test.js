@@ -76,6 +76,7 @@ test("custom resolution uses the exact backend combo label", () => {
 test("state round-trips without losing reference metadata", () => {
   const state = defaultState();
   state.prompt = "Keep @Image1's face";
+  state.prompt_options.system_instruction = "Favor restrained editorial lighting.";
   state.references = [{
     filename: "face.png",
     role: "identity",
@@ -91,6 +92,7 @@ test("state round-trips without losing reference metadata", () => {
   }];
   const restored = parseState(serializeState(state));
   assert.equal(restored.prompt, state.prompt);
+  assert.equal(restored.prompt_options.system_instruction, state.prompt_options.system_instruction);
   assert.equal(restored.references[0].filename, "face.png");
   assert.equal(restored.references[0].role, "identity");
   assert.equal(restored.references[0].retention, "fully_preserved");
