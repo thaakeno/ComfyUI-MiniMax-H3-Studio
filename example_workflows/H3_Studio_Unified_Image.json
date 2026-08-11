@@ -540,7 +540,7 @@
       ],
       "size": [
         620,
-        360
+        620
       ],
       "flags": {},
       "order": 3,
@@ -620,7 +620,7 @@
       "type": "5930b00d-9f8e-4b87-9cb5-ff5f7cf3b30a",
       "pos": [
         220,
-        700
+        920
       ],
       "size": [
         620,
@@ -770,7 +770,7 @@
       "type": "H3StudioABComparison",
       "pos": [
         -520,
-        1260
+        1500
       ],
       "size": [
         780,
@@ -927,7 +927,7 @@
       "type": "H3StudioLazyImageSwitch",
       "pos": [
         820,
-        1200
+        1440
       ],
       "size": [
         420,
@@ -1301,7 +1301,7 @@
       "type": "H3StudioWorkflowNote",
       "pos": [
         1040,
-        1260
+        1500
       ],
       "size": [
         480,
@@ -1604,7 +1604,7 @@
         160,
         190,
         740,
-        970
+        1230
       ],
       "color": "#6b5937",
       "font_size": 26,
@@ -1654,7 +1654,7 @@
       "title": "OPTIONAL - MULTI-PROFILE BENCHMARK LAB",
       "bounding": [
         -580,
-        1180,
+        1400,
         2140,
         720
       ],

@@ -12,6 +12,7 @@ import io
 import logging
 import math
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -182,7 +183,7 @@ class _PreviewWrapper:
         self.decoder.to(device=device, dtype=dtype)
         return self.decoder
 
-    def _send(self, torch, step, x0, total_steps, latent_shapes, run_id):
+    def _send(self, torch, step, x0, total_steps, latent_shapes, run_id, elapsed_seconds, average_step_seconds):
         latent = _limit_latent(torch, _first_h3_latent(torch, x0, latent_shapes), self.max_resolution)
         decoder = self._load(torch, latent.device, latent.dtype)
         with torch.inference_mode():
@@ -201,6 +202,9 @@ class _PreviewWrapper:
                 "width": width,
                 "height": height,
                 "run_id": run_id,
+                "elapsed_seconds": float(elapsed_seconds),
+                "average_step_seconds": float(average_step_seconds),
+                "eta_seconds": max(0.0, float(average_step_seconds) * (int(total_steps) - int(step) - 1)),
             },
             server.client_id,
         )
@@ -218,12 +222,20 @@ class _PreviewWrapper:
             except Exception as error:
                 LOGGER.warning("H3 Studio TAEH3 preview skipped: %s", error)
 
-    def _enqueue(self, torch, step, x0, total_steps, latent_shapes, run_id):
+    def _enqueue(self, torch, step, x0, total_steps, latent_shapes, run_id, elapsed_seconds, average_step_seconds):
         if step % self.every != 0 and step + 1 < total_steps:
             return
         snapshot = x0.detach().clone()
         with self._worker_lock:
-            self._pending = (step, snapshot, total_steps, latent_shapes, run_id)
+            self._pending = (
+                step,
+                snapshot,
+                total_steps,
+                latent_shapes,
+                run_id,
+                elapsed_seconds,
+                average_step_seconds,
+            )
             if self._worker is None or not self._worker.is_alive():
                 self._worker = threading.Thread(target=self._worker_loop, args=(torch,), daemon=True)
                 self._worker.start()
@@ -251,6 +263,7 @@ class _PreviewWrapper:
             callback = positional[callback_index]
         latent_shapes = kwargs.get("latent_shapes", positional[8] if len(positional) > 8 else None)
         total_steps = len(positional[3]) - 1 if len(positional) > 3 and hasattr(positional[3], "__len__") else 0
+        sampling_started = time.perf_counter()
         try:
             self._reset_frontend(total_steps, run_id)
         except Exception as error:
@@ -260,7 +273,18 @@ class _PreviewWrapper:
             if callback is not None:
                 callback(step, x0, x, total_steps)
             try:
-                self._enqueue(torch, step, x0, total_steps, latent_shapes, run_id)
+                elapsed_seconds = time.perf_counter() - sampling_started
+                completed_steps = max(1, int(step) + 1)
+                self._enqueue(
+                    torch,
+                    step,
+                    x0,
+                    total_steps,
+                    latent_shapes,
+                    run_id,
+                    elapsed_seconds,
+                    elapsed_seconds / completed_steps,
+                )
             except Exception as error:
                 LOGGER.warning("H3 Studio TAEH3 preview enqueue skipped: %s", error)
 

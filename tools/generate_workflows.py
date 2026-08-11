@@ -559,7 +559,7 @@ def build_workflow():
             "H3StudioTAEH3Preview",
             "Live preview · TAEH3 (optional)",
             [220, 260],
-            [620, 360],
+            [620, 620],
             order=3,
             inputs=[
                 socket("model", "MODEL", l_model_preview),
@@ -578,7 +578,7 @@ def build_workflow():
             13,
             SUBGRAPH_ID,
             "H3 Studio · Sampling + exact still",
-            [220, 700],
+            [220, 920],
             [620, 420],
             order=4,
             inputs=[
@@ -633,7 +633,7 @@ def build_workflow():
             17,
             "H3StudioABComparison",
             "Benchmark Lab - profiles / resolution / VAE",
-            [-520, 1260],
+            [-520, 1500],
             [780, 520],
             order=6,
             inputs=[
@@ -677,7 +677,7 @@ def build_workflow():
             19,
             "H3StudioLazyImageSwitch",
             "Run mode - normal or benchmark only",
-            [820, 1200],
+            [820, 1440],
             [420, 180],
             order=7,
             inputs=[
@@ -761,7 +761,7 @@ def build_workflow():
             "Benchmark Lab - quality and speed diagnosis",
             "optional / experimental",
             "Turn Benchmark ON only in the purple Run mode switch. ComfyUI lazy evaluation then requests the matrix and never schedules the normal sampler. Enter two profiles for simple A/B, or add more Base, LightX and PDD profile IDs. The node shows and guards the exact profile x resolution x repeat generation count before expensive work. PDD requires references and a REF2VA Director context. Same seed is the fair default; New seed every image is only a diversity sweep. VAE mode samples one T=1 latent once and decodes it through both available VAEs.",
-            [1040, 1260],
+            [1040, 1500],
             [480, 360],
             17,
         ),
@@ -804,7 +804,7 @@ def build_workflow():
         {
             "id": 3,
             "title": "03 · SAMPLE AND EXTRACT STILL",
-            "bounding": [160, 190, 740, 970],
+            "bounding": [160, 190, 740, 1230],
             "color": "#6b5937",
             "font_size": 26,
             "flags": {},
@@ -836,7 +836,7 @@ def build_workflow():
         {
             "id": 7,
             "title": "OPTIONAL - MULTI-PROFILE BENCHMARK LAB",
-            "bounding": [-580, 1180, 2140, 720],
+            "bounding": [-580, 1400, 2140, 720],
             "color": "#60467a",
             "font_size": 28,
             "flags": {},

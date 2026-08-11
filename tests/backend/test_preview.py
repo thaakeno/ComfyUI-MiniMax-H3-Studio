@@ -47,6 +47,25 @@ def test_preview_callback_preserves_native_progress_before_async_enqueue(monkeyp
     assert order == ["native-progress", "preview-enqueued"]
 
 
+def test_preview_callback_reports_sampler_elapsed_and_average_step_time(monkeypatch) -> None:
+    torch_module = ModuleType("torch")
+    monkeypatch.setitem(sys.modules, "torch", torch_module)
+    monkeypatch.setattr(preview_module.time, "perf_counter", iter((10.0, 14.0)).__next__)
+    captured = {}
+
+    class Executor:
+        def __call__(self, *args, **kwargs):
+            captured["callback"] = kwargs["callback"]
+            return "sampled"
+
+    wrapper = _PreviewWrapper("taeh3.safetensors", "16", 768, 90, 1)
+    monkeypatch.setattr(wrapper, "_enqueue", lambda *args: captured.update(enqueue=args))
+    wrapper(Executor(), "noise", callback=lambda *_args: None)
+    captured["callback"](1, "x0", "x", 4)
+
+    assert captured["enqueue"][-2:] == (4.0, 2.0)
+
+
 def test_preview_downscale_preserves_latent_aspect_ratio() -> None:
     captured = {}
 

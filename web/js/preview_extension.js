@@ -10,9 +10,12 @@ function installPreview(node) {
   node.__h3studioPreviewInstalled = true;
   const root = document.createElement("div");
   root.className = "h3s-live-preview";
-  const image = document.createElement("img");
-  image.alt = "TAEH3 live sampling preview";
-  image.title = "Click to expand";
+  const images = [document.createElement("img"), document.createElement("img")];
+  for (const image of images) {
+    image.alt = "TAEH3 live sampling preview";
+    image.title = "Click to expand";
+    image.className = "h3s-live-preview-frame";
+  }
   const empty = document.createElement("div");
   empty.className = "h3s-live-preview-empty";
   empty.textContent = "Enable for fast approximate sampling previews";
@@ -33,30 +36,48 @@ function installPreview(node) {
   next.textContent = "›";
   next.title = "Next sampling preview";
   navigation.append(previous, position, next);
-  root.append(image, empty, navigation, status);
+  root.append(...images, empty, navigation, status);
 
-  const state = { history: [], index: -1, runId: null, activeRunId: null, total: 0 };
+  const state = {
+    history: [], index: -1, runId: null, activeRunId: null, total: 0, visibleImage: -1, renderToken: 0,
+  };
   const render = () => {
     const frame = state.history[state.index];
     if (!frame) {
-      image.removeAttribute("src");
-      image.hidden = true;
+      for (const image of images) {
+        image.removeAttribute("src");
+        image.classList.remove("is-visible");
+      }
+      state.visibleImage = -1;
       empty.hidden = false;
-      empty.textContent = state.activeRunId ? "Sampling started · waiting for the first TAEH3 frame" : "Enable for fast approximate sampling previews";
+      empty.textContent = state.activeRunId
+        ? "Sampling started · waiting for the first TAEH3 frame"
+        : "Enable for fast approximate sampling previews";
       status.textContent = state.activeRunId && state.total ? `Step 0/${state.total}` : "";
       position.textContent = "";
       navigation.hidden = true;
       node.setDirtyCanvas?.(true, true);
       return;
     }
-    image.src = frame.image;
-    image.hidden = false;
     empty.hidden = true;
-    status.textContent = `Step ${frame.step}/${frame.total} · ${frame.width} × ${frame.height}`;
+    const elapsed = Number(frame.elapsed_seconds) || 0;
+    const average = Number(frame.average_step_seconds) || 0;
+    const eta = Number(frame.eta_seconds) || 0;
+    status.textContent = `Step ${frame.step}/${frame.total} · ${frame.width} × ${frame.height} · ${elapsed.toFixed(1)}s · ${average.toFixed(2)}s/step${frame.step < frame.total ? ` · ETA ≈ ${eta.toFixed(1)}s` : ""}`;
     position.textContent = `${state.index + 1} / ${state.history.length}`;
     previous.disabled = state.index <= 0;
     next.disabled = state.index >= state.history.length - 1;
     navigation.hidden = state.history.length < 2;
+    const token = ++state.renderToken;
+    const targetIndex = state.visibleImage === 0 ? 1 : 0;
+    const target = images[targetIndex];
+    target.onload = () => {
+      if (token !== state.renderToken) return;
+      images.forEach((candidate, index) => candidate.classList.toggle("is-visible", index === targetIndex));
+      state.visibleImage = targetIndex;
+    };
+    target.src = frame.image;
+    if (target.complete) target.onload();
     node.setDirtyCanvas?.(true, true);
   };
   previous.addEventListener("click", (event) => {
@@ -69,19 +90,21 @@ function installPreview(node) {
     state.index = Math.min(state.history.length - 1, state.index + 1);
     render();
   });
-  image.addEventListener("click", (event) => {
-    event.stopPropagation();
-    const frame = state.history[state.index];
-    openImageLightbox(frame?.image, status.textContent || "Expanded TAEH3 sampling preview");
-  });
+  for (const image of images) {
+    image.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const frame = state.history[state.index];
+      openImageLightbox(frame?.image, status.textContent || "Expanded TAEH3 sampling preview");
+    });
+  }
   navigation.hidden = true;
   node.__h3studioPreviewElements = { state, render };
   const widget = node.addDOMWidget("h3studio_live_preview", "h3studio_live_preview", root, {
     serialize: false,
     hideOnZoom: false,
   });
-  widget.computeSize = (width) => [width, 350];
-  node.setSize?.([Math.max(node.size?.[0] || 420, 420), Math.max(node.size?.[1] || 480, 480)]);
+  widget.computeSize = (width) => [width, 440];
+  node.setSize?.([Math.max(node.size?.[0] || 460, 460), Math.max(node.size?.[1] || 620, 620)]);
 }
 
 api.addEventListener("h3studio-preview", ({ detail }) => {
@@ -106,7 +129,7 @@ api.addEventListener("h3studio-preview", ({ detail }) => {
   elements.state.history.push(detail);
   if (elements.state.history.length > MAX_HISTORY) elements.state.history.shift();
   elements.state.index = elements.state.history.length - 1;
-  elements.render();
+  elements.state.render();
 });
 
 app.registerExtension({
