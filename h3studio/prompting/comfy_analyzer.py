@@ -199,7 +199,9 @@ def _writer_failures(candidate: str, original_prompt: str) -> list[str]:
     return failures
 
 
-def _deterministic_writer_fallback(prompt: str, references: Sequence[ReferenceImage]) -> str:
+def _deterministic_writer_fallback(
+    prompt: str, references: Sequence[ReferenceImage], additional_instruction: str = ""
+) -> str:
     assignments = "; ".join(
         f"@Image{item.ordinal} supplies {item.effective_role} with {item.retention} retention"
         + (f", visibly described as {item.description.rstrip('.')}" if item.description else "")
@@ -212,8 +214,10 @@ def _deterministic_writer_fallback(prompt: str, references: Sequence[ReferenceIm
             "with angular facial anatomy, bold black contours, crisp cel shading, dense cross-hatched shadows, "
             "dramatic contrast, dynamic graphic posing, and saturated color design."
         )
+    custom = str(additional_instruction or "").strip()[:4000]
     sections = (
         f"Create one coherent finished still image that visibly fulfills this exact direction: {prompt}.",
+        f"Additional creative direction: {custom}." if custom else "",
         f"Reference contract: {assignments}.",
         "Preserve every named subject, assignment, action, direction, expression, prop, environment, and negative constraint. Resolve pronouns to the referenced subject and make gaze, head direction, body orientation, facial expression, and object interactions unambiguous in the final frame. For any request to hold or carry an object, show the named hand or both hands visibly gripping or supporting its weight, with fingers wrapped around it, correct contact, overlap, scale, and occlusion; never merely place the object independently in front of the subject.",
         "Use each source only for its assigned identity, object, wardrobe, style, pose, layout, lighting, or environmental function. References are source material, not additional subjects. Do not create a reference sheet, collage, split screen, floating accessory, duplicate body, mannequin, source panel, or unrequested source background. Do not let one source overwrite unrelated traits assigned to another.",
@@ -232,11 +236,13 @@ def _run_prompt_writer(
     *,
     writer_name: str,
     clip_loader: Any = None,
+    additional_instruction: str = "",
 ) -> tuple[str, str]:
     global _WRITER_CACHE_KEY, _WRITER_CACHE_VALUE
     facts = tuple((item.ordinal, item.effective_role, item.retention, item.description) for item in references)
     identity = writer_name or (type(clip).__name__ if clip is not None else "default")
-    key = (str(identity), str(prompt), facts)
+    additional_instruction = str(additional_instruction or "").strip()[:4000]
+    key = (str(identity), str(prompt), facts, additional_instruction)
     with _CACHE_LOCK:
         if key == _WRITER_CACHE_KEY and _WRITER_CACHE_VALUE is not None:
             LOGGER.info("[H3 Studio - Prompt Director] Cache HIT | text generation skipped")
@@ -252,7 +258,13 @@ def _run_prompt_writer(
         f"@Image{item.ordinal}: role={item.effective_role}; retention={item.retention}; source observation={item.description or 'no visual description available'}"
         for item in references
     )
-    base = f"{WRITER_SYSTEM_INSTRUCTION}\n\nUSER REQUEST:\n{prompt}\n\nFACTUAL REFERENCE RECORDS:\n{records}"
+    custom = (
+        "\n\nADDITIONAL USER WRITER DIRECTION (apply only when consistent with the exact request, factual records, "
+        f"and JSON output contract):\n{additional_instruction}"
+        if additional_instruction
+        else ""
+    )
+    base = f"{WRITER_SYSTEM_INSTRUCTION}{custom}\n\nUSER REQUEST:\n{prompt}\n\nFACTUAL REFERENCE RECORDS:\n{records}"
     failures: list[str] = []
     started = time.perf_counter()
     for attempt in range(2):
@@ -308,6 +320,7 @@ def analyze_references(
     writer_clip: Any = None,
     writer_name: str = "",
     writer_loader: Any = None,
+    writer_instruction: str = "",
 ) -> tuple[tuple[ReferenceImage, ...], str, str]:
     """Inspect pixels once, then optionally run a cached text-only writing pass."""
 
@@ -324,6 +337,15 @@ def analyze_references(
         for key, record in zip(keys, cached_records, strict=True):
             if record is not None:
                 _ANALYSIS_CACHE.move_to_end(key)
+        for index, (key, record) in enumerate(zip(keys, cached_records, strict=True)):
+            reference = paired[index][0]
+            if record is None and reference.fingerprint and reference.description:
+                cached_records[index] = {
+                    "ordinal": reference.ordinal,
+                    "role": reference.effective_role,
+                    "description": reference.description,
+                }
+                _store_analysis_record(key, cached_records[index])
     missing = [index for index, record in enumerate(cached_records) if record is None]
     analysis_warning = ""
     if missing:
@@ -423,14 +445,11 @@ def analyze_references(
     if not missing:
         note += " Cache: HIT."
     if deep_enhancement:
-        enhanced, writer_note = _run_prompt_writer(
-            writer_clip,
-            prompt,
-            analyzed,
-            writer_name=writer_name,
-            clip_loader=writer_loader,
+        enhanced = _deterministic_writer_fallback(prompt, analyzed, writer_instruction)
+        note = (
+            f"{note} Prompt director: fast deterministic expansion produced {len(enhanced.split())} words; "
+            "no second language model was loaded."
         )
-        note = f"{note} {writer_note}"
     return analyzed, enhanced, note
 
 

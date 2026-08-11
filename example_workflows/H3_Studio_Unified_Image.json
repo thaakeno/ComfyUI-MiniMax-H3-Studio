@@ -447,7 +447,7 @@
         "minimax_h3_video_vae_int8_convrot.safetensors",
         "Disabled - original H3 video VAE only",
         "Auto · Qwen3-VL 4B",
-        "Same as image analyzer"
+        "Fast deterministic - no second model"
       ],
       "color": "#31475c",
       "bgcolor": "#202e3c"
@@ -1066,7 +1066,7 @@
       },
       "widgets_values": [
         "settings",
-        "Analyze image pixels uses a full native ComfyUI Qwen3-VL checkpoint for factual source descriptions and then repairs auto roles from your @Image sentence. Detailed prompt expansion reuses that model text-only by default, or a selected full 8B checkpoint, to create and validate a 200-450 word direction. Both stages cache seed-only reruns. The selected H3 ConvRot file remains the conditioning encoder; it is not assumed to expose a chat-generation head. No model is downloaded automatically."
+        "Analyze image pixels uses one native ComfyUI Qwen3-VL checkpoint for factual source descriptions and then repairs auto roles from your @Image sentence. Fingerprinted descriptions survive workflow reloads and unchanged images skip analysis. Fast detailed expansion is deterministic and never stages a second 8B writer model. The selected H3 ConvRot file remains the conditioning encoder; it is not assumed to expose a chat-generation head. No model is downloaded automatically."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"
@@ -1381,7 +1381,7 @@
       },
       "widgets_values": [
         "models",
-        "Core MiniMax H3 models, 32B conditioning encoder, and video VAE:\nhttps://huggingface.co/Comfy-Org/MiniMax-H3\n\nFull Qwen3-VL 4B/8B analyzer and prompt writer:\nhttps://huggingface.co/Comfy-Org/Qwen3-VL\n\nExperimental T=1 Image VAE:\nhttps://huggingface.co/Mamad8/MiniMax-H3-Image-VAE\n\nLightX:\nhttps://huggingface.co/Kijai/MiniMax-H3_comfy\n\nTAEH3 preview:\nhttps://huggingface.co/Kijai/MiniMax-H3-TAE\n\nPDD artifacts and required node:\nhttps://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8\nhttps://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8\n\nNothing downloads automatically."
+        "Core MiniMax H3 models, 32B conditioning encoder, and video VAE:\nhttps://huggingface.co/Comfy-Org/MiniMax-H3\n\nQwen3-VL 4B image analyzer:\nhttps://huggingface.co/Comfy-Org/Qwen3-VL\n\nExperimental T=1 Image VAE:\nhttps://huggingface.co/Mamad8/MiniMax-H3-Image-VAE\n\nLightX:\nhttps://huggingface.co/Kijai/MiniMax-H3_comfy\n\nTAEH3 preview:\nhttps://huggingface.co/Kijai/MiniMax-H3-TAE\n\nPDD artifacts and required node:\nhttps://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8\nhttps://github.com/mamad8c/ComfyUI-MiniMaxH3-PDD-Mamad8\n\nNothing downloads automatically."
       ],
       "color": "#22322f",
       "bgcolor": "#17211f"

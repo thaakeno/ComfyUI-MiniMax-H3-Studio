@@ -333,6 +333,7 @@ class H3StudioDirector:
                 writer_clip=analyzer_bundle.prompt_writer_clip if analyzer_bundle else None,
                 writer_name=analyzer_bundle.prompt_writer_name or "" if analyzer_bundle else "",
                 writer_loader=analyzer_bundle.writer_for_enhancement if analyzer_bundle else None,
+                writer_instruction=state.prompt_options.system_instruction,
             )
             state = state.with_references(analyzed_references)
             compile_result = compiler.compile(state.with_prompt(enhanced_prompt))
@@ -361,6 +362,10 @@ class H3StudioDirector:
             f"@Image{reference.ordinal} · {reference.effective_role} · {reference.retention} · {reference.filename}"
             for reference in compile_result.references
         ]
+        analyzer_status = (
+            f"Analyzer: {(h3_bundle.analyzer_name if isinstance(h3_bundle, H3StudioBundle) else None) or 'disabled'}"
+            " · Detailed writer: fast deterministic (no second model load)"
+        )
         result = (
             context,
             compile_result.native_prompt,
@@ -378,6 +383,7 @@ class H3StudioDirector:
                 "reference_roles": [reference.effective_role for reference in compile_result.references],
                 "reference_retentions": [reference.retention for reference in compile_result.references],
                 "reference_descriptions": [reference.description for reference in compile_result.references],
+                "analyzer_status": [analyzer_status],
                 "diagnostics": [diagnostics],
             },
             "result": result,

@@ -43,3 +43,12 @@ def test_deliberately_named_int8_choice_is_respected(monkeypatch) -> None:
     explicit = "custom_qwen3vl_32b_minimax_h3_int8_convrot_v2.safetensors"
     loader = _load_with_models(monkeypatch, [explicit, nvfp4])
     assert loader._resolve_text_encoder(explicit) == explicit
+
+
+def test_legacy_separate_prompt_writer_cannot_stage_a_second_model(monkeypatch) -> None:
+    loader = _load_with_models(
+        monkeypatch,
+        ["qwen3vl_4b_fp8_scaled.safetensors", "qwen3vl_8b_fp8_scaled.safetensors"],
+    )
+    assert loader.prompt_writer_choices() == [loader.FAST_WRITER]
+    assert loader._resolve_prompt_writer("qwen3vl_8b_fp8_scaled.safetensors", "qwen3vl_4b_fp8_scaled.safetensors") is None

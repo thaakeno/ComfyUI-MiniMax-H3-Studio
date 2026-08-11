@@ -79,11 +79,13 @@ class FakeClip:
 class FakeWriter:
     def __init__(self):
         self.generate_calls = 0
+        self.instruction = ""
 
     def tokenize(self, instruction, *, images, thinking):
         assert "senior image prompt director" in instruction
         assert images == []
         assert thinking is False
+        self.instruction = instruction
         return {"tokens": [1]}
 
     def generate(self, tokens, **kwargs):
@@ -389,7 +391,7 @@ def test_alternating_reference_sets_remain_cached(monkeypatch) -> None:
     assert clip.generate_calls == 2
 
 
-def test_two_pass_writer_is_text_only_validated_and_cached(monkeypatch) -> None:
+def test_detailed_expansion_does_not_load_a_second_language_model(monkeypatch) -> None:
     import h3studio.prompting.comfy_analyzer as analyzer_module
 
     analyzer_module._ANALYSIS_CACHE.clear()
@@ -408,19 +410,36 @@ def test_two_pass_writer_is_text_only_validated_and_cached(monkeypatch) -> None:
         deep_enhancement=True,
         writer_clip=writer,
         writer_name="qwen3vl_8b_fp8_scaled.safetensors",
+        writer_instruction="Favor a restrained editorial lighting treatment.",
     )
-    _references, enhanced_again, note_again = analyze_references(
+    assert 180 <= len(enhanced.split()) <= 500
+    assert writer.generate_calls == 0
+    assert "restrained editorial lighting" in enhanced
+    assert "no second language model was loaded" in note
+
+
+def test_persisted_fingerprinted_description_skips_cold_reanalysis() -> None:
+    import h3studio.prompting.comfy_analyzer as analyzer_module
+
+    analyzer_module._ANALYSIS_CACHE.clear()
+    analyzer = FakeClip()
+    reference = ReferenceImage(
+        "one",
+        "person.jpg",
+        1,
+        storage_name="h3studio/person.jpg",
+        fingerprint="persisted-fingerprint",
+        description="A persisted factual description of the unchanged source image.",
+        role="identity",
+    )
+    analyzed, _enhanced, note = analyze_references(
         analyzer,
-        "Place @Image1 outside",
-        references,
-        images,
-        deep_enhancement=True,
-        writer_clip=writer,
-        writer_name="qwen3vl_8b_fp8_scaled.safetensors",
+        "Use @Image1",
+        (reference,),
+        (FakeStableImage(801, b"same persisted pixels"),),
     )
 
-    assert 250 <= len(enhanced.split()) <= 500
-    assert enhanced_again == enhanced
-    assert writer.generate_calls == 1
-    assert "validated" in note
-    assert "Cache: HIT" in note_again
+    assert analyzer.generate_calls == 0
+    assert analyzed[0].description == reference.description
+    assert "1 factual record(s) reused and 0 inspected" in note
+    assert "Cache: HIT" in note

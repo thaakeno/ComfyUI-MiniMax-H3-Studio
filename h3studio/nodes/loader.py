@@ -28,6 +28,7 @@ NONE_MODEL = "None"
 AUTO_ANALYZER = "Auto · Qwen3-VL 4B"
 DISABLED_ANALYZER = "Disabled"
 SAME_AS_ANALYZER = "Same as image analyzer"
+FAST_WRITER = "Fast deterministic - no second model"
 DISABLED_IMAGE_VAE = "Disabled - original H3 video VAE only"
 OFFICIAL_H3_TEXT_ENCODER = "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
 LEGACY_H3_INT8_TEXT_ENCODER = "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
@@ -148,9 +149,9 @@ def analyzer_choices() -> list[str]:
 
 
 def prompt_writer_choices() -> list[str]:
-    """Full Qwen3-VL checkpoints that retain a language-model head."""
+    """Keep the serialized input while preventing a second large model load."""
 
-    return [SAME_AS_ANALYZER, DISABLED_ANALYZER, *analyzer_choices()[2:]]
+    return [FAST_WRITER]
 
 
 def _resolve_analyzer(name: str) -> str | None:
@@ -163,12 +164,14 @@ def _resolve_analyzer(name: str) -> str | None:
     return preferred or next((value for value in values if "qwen3vl4b" in _compact(value)), None)
 
 
-def _resolve_prompt_writer(name: str, analyzer_name: str | None) -> str | None:
-    if name == SAME_AS_ANALYZER:
-        return analyzer_name
-    if name == DISABLED_ANALYZER or _is_none(name):
-        return None
-    return name
+def _resolve_prompt_writer(name: str, _analyzer_name: str | None) -> str | None:
+    if name not in {FAST_WRITER, SAME_AS_ANALYZER, DISABLED_ANALYZER} and not _is_none(name):
+        LOGGER.warning(
+            "[H3 Studio] Ignoring legacy separate prompt writer %s; detailed expansion is deterministic and will not "
+            "stage a second language model.",
+            name,
+        )
+    return None
 
 
 def vae_choices() -> list[str]:
@@ -330,8 +333,8 @@ class H3StudioLoader:
     RETURN_TYPES = ("H3_STUDIO_BUNDLE", "CLIP", "VAE", "STRING")
     RETURN_NAMES = ("h3_bundle", "clip", "video_vae", "model_info")
     DESCRIPTION = (
-        "Load H3's conditioning encoder and VAE, plus optional full Qwen3-VL models for cached pixel analysis "
-        "and the text-only detailed prompt-director pass. The prompt writer defaults to reusing the analyzer. "
+        "Load H3's conditioning encoder and VAE, plus one optional Qwen3-VL model for cached pixel analysis. "
+        "Detailed prompt expansion is deterministic and never stages a second language model. "
         "NVFP4 AWQ is preferred for H3's native 32B conditioning encoder."
     )
 
@@ -369,8 +372,8 @@ class H3StudioLoader:
                 "prompt_writer": (
                     prompt_writer_choices(),
                     {
-                        "default": SAME_AS_ANALYZER,
-                        "tooltip": "Reuses the 4B image analyzer by default. Select a full Qwen3-VL 8B checkpoint for stronger detailed rewrites, or disable the second pass.",
+                        "default": FAST_WRITER,
+                        "tooltip": "Compatibility setting: detailed expansion is fast and deterministic; no second model is loaded.",
                     },
                 ),
             }
