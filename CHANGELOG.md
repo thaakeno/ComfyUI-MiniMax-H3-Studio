@@ -2,6 +2,30 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while Lightning GPU validation is incomplete.
 
+## [0.1.0-alpha.12] - 2026-08-11
+
+### Added
+
+- Added a guarded multi-profile Benchmark Lab with profile, resolution, VAE, repeat, and seed axes; live progress; honest ETA; optional cell previews; and comparison sheets containing useful source and result metadata.
+- Added a persisted Director comparison toggle and dedicated comparison node that place labeled `@ImageN` references beside the generated result and mirror the sheet back into the Director.
+- Added finished-image presentation and real seed-aware rerun actions in the Director, polished Markdown workflow cards, direct model-download links, and a public privacy-preserving aggregate generation badge.
+- Added direct 0.2–8.5 MP controls with conservative/recommended and experimental presentation, aligned output dimensions, and separately selectable decode/frame profiles.
+
+### Fixed
+
+- Repaired lazy Normal/Benchmark routing, early invalid-route validation, generated-PNG restoration, workflow persistence, reference metadata/thumbnails, subgraph packaging, node geometry, and unlocked/locked seed behavior.
+- Separated factual image-analysis, prompt-writer, reference, VAE, and latent caches; profile and LoRA changes now reuse unchanged Qwen work instead of regenerating it.
+- Repaired malformed/truncated analyzer output, factual descriptions, reference role/ownership inference, legacy `@Image` syntax, deterministic H3 prompt compilation, and visible rich reference pills.
+- Moved TAEH3 decoding into the active sampler lifetime, corrected packed-latent reconstruction, and surfaced preview failures in the node UI.
+- Connected successful H3 Studio image saves to the aggregate counter and count real batch sizes without collecting generation content or identifiers.
+
+### Changed
+
+- Preserved the proven direct multi-megapixel path from the earlier resolution work and labels very high resolutions as experimental rather than implying guaranteed quality.
+- Aligned LightX metadata with its empirical Kijai recipe, feature-detected compatible upstream chunked H3 VAE decoding, and retained the proven staged conditioning/NVFP4 path without manual DynamicVRAM eviction.
+- Rebuilt the maintained workflow as template `1.6.0` with a clearer generation, preview, output, and benchmark layout plus recommended and optional model download cards.
+- Reworked prompt results to distinguish the exact runtime instruction, one-line instruction, structured production brief, and editable Qwen source direction.
+
 ## [0.1.0-alpha.11] - 2026-08-09
 
 ### Added

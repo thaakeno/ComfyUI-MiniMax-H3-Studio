@@ -86,6 +86,15 @@ git log -1 --format='Installed H3 Studio %h · %s'
 
 Restart ComfyUI, hard-refresh the frontend, and open the maintained workflow. H3 Studio does not download models automatically.
 
+For a reproducible shared install, pin the current release instead of following later development commits:
+
+```bash
+cd /path/to/ComfyUI/custom_nodes
+git clone --branch v0.1.0-alpha.12 --depth 1 https://github.com/thaakeno/ComfyUI-MiniMax-H3-Studio.git
+cd ComfyUI-MiniMax-H3-Studio
+python -m pip install -r requirements.txt
+```
+
 To update an existing Git clone:
 
 ```bash
@@ -172,7 +181,7 @@ If generation fails, open an [issue](https://github.com/thaakeno/ComfyUI-MiniMax
 
 ## Aggregate generation counter
 
-After a still is successfully selected, H3 Studio adds one integer to an in-memory batch. Every ten images—or after five minutes—it sends only `{ "count": N, "schema": 1 }` in a background thread. It never sends prompts, images, references, filenames, workflows, seeds, hardware, usernames, paths, or installation identifiers. Failures are silent and cannot delay generation.
+After a still is successfully saved through **H3 Studio Save Image**, H3 Studio adds the actual output batch size to an in-memory batch. Every ten images—or after one minute—it sends only `{ "count": N, "schema": 1 }` in a background thread. It never sends prompts, images, references, filenames, workflows, seeds, hardware, usernames, paths, or installation identifiers. Failures are silent and cannot delay generation.
 
 To opt out, set `H3STUDIO_TELEMETRY=0` before starting ComfyUI, or create an empty `.h3studio-telemetry-disabled` file in this repository. The endpoint can be self-hosted with the deployable [Cloudflare Worker](telemetry/README.md).
 
