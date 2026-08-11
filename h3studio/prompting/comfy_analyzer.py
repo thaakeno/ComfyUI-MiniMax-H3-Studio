@@ -18,7 +18,7 @@ from ..references import ReferenceImage, mention_ordinals
 
 LOGGER = logging.getLogger(__name__)
 _CACHE_LOCK = threading.RLock()
-_ANALYSIS_SCHEMA_VERSION = 1
+_ANALYSIS_SCHEMA_VERSION = 2
 _ANALYSIS_CACHE_LIMIT = 64
 _ANALYSIS_CACHE: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
 _WRITER_CACHE_KEY: tuple[Any, ...] | None = None
@@ -28,10 +28,10 @@ _RETENTIONS = {"attribute_transfer", "fully_preserved", "partially_preserved", "
 SYSTEM_INSTRUCTION = """You are the factual visual reference analyst for MiniMax H3 image generation.
 Study every attached image pixel-by-pixel. Do not infer how a later creative prompt might use it.
 Return JSON only with this exact shape:
-{"references":[{"ordinal":1,"role":"character","description":"concise factual source-pixel observation"}]}
+{"references":[{"ordinal":1,"role":"character","description":"detailed factual source-pixel observation"}]}
 
 Allowed roles: auto, identity, face, character, style, composition, pose, outfit, object, environment, layout, typography, color_palette, lighting, texture, reference.
-Each description must contain only independently visible source facts in 8-24 words. Never copy a requested new action, prop, pose, gaze, clothing change, style, environment, or edit into a source description unless it is already visible in that image. Never write generic phrases such as 'visible information requested by the user'.
+Write 35-160 words per image using connected factual prose. Cover, when visibly supported: subject count and recognizable appearance; face, hair, body proportions, pose, expression and gaze; clothing, accessories and objects; spatial relationships; composition, framing and camera angle; environment and background; lighting and color palette; visual medium or rendering style; and legible text or typography. Omit categories that are not visible. State uncertainty instead of inventing hidden anatomy, identity, text or context. Never copy a requested new action, prop, pose, gaze, clothing change, style, environment or edit into a source description unless it is already visible in that image. Never write generic phrases such as 'visible information requested by the user'.
 Choose role only as a conservative visible-content category, never as ownership or retention reasoning for a future request.
 Do not emit prose outside JSON."""
 
@@ -151,6 +151,13 @@ def _validated_analysis_records(payload: dict[str, Any], expected_ordinals: set[
         if ordinal in records:
             raise ValueError(f"Qwen3-VL returned duplicate reference ordinal {ordinal}.")
         if ordinal in expected_ordinals:
+            description = " ".join(str(item.get("description") or "").split())
+            word_count = len(description.split())
+            if word_count < 35 or word_count > 180:
+                raise ValueError(
+                    f"Qwen3-VL reference {ordinal} description has {word_count} words; expected 35-180."
+                )
+            item = {**item, "description": description}
             records[ordinal] = item
     missing = sorted(expected_ordinals - records.keys())
     if missing:
@@ -372,9 +379,9 @@ def analyze_references(
                 tokens,
                 do_sample=False,
                 max_length=(
-                    min(768, 96 + len(missing_pairs) * 72)
+                    min(2048, 220 + len(missing_pairs) * 180)
                     if attempt == 0
-                    else min(1024, 160 + len(missing_pairs) * 96)
+                    else min(2560, 320 + len(missing_pairs) * 220)
                 ),
                 temperature=1.0,
                 top_k=0,

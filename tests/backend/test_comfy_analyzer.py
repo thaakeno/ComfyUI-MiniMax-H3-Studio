@@ -71,8 +71,8 @@ class FakeClip:
     def decode(self, generated, *, skip_special_tokens):
         assert skip_special_tokens is True
         return """{"instruction":"Turn the character from @Image1 toward frame-right, add the black rectangular glasses from @Image2, and make him smile visibly.","references":[
-          {"ordinal":1,"role":"character","retention":"fully_preserved","description":"A pale clown with red hair and a white ruffled costume."},
-          {"ordinal":2,"role":"object","retention":"attribute_transfer","description":"Thick rectangular black eyeglass frames."}
+          {"ordinal":1,"role":"character","retention":"fully_preserved","description":"A pale-faced clown character fills most of a centered portrait frame, with bright red swept-back hair, dark painted eye details, and a neutral forward gaze. The figure wears a layered white ruffled costume with red accents. Soft frontal lighting separates the character from a muted indoor background, while the close camera angle keeps the face and upper clothing clearly visible."},
+          {"ordinal":2,"role":"object","retention":"attribute_transfer","description":"A pair of thick rectangular black eyeglass frames appears alone against a plain light background. The front-facing product view clearly shows the wide rims, bridge, folded dark temples, glossy plastic material, and symmetrical proportions. Even diffuse lighting produces small edge highlights without strong shadows, and no person, branding, typography, or additional accessory is visible."}
         ]}"""
 
 
@@ -133,8 +133,8 @@ class BrokenClip(FakeClip):
 class TruncatedClip(FakeClip):
     def decode(self, generated, *, skip_special_tokens):
         return (
-            '{"references":[{"ordinal":1,"role":"character","description":"Pale clown with red hair"},'
-            '{"ordinal":2,"role":"object","description":"Thick rectangular black glasses'
+            '{"references":[{"ordinal":1,"role":"character","description":"A pale clown fills a centered portrait frame with bright red hair, dark eye makeup, and a layered white costume. The figure faces forward beneath soft frontal lighting, while a quiet indoor background stays out of focus. The close camera position emphasizes the visible face, ruffles, red accents, and symmetrical upper-body composition without showing the lower body."},'
+            '{"ordinal":2,"role":"object","description":"Thick rectangular black glasses appear alone in a front-facing product view against a plain light background. Wide glossy rims surround clear lenses, joined by a short bridge, with dark temples folded behind the frame. Soft even lighting creates restrained highlights and weak shadows; no person, logo, printed text, case, or other accessory is visible'
         )
 
 
@@ -154,7 +154,8 @@ def test_native_analyzer_uses_pixels_and_returns_card_descriptions() -> None:
     assert clip.seen_images == list(images)
     assert analyzed[0].role == "character"
     assert analyzed[0].retention == "fully_preserved"
-    assert "red hair" in analyzed[0].description
+    assert "red swept-back hair" in analyzed[0].description
+    assert len(analyzed[0].description.split()) >= 35
     assert analyzed[1].role == "object"
     assert "black eyeglass frames" in analyzed[1].description
     assert "@Image1" in enhanced
@@ -198,7 +199,8 @@ def test_truncated_json_prefix_is_repaired_without_another_vision_pass() -> None
     )
 
     assert clip.generate_calls == 1
-    assert analyzed[1].description == "Thick rectangular black glasses"
+    assert analyzed[1].description.startswith("Thick rectangular black glasses")
+    assert len(analyzed[1].description.split()) >= 35
 
 
 def test_malformed_analysis_retries_once_then_uses_valid_records() -> None:
@@ -212,7 +214,7 @@ def test_malformed_analysis_retries_once_then_uses_valid_records() -> None:
     )
 
     assert clip.generate_calls == 2
-    assert "red hair" in analyzed[0].description
+    assert "red swept-back hair" in analyzed[0].description
 
 
 def test_repeated_malformed_analysis_fails_soft_and_preserves_existing_cards() -> None:
