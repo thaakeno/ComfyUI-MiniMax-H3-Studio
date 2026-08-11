@@ -1,7 +1,8 @@
 export const STATE_SCHEMA_VERSION = 9;
 export const MAX_REFERENCES = 9;
 export const MIN_MEGAPIXELS = 0.2;
-export const MAX_MEGAPIXELS = 2;
+export const MAX_MEGAPIXELS = 8.5;
+export const UHD_4K_MEGAPIXELS = 8.2944;
 export const MEGAPIXEL_STEP = 0.05;
 
 export const ASPECT_RATIOS = Object.freeze({
@@ -197,6 +198,7 @@ export function normalizeState(value) {
   generation.megapixels = clamp(generation.megapixels, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1);
   generation.custom_width = Math.round(clamp(generation.custom_width, 32, 16384, 1024));
   generation.custom_height = Math.round(clamp(generation.custom_height, 32, 16384, 1024));
+  generation.cap_native_resolution = generation.cap_native_resolution === true;
   generation.sampling_profile = ({
     turbo_er_sde_6: "lightx_er_sde_4",
     turbo_sa_solver_4: "lightx_sa_solver_4",

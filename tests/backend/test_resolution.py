@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from h3studio.constants import NATIVE_MAX_PIXELS
+from h3studio.constants import NATIVE_MAX_PIXELS, UHD_4K_MEGAPIXELS
 from h3studio.errors import ResolutionError
 from h3studio.resolution import (
     label_for_ratio,
@@ -67,6 +67,13 @@ def test_direct_two_megapixel_resolution_is_the_default() -> None:
     assert (two_mp.width, two_mp.height) == (1408, 1408)
     assert two_mp.actual_megapixels == pytest.approx(2.0, abs=0.05)
     assert not two_mp.capped
+
+
+def test_direct_4k_class_canvas_is_aligned_without_upscaling() -> None:
+    plan = plan_resolution("16:9", UHD_4K_MEGAPIXELS)
+    assert (plan.width, plan.height) == (3840, 2176)
+    assert plan.actual_megapixels == pytest.approx(8.35584)
+    assert not plan.capped
 
 
 def test_plan_preserves_orientation() -> None:

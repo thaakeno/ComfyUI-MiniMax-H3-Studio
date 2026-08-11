@@ -6,6 +6,7 @@ import {
   MAX_MEGAPIXELS,
   MAX_REFERENCES,
   MIN_MEGAPIXELS,
+  UHD_4K_MEGAPIXELS,
   backendResolutionValue,
   defaultState,
   formatMegapixels,
@@ -81,7 +82,7 @@ test("normalization clamps fields and limits references", () => {
     prompt_options: { adherence: -2 },
     references: Array.from({ length: 20 }, (_, index) => ({ filename: `${index}.png` })),
   });
-  assert.equal(state.generation.megapixels, 2);
+  assert.equal(state.generation.megapixels, MAX_MEGAPIXELS);
   assert.equal(state.generation.seed, 0);
   assert.equal(state.prompt_options.adherence, 0);
   assert.equal(state.references.length, MAX_REFERENCES);
@@ -125,10 +126,16 @@ test("resolution planner keeps one and two megapixel requests distinct", () => {
   assert.equal(two.capped, false);
 });
 
+test("resolution planner reaches an aligned direct 4K-class canvas", () => {
+  const plan = planResolution("16:9", UHD_4K_MEGAPIXELS);
+  assert.deepEqual([plan.width, plan.height], [3840, 2176]);
+  assert.equal(plan.capped, false);
+});
+
 test("megapixel display exposes stable minimum and maximum limits", () => {
   assert.equal(formatMegapixels(MIN_MEGAPIXELS), "0.20 MP");
   assert.equal(formatMegapixels(1), "1.00 MP");
-  assert.equal(formatMegapixels(MAX_MEGAPIXELS), "2.00 MP");
+  assert.equal(formatMegapixels(MAX_MEGAPIXELS), "8.50 MP");
 });
 
 test("studio layout cannot feed total node height back into panel height", () => {

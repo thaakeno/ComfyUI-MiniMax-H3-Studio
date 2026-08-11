@@ -124,6 +124,14 @@ def plan_resolution(
     cap_pixels: int | None = NATIVE_MAX_PIXELS,
     multiple: int = CANVAS_MULTIPLE,
 ) -> ResolutionPlan:
+    """Return the aligned H3 canvas for direct or conservative generation.
+
+    Direct mode honors the requested multi-megapixel area up to the explicit
+    Studio limit. ``cap_native=True`` retains the former ~1 MP conservative
+    ceiling as an intentional option. High resolution increases memory cost and
+    does not by itself guarantee better visual quality.
+    """
+
     try:
         requested_mp = float(megapixels)
     except (TypeError, ValueError) as exc:

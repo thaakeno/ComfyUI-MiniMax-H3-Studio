@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from h3studio.constants import STATE_SCHEMA_VERSION
+from h3studio.constants import MAX_MEGAPIXELS, STATE_SCHEMA_VERSION
 from h3studio.errors import StateDecodeError, StateVersionError
 from h3studio.references import ReferenceImage
 from h3studio.state import GenerationOptions, PromptOptions, StudioState, migrate_state_dict
@@ -71,7 +71,7 @@ def test_v1_settings_are_migrated() -> None:
 def test_generation_options_clamp_values() -> None:
     options = GenerationOptions.from_dict({"seed": -4, "megapixels": 999, "custom_width": 1})
     assert options.seed == 0
-    assert options.megapixels == 2.0
+    assert options.megapixels == MAX_MEGAPIXELS
     assert options.custom_width == 32
 
 

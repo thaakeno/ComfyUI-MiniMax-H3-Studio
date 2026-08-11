@@ -12,6 +12,7 @@ from ..constants import (
     ASPECT_RATIOS,
     ENHANCE_COMPILE,
     ENHANCE_MODES,
+    MAX_MEGAPIXELS,
     MAX_REFERENCE_IMAGES,
     MODE_AUTO,
     MODE_REFERENCE_EDIT,
@@ -207,7 +208,7 @@ class H3StudioDirector:
                 "ref_image_size": (list(LEGACY_REF_SIZES), {"default": "2k"}),
                 "reference_mention_mode": (["index", "filename"], {"default": "index"}),
                 # Image Studio controls.
-                "megapixels": ("FLOAT", {"default": 1.0, "min": 0.20, "max": 2.0, "step": 0.05}),
+                "megapixels": ("FLOAT", {"default": 1.0, "min": 0.20, "max": MAX_MEGAPIXELS, "step": 0.05}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2**63 - 1, "control_after_generate": True}),
                 "enhance_mode": (list(ENHANCE_MODES), {"default": ENHANCE_COMPILE}),
                 "adherence": ("FLOAT", {"default": 0.85, "min": 0.0, "max": 1.0, "step": 0.05}),
