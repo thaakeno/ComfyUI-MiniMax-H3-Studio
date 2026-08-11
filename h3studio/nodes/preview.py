@@ -110,17 +110,27 @@ def _vae_choices() -> list[str]:
 
 
 def _resolve_packed_latent(torch, value, latent_shapes):
-    """Restore the first Comfy packed latent from its flattened multi-latent tensor."""
+    """Restore the first H3 latent from either supported Comfy packed layout."""
 
     if getattr(value, "ndim", 0) != 3 or not latent_shapes:
         return value
     shape = tuple(int(part) for part in latent_shapes[0])
+
+    # Older/channel-packed layouts keep the target channel axis and append
+    # following packed data on the final dimension. Slice every channel first
+    # so data from the next packed latent cannot leak into the H3 frame.
+    if value.shape[1] == shape[1]:
+        required_per_channel = math.prod(shape[2:])
+        if value.shape[2] < required_per_channel:
+            raise ValueError(f"Packed latent shape {tuple(value.shape)} cannot restore H3 shape {shape}.")
+        return value[:, :, :required_per_channel].reshape((value.shape[0], *shape[1:]))
+
+    # Current Comfy multi-latent sampling flattens nested latents into
+    # [batch, 1, total_values]. H3 video is first, followed by audio.
     required = math.prod(shape[1:])
-    flat = value.reshape(value.shape[0], -1)
+    flat = value.reshape((value.shape[0], -1))
     if flat.shape[1] < required:
         raise ValueError(f"Packed latent shape {tuple(value.shape)} cannot restore H3 shape {shape}.")
-    # Comfy flattens nested latents into [batch, 1, total_values]. The H3
-    # video latent is first and may be followed by the packed audio latent.
     return flat[:, :required].reshape((value.shape[0], *shape[1:]))
 
 
