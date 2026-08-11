@@ -14,8 +14,8 @@ from .image_runtime import H3StudioDecode
 from .loader import (
     AUTO_ANALYZER,
     DISABLED_IMAGE_VAE,
-    H3StudioLoader,
     SAME_AS_ANALYZER,
+    H3StudioLoader,
 )
 
 LOGGER = logging.getLogger(__name__)
