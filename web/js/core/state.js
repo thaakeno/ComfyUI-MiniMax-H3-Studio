@@ -335,6 +335,34 @@ export function validateGenerationContract(value) {
   return null;
 }
 
+export function missingReferenceOrdinals(value) {
+  const state = normalizeState(value);
+  const enabled = new Set(
+    state.references
+      .filter((reference) => reference.enabled !== false)
+      .map((reference) => Number(reference.ordinal)),
+  );
+  const missing = new Set();
+  String(state.prompt || "").replace(/(^|[^\w@])@Image[_\s]*([1-9]\d*)\b/gi, (whole, prefix, ordinal) => {
+    const number = Number(ordinal);
+    if (!enabled.has(number)) missing.add(number);
+    return whole;
+  });
+  return [...missing].sort((left, right) => left - right);
+}
+
+export function removeReferenceMentions(prompt, ordinals) {
+  const stale = new Set((ordinals || []).map(Number));
+  return String(prompt || "")
+    .replace(/(^|[^\w@])@Image[_\s]*([1-9]\d*)\b/gi, (whole, prefix, ordinal) => (
+      stale.has(Number(ordinal)) ? prefix : whole
+    ))
+    .replace(/[ \t]+([,.;:!?])/g, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+$/gm, "")
+    .trim();
+}
+
 export function rewriteMentions(prompt, ordinalMap) {
   return String(prompt || "").replace(/(^|[^\w@])@Image[_\s]*([1-9]\d*)\b/gi, (whole, prefix, ordinal) => {
     const mapped = ordinalMap[Number(ordinal)] ?? Number(ordinal);

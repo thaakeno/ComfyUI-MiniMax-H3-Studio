@@ -142,3 +142,11 @@ def test_director_lifecycle_has_one_dispatcher_and_one_state_serializer():
     assert "this.__h3studioAfterSerialize?.(info)" in legacy
     assert "node.__h3studioBeforeSerialize" in modular
     assert "node.__h3studioAfterSerialize" in modular
+
+
+def test_stale_reference_mentions_are_blocked_with_an_inline_repair_action():
+    source = STUDIO_FRONTEND.read_text(encoding="utf-8")
+    assert "missingReferenceOrdinals(state)" in source
+    assert "Remove stale mention" in source
+    assert "node.__h3sDomWidget?.setValue?.(fixedPrompt)" in source
+    assert "H3 Studio prompt fixed" in source

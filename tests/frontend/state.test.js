@@ -12,10 +12,12 @@ import {
   backendResolutionValue,
   defaultState,
   formatMegapixels,
+  missingReferenceOrdinals,
   normalizeState,
   parseState,
   planResolution,
   restorePersistedState,
+  removeReferenceMentions,
   rewriteMentions,
   serializeState,
   validateGenerationContract,
@@ -215,6 +217,26 @@ test("mention rewriting changes only actual friendly image references", () => {
 test("legacy mention forms normalize to canonical compact tags", () => {
   assert.equal(canonicalizeMentions("Use @image 1, @IMAGE_2, and @Image3"), "Use @Image1, @Image2, and @Image3");
   assert.equal(normalizeState({ prompt: "Keep @Image 1" }).prompt, "Keep @Image1");
+});
+
+test("missing prompt references are identified and removable without touching valid mentions", () => {
+  const state = normalizeState({
+    prompt: "Keep @Image1, borrow light from @Image 2, and ignore x@Image3.test.",
+    references: [{ filename: "connected.png" }],
+  });
+  assert.deepEqual(missingReferenceOrdinals(state), [2]);
+  assert.equal(
+    removeReferenceMentions(state.prompt, [2]),
+    "Keep @Image1, borrow light from, and ignore x@Image3.test.",
+  );
+});
+
+test("disabled cards remain missing until re-enabled", () => {
+  const state = normalizeState({
+    prompt: "Match @Image1 and @Image2",
+    references: [{ filename: "one.png" }, { filename: "two.png", enabled: false }],
+  });
+  assert.deepEqual(missingReferenceOrdinals(state), [2]);
 });
 
 test("resolution planner keeps one and two megapixel requests distinct", () => {

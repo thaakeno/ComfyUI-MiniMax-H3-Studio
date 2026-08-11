@@ -14,8 +14,10 @@ import {
   SAMPLING_PROFILES,
   advanceSeedAfterGeneration,
   formatMegapixels,
+  missingReferenceOrdinals,
   normalizeState,
   planResolution,
+  removeReferenceMentions,
   restorePersistedState,
   serializeState,
   validateGenerationContract,
@@ -576,7 +578,40 @@ function promptSection(node, state, refresh) {
   const analyzerHelp = options.analyze_images
     ? `Qwen3-VL inspects ${analyzerDetail}, improves the instruction, and supplies source-only roles and descriptions. H3 always receives the untouched originals. It reruns only when the prompt, references, or analyzer detail changes.`
     : "Pixel analysis is off; roles come from your wording and manual reference controls.";
+  const missingOrdinals = missingReferenceOrdinals(state);
+  const missingLabels = missingOrdinals.map((ordinal) => `@Image${ordinal}`);
+  const referenceNotice = missingOrdinals.length
+    ? element("div", { className: "h3s-validation-notice", attrs: { role: "alert", "aria-live": "polite" } }, [
+      element("div", { className: "h3s-validation-notice-copy" }, [
+        element("strong", { text: `${missingLabels.join(", ")} ${missingOrdinals.length === 1 ? "is" : "are"} not connected` }),
+        element("span", { text: "Reconnect or enable the matching image card, or remove only the stale mention from your prompt." }),
+      ]),
+      element("button", {
+        className: "h3s-validation-fix",
+        type: "button",
+        text: missingOrdinals.length === 1 ? `Remove ${missingLabels[0]}` : "Remove stale mentions",
+        attrs: { "aria-label": `Remove ${missingLabels.join(", ")} from prompt` },
+        on: {
+          click: () => {
+            const fixedPrompt = removeReferenceMentions(state.prompt, missingOrdinals);
+            state.prompt = fixedPrompt;
+            setWidget(node, "prompt", fixedPrompt);
+            node.__h3sDomWidget?.setValue?.(fixedPrompt);
+            applyState(node, state);
+            app.extensionManager?.toast?.add?.({
+              severity: "success",
+              summary: "H3 Studio prompt fixed",
+              detail: `${missingLabels.join(", ")} removed. Review the prompt, then queue again.`,
+              life: 4500,
+            });
+            refresh();
+          },
+        },
+      }),
+    ])
+    : null;
   const body = element("div", { className: "h3s-section-stack" }, [
+    referenceNotice,
     element("div", { className: "h3s-grid" }, [
       controlRow("Prompt format", enhance), controlRow("Image understanding", analyzerToggle),
       controlRow("Analyzer detail", analyzerResolution), controlRow("Prompt director", directorToggle),
@@ -863,8 +898,15 @@ function installPanel(node) {
     const originalBeforeQueued = stateWidget.beforeQueued;
     stateWidget.beforeQueued = async function h3studioBeforeQueued() {
       const result = await originalBeforeQueued?.apply(this, arguments);
-      const message = validateGenerationContract(stateFromNode(node));
+      const state = stateFromNode(node);
+      const missingOrdinals = missingReferenceOrdinals(state);
+      const missingLabels = missingOrdinals.map((ordinal) => `@Image${ordinal}`);
+      const fixLabel = missingOrdinals.length === 1 ? `Remove ${missingLabels[0]}` : "Remove stale mentions";
+      const message = missingOrdinals.length
+        ? `${missingLabels.join(", ")} ${missingOrdinals.length === 1 ? "has" : "have"} no enabled image card. Reconnect the image or use ${fixLabel} in Direction.`
+        : validateGenerationContract(state);
       if (message) {
+        if (missingOrdinals.length) renderPanel(node);
         app.extensionManager?.toast?.add?.({
           severity: "error",
           summary: "H3 Studio configuration",
