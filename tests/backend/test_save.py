@@ -2,7 +2,7 @@ import json
 from types import SimpleNamespace
 
 from h3studio.context import H3StudioContext
-from h3studio.nodes.save import completed_png_metadata
+from h3studio.nodes.save import _saved_image_count, completed_png_metadata
 from h3studio.prompting.compiler import CompileResult
 from h3studio.prompting.sections import ImagePromptSections
 from h3studio.references import ReferenceImage
@@ -62,3 +62,8 @@ def test_completed_png_metadata_restores_runtime_state_without_embedding_pixels(
     assert saved_extra["h3studio"]["portability"] == "same_machine_storage_references"
     assert "images" not in saved_extra["h3studio"]
     assert json.loads(json.dumps(saved_extra["h3studio"]))["state"]["generation"]["seed"] == 987
+
+
+def test_saved_image_count_uses_the_successful_output_batch() -> None:
+    assert _saved_image_count(SimpleNamespace(shape=(3, 1024, 1024, 3))) == 3
+    assert _saved_image_count([object(), object()]) == 2

@@ -41,7 +41,7 @@ class AggregateReporter:
         self,
         *,
         batch_size: int = 10,
-        flush_seconds: float = 300.0,
+        flush_seconds: float = 60.0,
         sender: Callable[[int], None] = _post_count,
         enabled: Callable[[], bool] = telemetry_enabled,
     ) -> None:
