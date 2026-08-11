@@ -85,13 +85,54 @@ def _store_analysis_record(key: tuple[Any, ...], record: dict[str, Any]) -> None
 
 def _json_object(text: str) -> dict[str, Any]:
     value = re.sub(r"^```(?:json)?\s*|\s*```$", "", str(text or "").strip(), flags=re.IGNORECASE)
-    start, end = value.find("{"), value.rfind("}")
-    if start < 0 or end <= start:
+    start = value.find("{")
+    if start < 0:
         raise ValueError("Qwen3-VL returned no JSON object.")
-    parsed = json.loads(value[start : end + 1])
+    candidate = value[start:]
+    try:
+        parsed, _end = json.JSONDecoder().raw_decode(candidate)
+    except json.JSONDecodeError as original_error:
+        repaired = _repair_truncated_json(candidate)
+        try:
+            parsed, _end = json.JSONDecoder().raw_decode(repaired)
+        except json.JSONDecodeError:
+            raise ValueError(f"Qwen3-VL returned malformed JSON: {original_error.msg}.") from original_error
     if not isinstance(parsed, dict):
         raise ValueError("Qwen3-VL JSON was not an object.")
     return parsed
+
+
+def _repair_truncated_json(value: str) -> str:
+    """Close an otherwise valid JSON prefix without inventing missing records."""
+
+    text = str(value or "").strip()
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    for character in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character in "[{":
+            stack.append(character)
+        elif character == "]" and stack and stack[-1] == "[":
+            stack.pop()
+        elif character == "}" and stack and stack[-1] == "{":
+            stack.pop()
+    if in_string:
+        text += '"'
+    text = re.sub(r",\s*$", "", text)
+    text = re.sub(r',?\s*"[^"\\]+"\s*:\s*$', "", text)
+    text = re.sub(r",\s*([}\]])", r"\1", text)
+    text += "".join("}" if opener == "{" else "]" for opener in reversed(stack))
+    return text
 
 
 def _extract_analysis(text: str) -> dict[str, Any]:
@@ -99,6 +140,22 @@ def _extract_analysis(text: str) -> dict[str, Any]:
     if not isinstance(parsed.get("references"), list):
         raise ValueError("Qwen3-VL JSON did not contain a references list.")
     return parsed
+
+
+def _validated_analysis_records(payload: dict[str, Any], expected_ordinals: set[int]) -> dict[int, dict[str, Any]]:
+    records: dict[int, dict[str, Any]] = {}
+    for item in payload["references"]:
+        if not isinstance(item, dict) or not str(item.get("ordinal", "")).isdigit():
+            continue
+        ordinal = int(item["ordinal"])
+        if ordinal in records:
+            raise ValueError(f"Qwen3-VL returned duplicate reference ordinal {ordinal}.")
+        if ordinal in expected_ordinals:
+            records[ordinal] = item
+    missing = sorted(expected_ordinals - records.keys())
+    if missing:
+        raise ValueError("Qwen3-VL omitted reference records: " + ", ".join(map(str, missing)) + ".")
+    return records
 
 
 def _extract_writer_instruction(text: str) -> str:
@@ -274,6 +331,7 @@ def analyze_references(
             if record is not None:
                 _ANALYSIS_CACHE.move_to_end(key)
     missing = [index for index, record in enumerate(cached_records) if record is None]
+    analysis_warning = ""
     if missing:
         detail_label = "native original pixels" if max_image_edge == 0 else f"max edge {max_image_edge}px"
         started = time.perf_counter()
@@ -300,29 +358,49 @@ def analyze_references(
         )
         analysis_images = [_prepare_image(image, max_image_edge) for _reference, image in missing_pairs]
         LOGGER.info("[H3 Studio - Vision] Prepared %d analysis copies | H3 originals untouched", len(analysis_images))
-        tokens = clip.tokenize(instruction, images=analysis_images, thinking=False)
-        LOGGER.info("[H3 Studio - Vision] Inspecting pixels and writing factual source records...")
-        generated = clip.generate(
-            tokens,
-            do_sample=False,
-            max_length=min(768, 96 + len(missing_pairs) * 72),
-            temperature=1.0,
-            top_k=0,
-            top_p=1.0,
-            min_p=0.0,
-            repetition_penalty=1.05,
-            seed=0,
-            presence_penalty=0.0,
-        )
-        decoded = clip.decode(generated, skip_special_tokens=True)
-        if isinstance(decoded, (tuple, list)):
-            decoded = decoded[0] if decoded else ""
-        payload = _extract_analysis(str(decoded))
-        generated_by_ordinal = {
-            int(item.get("ordinal", 0)): item
-            for item in payload["references"]
-            if isinstance(item, dict) and str(item.get("ordinal", "")).isdigit()
-        }
+        expected_ordinals = {reference.ordinal for reference, _image in missing_pairs}
+        generated_by_ordinal: dict[int, dict[str, Any]] = {}
+        failure = ""
+        for attempt in range(2):
+            retry = "" if not failure else (
+                "\n\nYour previous response was invalid: " + failure
+                + " Return one complete compact JSON object with every requested ordinal."
+            )
+            tokens = clip.tokenize(instruction + retry, images=analysis_images, thinking=False)
+            LOGGER.info("[H3 Studio - Vision] Inspecting pixels | structured attempt %d/2", attempt + 1)
+            generated = clip.generate(
+                tokens,
+                do_sample=False,
+                max_length=(
+                    min(768, 96 + len(missing_pairs) * 72)
+                    if attempt == 0
+                    else min(1024, 160 + len(missing_pairs) * 96)
+                ),
+                temperature=1.0,
+                top_k=0,
+                top_p=1.0,
+                min_p=0.0,
+                repetition_penalty=1.05,
+                seed=0,
+                presence_penalty=0.0,
+            )
+            decoded = clip.decode(generated, skip_special_tokens=True)
+            if isinstance(decoded, (tuple, list)):
+                decoded = decoded[0] if decoded else ""
+            try:
+                generated_by_ordinal = _validated_analysis_records(
+                    _extract_analysis(str(decoded)), expected_ordinals
+                )
+                failure = ""
+                break
+            except (ValueError, json.JSONDecodeError) as exc:
+                failure = str(exc)
+                LOGGER.warning("[H3 Studio - Vision] Structured output invalid | attempt %d/2 | %s", attempt + 1, failure)
+        if failure:
+            analysis_warning = (
+                " Analyzer output remained malformed after repair and retry; existing descriptions and manual roles were preserved."
+            )
+            LOGGER.error("[H3 Studio - Vision] Failing soft after structured retry | %s", failure)
         with _CACHE_LOCK:
             for index in missing:
                 reference = paired[index][0]
@@ -347,6 +425,7 @@ def analyze_references(
         f"Image analysis: {len(analyzed)} actual reference image(s) at {detail_label}; "
         f"{hit_count} factual record(s) reused and {len(missing)} inspected. Prompt wording does not invalidate facts."
     )
+    note += analysis_warning
     if not missing:
         note += " Cache: HIT."
     if deep_enhancement:

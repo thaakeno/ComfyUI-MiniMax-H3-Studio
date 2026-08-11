@@ -118,6 +118,26 @@ class FakeWriter:
         return json.dumps({"instruction": instruction})
 
 
+class RetryClip(FakeClip):
+    def decode(self, generated, *, skip_special_tokens):
+        if self.generate_calls == 1:
+            return '{"references":['
+        return super().decode(generated, skip_special_tokens=skip_special_tokens)
+
+
+class BrokenClip(FakeClip):
+    def decode(self, generated, *, skip_special_tokens):
+        return "not structured output"
+
+
+class TruncatedClip(FakeClip):
+    def decode(self, generated, *, skip_special_tokens):
+        return (
+            '{"references":[{"ordinal":1,"role":"character","description":"Pale clown with red hair"},'
+            '{"ordinal":2,"role":"object","description":"Thick rectangular black glasses'
+        )
+
+
 def test_native_analyzer_uses_pixels_and_returns_card_descriptions() -> None:
     clip = FakeClip()
     references = (
@@ -165,6 +185,57 @@ def test_inference_tensor_without_version_counter_is_cacheable() -> None:
         (FakeInferenceImage(303), FakeInferenceImage(404)),
     )
     assert analyzed[0].role == "character"
+
+
+def test_truncated_json_prefix_is_repaired_without_another_vision_pass() -> None:
+    import h3studio.prompting.comfy_analyzer as analyzer_module
+
+    analyzer_module._ANALYSIS_CACHE.clear()
+    clip = TruncatedClip()
+    references = (ReferenceImage("one", "one.png", 1), ReferenceImage("two", "two.png", 2))
+    analyzed, _enhanced, _note = analyze_references(
+        clip, "Use @Image1 and @Image2", references, (FakeImage(1), FakeImage(2))
+    )
+
+    assert clip.generate_calls == 1
+    assert analyzed[1].description == "Thick rectangular black glasses"
+
+
+def test_malformed_analysis_retries_once_then_uses_valid_records() -> None:
+    import h3studio.prompting.comfy_analyzer as analyzer_module
+
+    analyzer_module._ANALYSIS_CACHE.clear()
+    clip = RetryClip()
+    references = (ReferenceImage("one", "one.png", 1), ReferenceImage("two", "two.png", 2))
+    analyzed, _enhanced, _note = analyze_references(
+        clip, "Use @Image1 and @Image2", references, (FakeImage(11), FakeImage(12))
+    )
+
+    assert clip.generate_calls == 2
+    assert "red hair" in analyzed[0].description
+
+
+def test_repeated_malformed_analysis_fails_soft_and_preserves_existing_cards() -> None:
+    import h3studio.prompting.comfy_analyzer as analyzer_module
+
+    analyzer_module._ANALYSIS_CACHE.clear()
+    clip = BrokenClip()
+    reference = ReferenceImage(
+        "one",
+        "one.png",
+        1,
+        role="style",
+        description="Existing factual description",
+        role_auto=False,
+        description_auto=False,
+    )
+    analyzed, enhanced, note = analyze_references(clip, "Restyle @Image1", (reference,), (FakeImage(21),))
+
+    assert clip.generate_calls == 2
+    assert analyzed[0].role == "style"
+    assert analyzed[0].description == "Existing factual description"
+    assert enhanced == "Restyle @Image1"
+    assert "malformed after repair and retry" in note
 
 
 def test_seed_only_queue_reuses_analysis_across_recreated_runtime_objects(monkeypatch) -> None:
