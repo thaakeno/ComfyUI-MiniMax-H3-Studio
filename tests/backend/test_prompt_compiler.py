@@ -69,9 +69,10 @@ def test_compile_reference_prompt_uses_native_tags() -> None:
     )
     result = PromptCompiler().compile(state)
     assert result.resolved_mode == "reference_edit"
-    assert "<Picture 1>" in result.native_prompt
-    assert "<Picture 2>" in result.native_prompt
-    assert "<Subject" not in result.native_prompt
+    assert "<Subject 1> is rendering language" in result.native_prompt
+    assert "sourced from <Picture 1>" in result.native_prompt
+    assert "<Subject 2>" in result.native_prompt
+    assert "sourced from <Picture 2>" in result.native_prompt
     assert "@Image" not in result.native_prompt
     assert "fully_preserved" in result.native_prompt
 
@@ -86,7 +87,9 @@ def test_easy_runtime_tokens_and_zero_width_chip_spacing_compile_to_native_ids()
     )
     result = PromptCompiler().compile(state)
     assert "__H3STUDIO" not in result.native_prompt
+    assert "<Subject 1>" in result.native_prompt
     assert "<Picture 1>" in result.native_prompt
+    assert "<Subject 2>" in result.native_prompt
     assert "<Picture 2>" in result.native_prompt
     assert result.references[0].role == "outfit"
     assert result.references[1].role in {"character", "identity"}
@@ -135,7 +138,7 @@ def test_single_prompt_is_one_line_and_explicit_for_source_edit() -> None:
     assert "reference sheet" in result.native_prompt
 
 
-def test_single_prompt_assigns_multi_reference_roles_without_subject_tags() -> None:
+def test_single_prompt_assigns_multi_reference_roles_to_stable_subjects() -> None:
     state = StudioState(
         prompt="Show the person from @Image2 with the clothes in @Image1 somewhere outside",
         references=(ref(1), ref(2)),
@@ -143,10 +146,30 @@ def test_single_prompt_assigns_multi_reference_roles_without_subject_tags() -> N
     )
     result = PromptCompiler().compile(state)
     assert "\n" not in result.native_prompt
-    assert "<Picture 1> supplies wardrobe" in result.native_prompt
-    assert "<Picture 2> supplies character identity" in result.native_prompt
+    assert "<Subject 1>, sourced from <Picture 1>, supplies wardrobe" in result.native_prompt
+    assert "<Subject 2>, sourced from <Picture 2>, supplies character identity" in result.native_prompt
     assert "floating garments" in result.native_prompt
-    assert "<Subject" not in result.native_prompt
+    assert "<Subject 1>" in result.native_prompt
+
+
+def test_reference_only_state_uses_official_weak_reference_marker_in_native_prompt() -> None:
+    manual = ReferenceImage(
+        "manual",
+        "manual.png",
+        1,
+        role="style",
+        retention="reference_only",
+        role_auto=False,
+        retention_auto=False,
+    )
+    result = PromptCompiler().compile(
+        StudioState(
+            prompt="Use @Image1 as broad visual inspiration alongside @Image2",
+            references=(manual, ref(2, "identity", "fully_preserved")),
+        )
+    )
+    assert "<Subject 1>: weak_reference" in result.native_prompt
+    assert result.references[0].retention == "reference_only"
 
 
 def test_single_prompt_includes_visual_analyzer_descriptions() -> None:

@@ -85,18 +85,26 @@ def _role_phrase(reference: ReferenceImage) -> str:
     return ROLE_PHRASES.get(reference.effective_role, ROLE_PHRASES["reference"])
 
 
+def _owned_label(reference: ReferenceImage, mode: str) -> str:
+    return reference.picture_tag if mode == MODE_IMAGE_TO_IMAGE else reference.subject_tag
+
+
+def _native_retention(reference: ReferenceImage) -> str:
+    return "weak_reference" if reference.retention == "reference_only" else reference.retention
+
+
 def _definition(reference: ReferenceImage, mode: str) -> str:
     description = reference.description.strip()
     observed = f" Visible details to use: {description}." if description else ""
     if mode == MODE_IMAGE_TO_IMAGE:
         return (
-            f"{reference.mention} is the single source image and locked canvas. Preserve the same person, identity, "
+            f"{reference.picture_tag} is the single source image and locked canvas. Preserve the same person, identity, "
             "pose, framing, background, lighting, clothing, and all other unmentioned details; change only what the "
             f"user explicitly requests.{observed}"
         )
     return (
-        f"{reference.mention} defines {_role_phrase(reference)} only."
-        f"{observed} Treat it as a reference input, not as an additional subject in the final image."
+        f"{reference.subject_tag} is {_role_phrase(reference)} sourced from {reference.picture_tag}."
+        f"{observed} This label owns only that defined content, not unrelated details from the source image."
     )
 
 
@@ -105,7 +113,7 @@ def _retention(reference: ReferenceImage, mode: str) -> str:
     description = f" Specifically preserve {reference.description.strip()}." if reference.description.strip() else ""
     if mode == MODE_IMAGE_TO_IMAGE:
         return (
-            f"{reference.mention}: fully_preserved - use it as the source image and preserve every unmentioned "
+            f"{reference.picture_tag}: fully_preserved - use it as the source image and preserve every unmentioned "
             f"visual property exactly; apply only the requested edit.{description}"
         )
     if reference.retention == "fully_preserved":
@@ -116,7 +124,7 @@ def _retention(reference: ReferenceImage, mode: str) -> str:
         action = f"use {role} only as guidance and do not copy unrelated details"
     else:
         action = f"transfer {role} to the target without copying unrelated reference content"
-    return f"{reference.mention}: {reference.retention} - {action}.{description}"
+    return f"{reference.subject_tag}: {_native_retention(reference)} - {action}.{description}"
 
 
 def _reference_clause(references: Sequence[ReferenceImage], mode: str) -> str:
@@ -125,9 +133,9 @@ def _reference_clause(references: Sequence[ReferenceImage], mode: str) -> str:
     clauses = []
     for reference in references:
         if mode == MODE_IMAGE_TO_IMAGE:
-            clauses.append(f"{reference.mention} is the locked source image; only the requested change is allowed")
+            clauses.append(f"{reference.picture_tag} is the locked source image; only the requested change is allowed")
         else:
-            clauses.append(f"{reference.mention} supplies {_role_phrase(reference)} only")
+            clauses.append(f"{reference.subject_tag} supplies {_role_phrase(reference)} from {reference.picture_tag} only")
     if len(clauses) == 1:
         return clauses[0] + "."
     return ", ".join(clauses[:-1]) + f", and {clauses[-1]}."
@@ -142,19 +150,23 @@ def _summary(prompt: str, references: Sequence[ReferenceImage], mode: str) -> st
         MODE_IMAGE_TO_IMAGE: "Create a new still image guided by the source reference",
         MODE_REFERENCE_EDIT: "Create a new still image using the ordered reference set",
     }.get(mode, "Create a new still image")
+    prefix = {
+        MODE_IMAGE_TO_IMAGE: "[keyframe completion]",
+        MODE_REFERENCE_EDIT: "[reference generation]",
+    }.get(mode, "[image generation]")
     if not references:
-        return f"[image generation] {mode_text}: {compact}.".strip()
+        return f"{prefix} {mode_text}: {compact}.".strip()
     assignments = "; ".join(
         (
-            f"{reference.mention} = locked source image, preserve everything except the explicit edit"
+            f"{reference.picture_tag} = locked source image, preserve everything except the explicit edit"
             if mode == MODE_IMAGE_TO_IMAGE
-            else f"{reference.mention} = {_role_phrase(reference)}"
+            else f"{reference.subject_tag} = {_role_phrase(reference)} from {reference.picture_tag}"
         )
         for reference in references
     )
     hard = " ".join(_hard_constraints(prompt))
     return (
-        f"[image generation] {mode_text}: {compact}. "
+        f"{prefix} {mode_text}: {compact}. "
         f"Reference assignments: {assignments}. Produce one coherent final image, not a reference sheet or collage. "
         f"{hard}"
     ).strip()
@@ -176,7 +188,8 @@ def _description(prompt: str, references: Sequence[ReferenceImage], state: Studi
                 f"- {reference.mention}: locked FL2VA source image; preserve every unmentioned detail and perform only "
                 "the explicit edit."
                 if mode == MODE_IMAGE_TO_IMAGE
-                else f"- {reference.mention}: use {_role_phrase(reference)} only; retention = {reference.retention}."
+                else f"- {reference.subject_tag} from {reference.picture_tag}: use {_role_phrase(reference)} only; "
+                f"retention = {_native_retention(reference)}."
             )
             for reference in references
         )
@@ -234,7 +247,7 @@ def _single_prompt(prompt: str, references: Sequence[ReferenceImage], mode: str)
         )
 
     assignments = "; ".join(
-        f"{reference.mention} supplies {_role_phrase(reference)} only"
+        f"{reference.subject_tag}, sourced from {reference.picture_tag}, supplies {_role_phrase(reference)} only"
         + (f", visibly described as {reference.description.strip()}" if reference.description.strip() else "")
         for reference in references
     )
@@ -360,9 +373,17 @@ class PromptCompiler:
         if state.prompt_options.enhance_mode == ENHANCE_OFF:
             native_prompt = compile_mentions(prompt, references)
         elif state.prompt_options.enhance_mode == ENHANCE_SINGLE:
-            native_prompt = compile_mentions(_single_prompt(prompt, references, resolved_mode), references)
+            native_prompt = compile_mentions(
+                _single_prompt(prompt, references, resolved_mode),
+                references,
+                tag="subject" if resolved_mode == MODE_REFERENCE_EDIT else "picture",
+            )
         else:
-            native_prompt = compile_mentions(rendered, references)
+            native_prompt = compile_mentions(
+                rendered,
+                references,
+                tag="subject" if resolved_mode == MODE_REFERENCE_EDIT else "picture",
+            )
         return CompileResult(sections, rendered, native_prompt, tuple(references), resolved_mode, tuple(bag.items))
 
     def accept_enhanced(self, value: str, base: CompileResult, *, strict: bool = True) -> CompileResult:
@@ -370,5 +391,9 @@ class PromptCompiler:
 
         sections = ImagePromptSections.parse(value, strict=strict)
         rendered = sections.render()
-        native_prompt = compile_mentions(rendered, base.references)
+        native_prompt = compile_mentions(
+            rendered,
+            base.references,
+            tag="subject" if base.resolved_mode == MODE_REFERENCE_EDIT else "picture",
+        )
         return replace(base, sections=sections, rendered=rendered, native_prompt=native_prompt)

@@ -14,15 +14,15 @@ detailed_description:
 Never output overall_soundscape, non_diegetic_music, dialogue timing, shot timing, video duration, camera motion over time, or any other audio/video-only field.
 
 Reference rules:
-- The UI calls the images @Image1, @Image2, and so on. Accept legacy spaced forms, but emit the supplied native labels exactly as provided by the request, normally <Picture N> and <Subject N>.
+- The UI calls the images @Image1, @Image2, and so on. Accept legacy spaced forms. In full-reference output, define reusable visible content as <Subject N> sourced from <Picture N>; reserve a standalone <Picture N> role for a concrete frame or composition anchor.
 - Keep every label stable across all four sections.
 - Define separately trackable people, characters, objects, environments, styles, layouts, typography, lighting, palettes, poses and clothing when they materially affect the result.
 - Do not invent observations that are not visible in a reference or requested by the user.
 - Distinguish identity preservation from attribute transfer.
 
-retention_analysis uses one marker per reference: fully_preserved, partially_preserved, attribute_transfer, or reference_only. Explain the concrete retained or transferred attributes after the marker.
+retention_analysis uses one native marker per reference: fully_preserved, partially_preserved, attribute_transfer, or weak_reference. Treat an internal reference_only instruction as weak_reference in model-facing prose. Explain the concrete retained or transferred attributes after the marker.
 
-summary begins with [image generation] and states the target still image, composition and principal reference relationships in one compact paragraph.
+summary begins with [reference generation] for multi-reference work and states the target still image, composition and principal reference relationships in one compact paragraph.
 
 detailed_description is a production brief, not tag salad. Describe the single final frame in coherent natural language: subject identity and appearance, pose and expression, wardrobe and props, environment, composition and camera, lighting, color, material/rendering style, typography with exact requested text, and exclusions. Preserve the user's actual intent; increase specificity without replacing it with a different concept.
 
