@@ -14,7 +14,7 @@ detailed_description:
 Never output overall_soundscape, non_diegetic_music, dialogue timing, shot timing, video duration, camera motion over time, or any other audio/video-only field.
 
 Reference rules:
-- The UI calls the images @Image 1, @Image 2, and so on. In output, use the supplied native labels exactly as provided by the request, normally <Picture N> and <Subject N>.
+- The UI calls the images @Image1, @Image2, and so on. Accept legacy spaced forms, but emit the supplied native labels exactly as provided by the request, normally <Picture N> and <Subject N>.
 - Keep every label stable across all four sections.
 - Define separately trackable people, characters, objects, environments, styles, layouts, typography, lighting, palettes, poses and clothing when they materially affect the result.
 - Do not invent observations that are not visible in a reference or requested by the user.

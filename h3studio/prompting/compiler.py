@@ -65,8 +65,8 @@ def normalize_user_prompt(value: str) -> str:
     # Rich-text serializers may Markdown-escape underscores before sending a
     # mention chip back to Python (for example **H3STUDIO\_REF\_1**).
     text = text.replace("\\_", "_")
-    text = _LEGACY_RUNTIME_REF_RE.sub(lambda match: f"@Image {match.group(1)}", text)
-    text = re.sub(r"(?<![\w@])@image[_\s]*([1-9]\d*)\b", r"@Image \1", text, flags=re.IGNORECASE)
+    text = _LEGACY_RUNTIME_REF_RE.sub(lambda match: f"@Image{match.group(1)}", text)
+    text = re.sub(r"(?<![\w@])@image[_\s]*([1-9]\d*)\b", r"@Image\1", text, flags=re.IGNORECASE)
     text = "\n".join(_SPACE_RE.sub(" ", line).rstrip() for line in text.splitlines())
     return _BLANK_RE.sub("\n\n", text).strip()
 

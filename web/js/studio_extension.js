@@ -507,7 +507,7 @@ function referenceCard(node, state, reference, index, refresh) {
   const preview = reference.storage_name ? previewUrlForStorage(reference.storage_name) : sourcePreview(source);
   const thumb = element("div", { className: "h3s-reference-thumb" }, [
     preview ? element("img", { src: preview, alt: "" }) : element("span", { className: "h3s-thumb-placeholder", text: "IMG" }),
-    element("span", { className: "h3s-reference-index", text: `@${index + 1}` }),
+    element("span", { className: "h3s-reference-index", text: `@Image${index + 1}` }),
   ]);
   const mutate = (patch) => {
     state.references[index] = { ...state.references[index], ...patch };
@@ -641,7 +641,7 @@ function referencesSection(node, state, refresh) {
   if (!state.references.length) {
     list.append(element("div", { className: "h3s-empty" }, [
       element("strong", { text: "Text-to-image ready" }),
-      element("span", { text: "Drop images here or add several at once. They become @Image 1 through @Image 9." }),
+      element("span", { text: "Drop images here or add several at once. They become @Image1 through @Image9." }),
     ]));
   } else {
     state.references.forEach((reference, index) => list.append(referenceCard(node, state, reference, index, refresh)));

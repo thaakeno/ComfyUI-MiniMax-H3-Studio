@@ -48,7 +48,7 @@ def format_execution_report(context: H3StudioContext, enhancement_note: str = ""
             role_source = "auto" if reference.role_auto else "manual"
             retention_source = "auto" if reference.retention_auto else "manual"
             lines.append(
-                f"  @Image {reference.ordinal}: {reference.display_name} | role={reference.effective_role} | "
+                f"  @Image{reference.ordinal}: {reference.display_name} | role={reference.effective_role} | "
                 f"retention={reference.retention} | set_by=role:{role_source},retention:{retention_source}{description}"
             )
     if enhancement_note.strip():

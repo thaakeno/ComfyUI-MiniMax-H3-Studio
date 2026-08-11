@@ -338,7 +338,7 @@ class H3StudioDirector:
         LOGGER.info("\n%s", format_execution_report(context, vlm_note))
         diagnostics = context.summary() + vlm_note
         reference_labels = [
-            f"@Image {reference.ordinal} · {reference.effective_role} · {reference.retention} · {reference.filename}"
+            f"@Image{reference.ordinal} · {reference.effective_role} · {reference.retention} · {reference.filename}"
             for reference in compile_result.references
         ]
         result = (

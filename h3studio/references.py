@@ -1,4 +1,4 @@
-"""Ordered image references and the friendly ``@Image N`` language."""
+"""Ordered image references and the friendly ``@ImageN`` language."""
 
 from __future__ import annotations
 
@@ -90,7 +90,7 @@ class ReferenceImage:
 
     @property
     def mention(self) -> str:
-        return f"@Image {self.ordinal}"
+        return f"@Image{self.ordinal}"
 
     @property
     def picture_tag(self) -> str:
@@ -204,7 +204,7 @@ class Mention:
 
     @property
     def token(self) -> str:
-        return f"@Image {self.ordinal}"
+        return f"@Image{self.ordinal}"
 
 
 def iter_mentions(prompt: str) -> Iterator[Mention]:
@@ -236,7 +236,7 @@ def rewrite_mentions(prompt: str, ordinal_map: Mapping[int, int]) -> str:
     def substitute(match: re.Match[str]) -> str:
         old = int(match.group(1))
         new = ordinal_map.get(old, old)
-        return f"@Image {new}"
+        return f"@Image{new}"
 
     return _MENTION_RE.sub(substitute, prompt or "")
 
@@ -247,7 +247,7 @@ def compile_mentions(prompt: str, references: Sequence[ReferenceImage], *, tag: 
     by_ordinal = {reference.ordinal: reference for reference in references if reference.enabled}
     missing = [ordinal for ordinal in mention_ordinals(prompt) if ordinal not in by_ordinal]
     if missing:
-        joined = ", ".join(f"@Image {ordinal}" for ordinal in missing)
+        joined = ", ".join(f"@Image{ordinal}" for ordinal in missing)
         raise MissingReferenceError(
             f"Prompt references {joined}, but those image slots are not connected.",
             hint="Reconnect the images, reorder the cards, or remove the stale mentions.",
@@ -364,7 +364,7 @@ def validate_mentions(prompt: str, references: Sequence[ReferenceImage]) -> Diag
         if ordinal not in enabled:
             bag.error(
                 "missing_reference",
-                f"@Image {ordinal} has no enabled image card.",
+                f"@Image{ordinal} has no enabled image card.",
                 field="prompt",
                 reference_id=f"image_{ordinal}",
                 hint="Reconnect the image or remove the mention.",

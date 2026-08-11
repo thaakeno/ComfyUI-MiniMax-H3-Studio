@@ -212,7 +212,7 @@ export function normalizeState(value) {
     ...defaults,
     ...source,
     schema_version: STATE_SCHEMA_VERSION,
-    prompt: String(source.prompt || ""),
+    prompt: canonicalizeMentions(source.prompt),
     references,
     prompt_options: promptOptions,
     generation,
@@ -295,10 +295,14 @@ export function validateGenerationContract(value) {
 }
 
 export function rewriteMentions(prompt, ordinalMap) {
-  return String(prompt || "").replace(/(^|[^\w@])@Image\s*([1-9]\d*)\b/gi, (whole, prefix, ordinal) => {
+  return String(prompt || "").replace(/(^|[^\w@])@Image[_\s]*([1-9]\d*)\b/gi, (whole, prefix, ordinal) => {
     const mapped = ordinalMap[Number(ordinal)] ?? Number(ordinal);
-    return `${prefix}@Image ${mapped}`;
+    return `${prefix}@Image${mapped}`;
   });
+}
+
+export function canonicalizeMentions(prompt) {
+  return rewriteMentions(prompt, {});
 }
 
 export function planResolution(aspectRatio, megapixels, customWidth = 1024, customHeight = 1024, capNative = false) {

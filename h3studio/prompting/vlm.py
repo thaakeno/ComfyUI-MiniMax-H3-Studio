@@ -230,7 +230,7 @@ class QwenVLAdapter:
         for reference in request.references:
             description = reference.description or "Analyze the visible reference directly."
             reference_lines.append(
-                f"- @Image {reference.ordinal} is supplied as {reference.picture_tag}; define reusable content as "
+                f"- @Image{reference.ordinal} is supplied as {reference.picture_tag}; define reusable content as "
                 f"{reference.subject_tag}. Requested role={reference.role}; retention={reference.retention}; "
                 f"existing note={description}"
             )

@@ -1311,8 +1311,8 @@ function buildRuntimePrompt(node, runtimeLinks) {
                 && String(link.media_type || "image").toLowerCase() === mediaType
             );
         }
-        if (index >= 0) return `@Image ${index + 1}`;
-        if (Number.isFinite(partOrdinal) && partOrdinal > 0) return `@Image ${partOrdinal}`;
+        if (index >= 0) return `@Image${index + 1}`;
+        if (Number.isFinite(partOrdinal) && partOrdinal > 0) return `@Image${partOrdinal}`;
         return String(part.token || "");
     }).join("");
 }

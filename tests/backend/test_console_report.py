@@ -29,7 +29,7 @@ def test_console_report_includes_config_references_and_both_prompts() -> None:
         "Prompt shaping: compile_only | image analysis off | detailed second pass off | reference priority 85%"
         in report
     )
-    assert "@Image 1: face.png | role=identity | retention=fully_preserved" in report
+    assert "@Image1: face.png | role=identity | retention=fully_preserved" in report
     assert "Original prompt:" in report
     assert "Compiled H3 prompt:" in report
     assert "<Picture 1>" in report

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   applyReferenceInferences,
+  canonicalizeMentions,
   MAX_MEGAPIXELS,
   MAX_REFERENCES,
   MIN_MEGAPIXELS,
@@ -47,7 +48,7 @@ test("custom resolution uses the exact backend combo label", () => {
 
 test("state round-trips without losing reference metadata", () => {
   const state = defaultState();
-  state.prompt = "Keep @Image 1's face";
+  state.prompt = "Keep @Image1's face";
   state.references = [{
     filename: "face.png",
     role: "identity",
@@ -135,7 +136,12 @@ test("prompt inference updates auto-managed role and retention but preserves man
 test("mention rewriting changes only actual friendly image references", () => {
   const source = "Use @Image 1, @image2, email x@Image3.test, and @@Image 4";
   const result = rewriteMentions(source, { 1: 3, 2: 1, 4: 2 });
-  assert.equal(result, "Use @Image 3, @Image 1, email x@Image3.test, and @@Image 4");
+  assert.equal(result, "Use @Image3, @Image1, email x@Image3.test, and @@Image 4");
+});
+
+test("legacy mention forms normalize to canonical compact tags", () => {
+  assert.equal(canonicalizeMentions("Use @image 1, @IMAGE_2, and @Image3"), "Use @Image1, @Image2, and @Image3");
+  assert.equal(normalizeState({ prompt: "Keep @Image 1" }).prompt, "Keep @Image1");
 });
 
 test("resolution planner keeps one and two megapixel requests distinct", () => {

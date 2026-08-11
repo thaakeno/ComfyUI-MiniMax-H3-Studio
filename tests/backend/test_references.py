@@ -31,6 +31,7 @@ def test_iter_mentions_accepts_spacing_and_case() -> None:
     mentions = list(iter_mentions("Use @Image1, @image 2 and @IMAGE   9."))
     assert [item.ordinal for item in mentions] == [1, 2, 9]
     assert mentions[0].source == "@Image1"
+    assert reference(1).mention == "@Image1"
 
 
 def test_mentions_do_not_match_email_or_double_at() -> None:
@@ -62,8 +63,8 @@ def test_disabled_reference_is_treated_as_missing() -> None:
 
 
 def test_rewrite_mentions_after_reorder() -> None:
-    prompt = "Use @Image 1 for style and @Image2 for identity."
-    assert rewrite_mentions(prompt, {1: 2, 2: 1}) == "Use @Image 2 for style and @Image 1 for identity."
+    prompt = "Use @Image 1 for style and @Image_2 for identity."
+    assert rewrite_mentions(prompt, {1: 2, 2: 1}) == "Use @Image2 for style and @Image1 for identity."
 
 
 def test_normalize_references_renumbers_and_limits() -> None:

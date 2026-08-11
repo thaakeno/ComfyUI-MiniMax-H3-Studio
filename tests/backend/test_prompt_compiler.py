@@ -24,7 +24,7 @@ def test_normalize_user_prompt() -> None:
     ["@image_1", "H3STUDIO_REF_1", "__H3STUDIO_REF_1__", "**H3STUDIO\\_REF\\_1**"],
 )
 def test_normalize_all_editor_reference_tokens(token: str) -> None:
-    assert normalize_user_prompt(f"change his hair to green {token}") == "change his hair to green @Image 1"
+    assert normalize_user_prompt(f"change his hair to green {token}") == "change his hair to green @Image1"
 
 
 @pytest.mark.parametrize(
