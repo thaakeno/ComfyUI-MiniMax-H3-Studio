@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
@@ -112,10 +113,8 @@ def capture_runtime_state(patcher: Any = None) -> RuntimeState:
         host_available = int(psutil.virtual_memory().available)
         process = psutil.Process()
         process_rss = int(process.memory_info().rss)
-        try:
+        with suppress(AttributeError, OSError, PermissionError):
             io_read_bytes = int(process.io_counters().read_bytes)
-        except (AttributeError, OSError, PermissionError):
-            pass
     except Exception:
         pass
 
