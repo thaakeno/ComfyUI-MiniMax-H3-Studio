@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from types import ModuleType, SimpleNamespace
 
-from h3studio.performance import ResidencyResult, force_full_residency, release_patcher
+from h3studio.performance import ResidencyResult, force_full_residency, release_patcher, text_encoder_residency
 
 
 class FakePatcher:
@@ -81,3 +81,39 @@ def test_targeted_release_does_not_globally_unload_models(monkeypatch) -> None:
     assert unload[1] is patcher
     assert unload[2] == {"unload_additional_models": False}
     assert any(call[0] == "empty" for call in calls)
+
+
+def test_text_encoder_full_load_happens_only_at_native_clip_boundary(monkeypatch) -> None:
+    calls = _install_fake_manager(monkeypatch)
+    patcher = FakePatcher()
+    original_calls = []
+
+    class CondStage:
+        @staticmethod
+        def memory_estimation_function(tokens, device=None):
+            assert tokens == {"tokens": 1}
+            assert device is patcher.load_device
+            return 321
+
+    class Clip:
+        def __init__(self):
+            self.patcher = patcher
+            self.cond_stage_model = CondStage()
+
+        def load_model(self, tokens=None):
+            original_calls.append(tokens)
+            return self.patcher
+
+    clip = Clip()
+    with text_encoder_residency(clip) as result:
+        assert not [call for call in calls if call[0] == "load"]
+        returned = clip.load_model({"tokens": 1})
+        assert returned is patcher
+
+    loads = [call for call in calls if call[0] == "load"]
+    assert len(loads) == 1
+    assert loads[0][1] == (patcher,)
+    assert loads[0][2] == {"memory_required": 321, "force_full_load": True}
+    assert original_calls == []
+    assert result.mode == "native-full"
+    assert any(call[0] == "unload" for call in calls)
