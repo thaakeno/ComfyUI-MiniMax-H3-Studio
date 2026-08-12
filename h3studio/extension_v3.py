@@ -1,12 +1,17 @@
-"""ComfyUI registration surface for the L4-stable H3 runtime v3.
+"""ComfyUI registration surface for the L4-stable H3 runtime.
 
-v3 deliberately restores the production runtime classes that produced the
-healthy L4 baseline and changes only live-preview ownership. The preview stays
-CPU-only so it cannot perturb DynamicVRAM residency.
+The sampler/decode classes stay on the proven stable runtime. Conditioning uses
+the native no-extra-unload fast path, and live preview keeps its decoder off
+CUDA while dropping stale queued frames. Automatic fast-disk is disabled: on
+Lightning persistent storage it can turn DynamicVRAM faults into storage-bound
+inference. Users can still opt into ComfyUI --fast-disk explicitly.
 """
 
 from __future__ import annotations
 
+import os
+
+from .conditioning_fastpath import install_conditioning_fastpath
 from .nodes.benchmark import NODE_CLASS_MAPPINGS as BENCHMARK_NODE_CLASS_MAPPINGS
 from .nodes.benchmark import NODE_DISPLAY_NAME_MAPPINGS as BENCHMARK_NODE_DISPLAY_NAME_MAPPINGS
 from .nodes.comparison import NODE_CLASS_MAPPINGS as COMPARISON_NODE_CLASS_MAPPINGS
@@ -22,17 +27,23 @@ from .nodes.image_runtime import NODE_DISPLAY_NAME_MAPPINGS as IMAGE_NODE_DISPLA
 from .nodes.performance import H3StudioOptimizedLoader
 from .nodes.save import NODE_CLASS_MAPPINGS as SAVE_NODE_CLASS_MAPPINGS
 from .nodes.save import NODE_DISPLAY_NAME_MAPPINGS as SAVE_NODE_DISPLAY_NAME_MAPPINGS
-from .preview_runtime_v3 import H3StudioTAEH3PreviewV3
+from .preview_runtime_v4 import H3StudioTAEH3PreviewV4
 from .runtime_guards import install_runtime_guards
 from .runtime_stability import install_runtime_stability, runtime_node_classes
 from .web_routes import register_routes
 
+# Do not silently enable ComfyUI's disk-backed DynamicVRAM path merely because
+# host RAM is below 48 GiB. Normal RAM/pinned-memory behavior is the safe default
+# on Lightning; --fast-disk remains available as an explicit launcher choice.
+os.environ.setdefault("H3STUDIO_DISABLE_AUTO_FAST_DISK", "1")
+
+# Install this before runtime diagnostics wrap _encode_prompt so diagnostics
+# observe the same native path that produced the healthy L4 conditioning run.
+install_conditioning_fastpath()
 install_runtime_guards()
 install_runtime_stability()
 register_routes()
 
-# These are the already-validated stable sampler/decode classes from the
-# pre-v2 runtime. Do not wrap them in another residency layer.
 H3StudioStableContextSamplingPreset, H3StudioStableDecode = runtime_node_classes()
 
 NODE_CLASS_MAPPINGS = {
@@ -40,7 +51,7 @@ NODE_CLASS_MAPPINGS = {
     "H3StudioCondition": H3StudioCondition,
     "H3StudioOutput": H3StudioOutput,
     "H3StudioContextInspector": H3StudioContextInspector,
-    "H3StudioTAEH3Preview": H3StudioTAEH3PreviewV3,
+    "H3StudioTAEH3Preview": H3StudioTAEH3PreviewV4,
     **BENCHMARK_NODE_CLASS_MAPPINGS,
     **COMPARISON_NODE_CLASS_MAPPINGS,
     **IMAGE_NODE_CLASS_MAPPINGS,
