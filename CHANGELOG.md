@@ -30,6 +30,10 @@ All notable changes are recorded here. The format follows Keep a Changelog; vers
 - Kept MiniMax H3's upstream VAE geometry, temporal semantics, frame selection, and final pixels unchanged. When `comfy_has_chunked_io` is present, native ComfyUI owns the chunked output buffers and memory behavior.
 - Removed internal `plans.md`, `prompt.md`, `implement.md`, and stale `documentation.md` from the public repository surface.
 
+### Validation boundary
+
+- CPU/CI coverage verifies cache semantics, targeted manager handoffs, preview cadence/lifecycle, frontend/workflow contracts, and release integrity. The target NVIDIA L4 still needs a controlled runtime pass before the project claims stable 20–30 second conditioning misses or ~1.5–2 seconds per denoising step.
+
 ## [0.1.0-alpha.13] - 2026-08-11
 
 ### Added
