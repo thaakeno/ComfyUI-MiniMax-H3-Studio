@@ -62,3 +62,22 @@ def test_experimental_prepare_sampling_wrapper_is_removed(monkeypatch) -> None:
 
     assert runtime_stability._remove_experimental_sampling_residency(Model()) is True
     assert calls == [("prepare-sampling", runtime_stability.SAMPLING_RESIDENCY_WRAPPER_KEY)]
+
+
+def test_post_sampling_release_is_removed_for_warm_reruns(monkeypatch) -> None:
+    calls = []
+
+    class Model:
+        def remove_wrappers_with_key(self, wrapper, key):
+            calls.append((wrapper, key))
+
+    patcher_extension = ModuleType("comfy.patcher_extension")
+    patcher_extension.WrappersMP = SimpleNamespace(OUTER_SAMPLE="outer-sample")
+    comfy = ModuleType("comfy")
+    comfy.patcher_extension = patcher_extension
+    monkeypatch.setitem(sys.modules, "comfy", comfy)
+    monkeypatch.setitem(sys.modules, "comfy.patcher_extension", patcher_extension)
+
+    result = runtime_stability._keep_diffusion_hot_after_sampling(Model())
+    assert result == "keep-hot-until-conditioning-miss"
+    assert calls == [("outer-sample", runtime_stability.POST_SAMPLE_RELEASE_KEY)]
