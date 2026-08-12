@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ..lora_stack import apply_custom_lora_stack, normalize_custom_loras
-from ..performance import attach_sampling_residency_policy, tmpfs_pressure_note, vae_full_stage
+from ..performance import tmpfs_pressure_note, vae_full_stage
 from .director import H3StudioContextSamplingPreset
 from .image_runtime import H3StudioDecode
 from .loader import (
@@ -51,26 +51,6 @@ def _is_tmpfs_path(value: str | Path) -> bool:
         path = Path(value)
     tmpfs = Path("/dev/shm")
     return path == tmpfs or tmpfs in path.parents
-
-
-def _artifact_bytes(category: str, names: list[str]) -> int:
-    """Return unique on-disk bytes for selected artifacts when resolvable."""
-
-    total = 0
-    seen: set[str] = set()
-    for name in names:
-        path = _full_path(category, name)
-        if not path:
-            continue
-        try:
-            resolved = str(Path(path).resolve())
-            if resolved in seen:
-                continue
-            seen.add(resolved)
-            total += int(Path(resolved).stat().st_size)
-        except OSError:
-            continue
-    return total
 
 
 def _storage_pressure_for_selection(
@@ -233,7 +213,7 @@ class H3StudioOptimizedLoader(H3StudioLoader):
 
 
 class H3StudioOptimizedContextSamplingPreset(H3StudioContextSamplingPreset):
-    """Apply acceleration + custom LoRAs, then defer residency to sampler preparation."""
+    """Apply acceleration and custom LoRAs without taking over model residency."""
 
     def build(self, model, studio_context):
         profile = str(studio_context.state.generation.sampling_profile)
@@ -243,15 +223,10 @@ class H3StudioOptimizedContextSamplingPreset(H3StudioContextSamplingPreset):
 
         accelerated = profile in LIGHTX_PROFILES or is_pdd_profile(profile)
         reserved: list[str] = []
-        adapter_names: list[str] = []
         if profile in LIGHTX_PROFILES:
-            filename = LIGHTX_PROFILES[profile].lora_filename
-            reserved.append(filename)
-            adapter_names.append(filename)
+            reserved.append(LIGHTX_PROFILES[profile].lora_filename)
         if profile in PDD_PROFILES:
-            filename = PDD_PROFILES[profile].lora_filename
-            reserved.append(filename)
-            adapter_names.append(filename)
+            reserved.append(PDD_PROFILES[profile].lora_filename)
 
         if custom_specs and not accelerated:
             from .director import SAMPLING_PROFILE_TO_RUNTIME, _sampling_profile
@@ -273,20 +248,13 @@ class H3StudioOptimizedContextSamplingPreset(H3StudioContextSamplingPreset):
             else:
                 info = f"{info} | custom_loras=none"
 
-        adapter_names.extend(spec.name for spec in custom_specs)
-        adapter_bytes = _artifact_bytes("loras", adapter_names)
-        residency = attach_sampling_residency_policy(
-            built_model,
-            adapter_bytes=adapter_bytes,
-            profile=profile,
-        )
-        info = f"{info} | {residency.summary()}"
+        info = f"{info} | sampling_residency=native-comfy-manager"
         LOGGER.info("[H3 Studio] Sampling ready\n  %s", info)
         return built_model, sampler, sigmas, info
 
 
 class H3StudioFastDecode(H3StudioDecode):
-    """Decode with one native full-VAE handoff instead of eager double loading."""
+    """Legacy-core decode fallback with one native full-VAE stage."""
 
     def decode(self, samples, vae):
         started = time.perf_counter()
