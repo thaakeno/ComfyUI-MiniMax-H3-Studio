@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .runtime_handoff import release_stage_patcher
+from .runtime_trace import emit
 
 LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ _PREVIEW_CACHE = _LRUCache(4)
 def clear_conditioning_caches() -> None:
     for cache in (_PROMPT_CACHE, _LATENT_CACHE, _REFERENCE_VAE_CACHE, _SOURCE_VAE_CACHE, _PREVIEW_CACHE):
         cache.clear()
+    emit("conditioning.cache.clear", prompt=8, latent=4, reference_vae=12, source_vae=4, preview=4)
 
 
 def _tensor_identity(image: Any, reference: Any = None) -> tuple[Any, ...]:
@@ -124,7 +126,15 @@ def _latent_stage(runtime_mode: str, width: int, height: int, frame_preset: str)
     key = runtime_mode, int(width), int(height), str(frame_preset)
     cached = _LATENT_CACHE.get(key)
     if cached is not None:
+        emit(
+            "conditioning.latent.hit",
+            mode=runtime_mode,
+            width=width,
+            height=height,
+            frame_preset=frame_preset,
+        )
         return (*cached, "HIT")
+    started = time.perf_counter()
     internal_frames = _resolve_frame_count(frame_preset)
     output_strategy = "first_stable_edit" if runtime_mode == "image_to_image (FL2VA)" and internal_frames == 20 else "fixed"
     latent, requested_frames, natural_frames = _empty_h3_av_latent(
@@ -137,6 +147,17 @@ def _latent_stage(runtime_mode: str, width: int, height: int, frame_preset: str)
     )
     value = latent, requested_frames, natural_frames, internal_frames, output_strategy
     _LATENT_CACHE.put(key, value)
+    emit(
+        "conditioning.latent.miss",
+        elapsed_s=time.perf_counter() - started,
+        mode=runtime_mode,
+        width=width,
+        height=height,
+        frame_preset=frame_preset,
+        internal_frames=internal_frames,
+        natural_frames=natural_frames,
+        requested_frames=requested_frames,
+    )
     return (*value, "MISS")
 
 
@@ -181,11 +202,24 @@ def _source_stage(bundle: Any, image: Any, image_id: Hashable, width: int, heigh
     key = _vae_key(bundle), image_id, int(width), int(height), str(source_fit)
     cached = _SOURCE_VAE_CACHE.get(key)
     if cached is not None:
+        emit("conditioning.source_vae.hit", width=width, height=height, source_fit=source_fit)
         return (*cached, "HIT")
+    started = time.perf_counter()
+    emit("conditioning.source_vae.begin", memory=True, models=True, width=width, height=height, source_fit=source_fit)
     fitted = _resize_image(image[:1], width, height, source_fit)
     latent = bundle.video_vae.encode(fitted)
     value = fitted, latent
     _SOURCE_VAE_CACHE.put(key, value)
+    emit(
+        "conditioning.source_vae.end",
+        memory=True,
+        models=True,
+        elapsed_s=time.perf_counter() - started,
+        width=width,
+        height=height,
+        source_fit=source_fit,
+        cache="MISS",
+    )
     return (*value, "MISS")
 
 
@@ -205,12 +239,30 @@ def _reference_vae_stage(
     key = _vae_key(bundle), image_id, str(reference_size), dimension_key
     cached = _REFERENCE_VAE_CACHE.get(key)
     if cached is not None:
+        emit("conditioning.reference_vae.hit", target=f"{tw}x{th}", reference_size=reference_size)
         return (*cached, "HIT")
+    started = time.perf_counter()
+    emit(
+        "conditioning.reference_vae.begin",
+        memory=True,
+        models=True,
+        target=f"{tw}x{th}",
+        reference_size=reference_size,
+    )
     if resized_image is None:
         resized_image, tw, th = _reference_resize(image, width, height, reference_size)
     latent = bundle.video_vae.encode(resized_image)
     value = latent, tw, th
     _REFERENCE_VAE_CACHE.put(key, value)
+    emit(
+        "conditioning.reference_vae.end",
+        memory=True,
+        models=True,
+        elapsed_s=time.perf_counter() - started,
+        target=f"{tw}x{th}",
+        reference_size=reference_size,
+        cache="MISS",
+    )
     return (*value, "MISS")
 
 
@@ -233,6 +285,23 @@ def run_conditioning_pipeline(
 
     width, height = int(studio_context.width), int(studio_context.height)
     prompt = str(studio_context.prompt)
+    seed = int(getattr(getattr(studio_context.state, "generation", None), "seed", 0))
+    started = time.perf_counter()
+    emit(
+        "conditioning.pipeline.begin",
+        memory=True,
+        models=True,
+        route=route,
+        mode=runtime_mode,
+        seed=seed,
+        width=width,
+        height=height,
+        references=len(used_images),
+        frame_preset=frame_preset,
+        source_fit=source_fit,
+        reference_size=reference_size,
+    )
+
     prompt_key_base = _selected_model_key(bundle, route), route, runtime_mode, _clip_key(bundle), prompt
     image_ids = image_cache_key(studio_context, used_images)
     latent, requested_frames, natural_frames, internal_frames, output_strategy, latent_state = _latent_stage(
@@ -242,88 +311,112 @@ def run_conditioning_pipeline(
     reference_state = "N/A"
     vae_handoff = "N/A"
 
-    if runtime_mode == "text_to_image (FL2VA)":
-        # The previous prompt's final VAE decode may still be resident. Give the
-        # 32B text encoder a clean stage before asking Comfy to load it.
-        vae_handoff = _release_video_vae(bundle, "pre_text_vae").summary()
-        conditioning, text_state, text_seconds, residency = _encode_prompt(
-            bundle, (*prompt_key_base, "text-only"), lambda: bundle.clip.tokenize(prompt, images=[])
-        )
-        checkpoint_note = "Use an FL2VA checkpoint."
-    elif runtime_mode == "image_to_image (FL2VA)":
-        if not used_images:
-            raise ValueError("Image to Image mode requires source_image.")
-        source_id = image_ids[0]
-        fitted_source, keyframe_latent, source_state = _source_stage(
-            bundle, used_images[0], source_id, width, height, source_fit
-        )
-        reference_state = f"source_vae:{source_state}"
-        # Release after source encode (or clean up a previous decode on a cache
-        # hit) before the much larger Qwen stage starts.
-        vae_handoff = _release_video_vae(bundle, "source_vae").summary()
-        conditioning, text_state, text_seconds, residency = _encode_prompt(
-            bundle,
-            (*prompt_key_base, "i2i", source_id, width, height, source_fit),
-            lambda: bundle.clip.tokenize(prompt, images=[fitted_source]),
-        )
-        conditioning = node_helpers.conditioning_set_values(
-            conditioning,
-            {
-                "minimax_keyframes": [{"resolved_frame_index": 0, "latent": keyframe_latent}],
-                "minimax_frame_count": natural_frames,
-            },
-        )
-        checkpoint_note = "Use an FL2VA checkpoint; frame 0 is the exact source anchor."
-    else:
-        if not used_images:
-            raise ValueError("Reference Edit mode requires source_image as <Picture 1>.")
-        preview_key = "ref-preview", image_ids[0], width, height, source_fit
-        fitted_source = _PREVIEW_CACHE.get(preview_key)
-        if fitted_source is None:
-            fitted_source = _resize_image(used_images[0][:1], width, height, source_fit)
-            _PREVIEW_CACHE.put(preview_key, fitted_source)
-        signatures = tuple(
-            (image_id, *_reference_target_size(image, reference_size, width, height))
-            for image, image_id in zip(used_images, image_ids, strict=False)
-        )
-        prompt_key = (*prompt_key_base, "ref2va", signatures, reference_size)
-        cached_prompt = _PROMPT_CACHE.get(prompt_key)
-        resized_refs = []
-
-        # REF2VA's Qwen vision/text pass happens before its video-VAE reference
-        # encodes, so clear any VAE residency left by the previous generation.
-        _release_video_vae(bundle, "pre_reference_text_vae")
-        if cached_prompt is None:
-            resized_refs = [_reference_resize(image, width, height, reference_size)[0] for image in used_images]
+    try:
+        if runtime_mode == "text_to_image (FL2VA)":
+            vae_handoff = _release_video_vae(bundle, "pre_text_vae").summary()
+            emit("conditioning.vae_handoff", memory=True, models=True, stage="pre_text_vae", result=vae_handoff)
+            conditioning, text_state, text_seconds, residency = _encode_prompt(
+                bundle, (*prompt_key_base, "text-only"), lambda: bundle.clip.tokenize(prompt, images=[])
+            )
+            checkpoint_note = "Use an FL2VA checkpoint."
+        elif runtime_mode == "image_to_image (FL2VA)":
+            if not used_images:
+                raise ValueError("Image to Image mode requires source_image.")
+            source_id = image_ids[0]
+            fitted_source, keyframe_latent, source_state = _source_stage(
+                bundle, used_images[0], source_id, width, height, source_fit
+            )
+            reference_state = f"source_vae:{source_state}"
+            vae_handoff = _release_video_vae(bundle, "source_vae").summary()
+            emit("conditioning.vae_handoff", memory=True, models=True, stage="source_vae", result=vae_handoff)
             conditioning, text_state, text_seconds, residency = _encode_prompt(
                 bundle,
-                prompt_key,
-                lambda: bundle.clip.tokenize(
-                    prompt,
-                    minimax_ref_items=[{"type": "image", "data": image} for image in resized_refs],
-                ),
+                (*prompt_key_base, "i2i", source_id, width, height, source_fit),
+                lambda: bundle.clip.tokenize(prompt, images=[fitted_source]),
             )
+            conditioning = node_helpers.conditioning_set_values(
+                conditioning,
+                {
+                    "minimax_keyframes": [{"resolved_frame_index": 0, "latent": keyframe_latent}],
+                    "minimax_frame_count": natural_frames,
+                },
+            )
+            checkpoint_note = "Use an FL2VA checkpoint; frame 0 is the exact source anchor."
         else:
-            conditioning, text_state, text_seconds, residency = cached_prompt, "HIT", 0.0, "warm-cache"
-
-        ref_blocks, ref_states, ref_sizes = [], [], []
-        for index, (image, image_id) in enumerate(zip(used_images, image_ids, strict=False)):
-            resized = resized_refs[index] if index < len(resized_refs) else None
-            latent_ref, tw, th, state = _reference_vae_stage(
-                bundle, image, image_id, width, height, reference_size, resized
+            if not used_images:
+                raise ValueError("Reference Edit mode requires source_image as <Picture 1>.")
+            preview_key = "ref-preview", image_ids[0], width, height, source_fit
+            fitted_source = _PREVIEW_CACHE.get(preview_key)
+            if fitted_source is None:
+                fitted_source = _resize_image(used_images[0][:1], width, height, source_fit)
+                _PREVIEW_CACHE.put(preview_key, fitted_source)
+            signatures = tuple(
+                (image_id, *_reference_target_size(image, reference_size, width, height))
+                for image, image_id in zip(used_images, image_ids, strict=False)
             )
-            ref_blocks.append({"kind": "image", "latent_h": th // 16, "latent_w": tw // 16, "latent": latent_ref})
-            ref_states.append(state)
-            ref_sizes.append(f"{tw}x{th}")
-        reference_state = f"reference_vae:{sum(state == 'HIT' for state in ref_states)}/{len(ref_states)} HIT"
-        vae_handoff = _release_video_vae(bundle, "reference_vae").summary()
-        conditioning = node_helpers.conditioning_set_values(
-            conditioning,
-            {"minimax_refs": ref_blocks, "minimax_frame_count": natural_frames},
+            prompt_key = (*prompt_key_base, "ref2va", signatures, reference_size)
+            cached_prompt = _PROMPT_CACHE.get(prompt_key)
+            resized_refs = []
+
+            pre_ref_handoff = _release_video_vae(bundle, "pre_reference_text_vae").summary()
+            emit(
+                "conditioning.vae_handoff",
+                memory=True,
+                models=True,
+                stage="pre_reference_text_vae",
+                result=pre_ref_handoff,
+            )
+            if cached_prompt is None:
+                resized_refs = [_reference_resize(image, width, height, reference_size)[0] for image in used_images]
+                conditioning, text_state, text_seconds, residency = _encode_prompt(
+                    bundle,
+                    prompt_key,
+                    lambda: bundle.clip.tokenize(
+                        prompt,
+                        minimax_ref_items=[{"type": "image", "data": image} for image in resized_refs],
+                    ),
+                )
+            else:
+                conditioning, text_state, text_seconds, residency = cached_prompt, "HIT", 0.0, "warm-cache"
+                emit(
+                    "conditioning.reference_prompt.hit",
+                    memory=True,
+                    models=True,
+                    references=len(used_images),
+                )
+
+            ref_blocks, ref_states, ref_sizes = [], [], []
+            for index, (image, image_id) in enumerate(zip(used_images, image_ids, strict=False)):
+                resized = resized_refs[index] if index < len(resized_refs) else None
+                latent_ref, tw, th, state = _reference_vae_stage(
+                    bundle, image, image_id, width, height, reference_size, resized
+                )
+                ref_blocks.append({"kind": "image", "latent_h": th // 16, "latent_w": tw // 16, "latent": latent_ref})
+                ref_states.append(state)
+                ref_sizes.append(f"{tw}x{th}")
+            reference_state = f"reference_vae:{sum(state == 'HIT' for state in ref_states)}/{len(ref_states)} HIT"
+            vae_handoff = _release_video_vae(bundle, "reference_vae").summary()
+            emit("conditioning.vae_handoff", memory=True, models=True, stage="reference_vae", result=vae_handoff)
+            conditioning = node_helpers.conditioning_set_values(
+                conditioning,
+                {"minimax_refs": ref_blocks, "minimax_frame_count": natural_frames},
+            )
+            checkpoint_note = (
+                f"Use a REF2VA checkpoint; {len(used_images)} ordered reference image(s) encoded as "
+                f"{', '.join(ref_sizes)} and exposed as <Picture 1> through <Picture {len(used_images)}>.")
+    except Exception as exc:
+        emit(
+            "conditioning.pipeline.error",
+            memory=True,
+            models=True,
+            elapsed_s=time.perf_counter() - started,
+            route=route,
+            mode=runtime_mode,
+            seed=seed,
+            error_type=type(exc).__name__,
+            error=str(exc),
         )
-        checkpoint_note = (
-            f"Use a REF2VA checkpoint; {len(used_images)} ordered reference image(s) encoded as "
-            f"{', '.join(ref_sizes)} and exposed as <Picture 1> through <Picture {len(used_images)}>.")
+        raise
 
     trained_note = (
         "beyond the documented 124-362-frame training range"
@@ -348,4 +441,20 @@ def run_conditioning_pipeline(
         f"latent_prepare={latent_state} | text_encoder_runtime={residency} | vae_handoff={vae_handoff}"
     )
     LOGGER.info("[H3 Studio] Conditioning stages\n  %s", diagnostics)
+    emit(
+        "conditioning.pipeline.end",
+        memory=True,
+        models=True,
+        elapsed_s=time.perf_counter() - started,
+        route=route,
+        mode=runtime_mode,
+        seed=seed,
+        text_cache=text_state,
+        text_s=text_seconds,
+        reference_state=reference_state,
+        latent_cache=latent_state,
+        requested_frames=requested_frames,
+        natural_frames=natural_frames,
+        vae_handoff=vae_handoff,
+    )
     return ConditioningStages(conditioning, latent, fitted_source, requested_frames, runtime_info, diagnostics)
