@@ -1,9 +1,8 @@
 """Runtime stability policy for memory-constrained MiniMax H3 sessions.
 
 This module intentionally prefers proven native ComfyUI model-manager behavior
-for the expensive H3 text/diffusion stages.  It also prevents the optional
-TAEH3 preview worker from competing with DynamicVRAM/async-offload on low-RAM
-hosts, where CPU preview work can otherwise slow the actual denoiser.
+for the expensive H3 text/diffusion stages. It also prevents the optional TAEH3
+preview worker from competing with DynamicVRAM/async-offload on low-RAM hosts.
 """
 
 from __future__ import annotations
@@ -13,14 +12,13 @@ import os
 from contextlib import suppress
 from typing import Any
 
-from .nodes.performance import H3StudioFastDecode, H3StudioOptimizedContextSamplingPreset
-
 LOGGER = logging.getLogger(__name__)
 GIB = 1024**3
 LOW_RAM_THRESHOLD = 48 * GIB
 FAST_PREVIEW_MAX_RESOLUTION = 320
 SAMPLING_RESIDENCY_WRAPPER_KEY = "h3studio_sampling_residency"
 _INSTALLED = False
+_RUNTIME_NODE_CLASSES: tuple[type, type] | None = None
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -29,14 +27,7 @@ def _env_flag(name: str, default: bool = False) -> bool:
 
 
 def configure_low_ram_fast_disk() -> str:
-    """Enable ComfyUI's disk-backed DynamicVRAM path on small host-RAM systems.
-
-    ComfyUI reads ``args.fast_disk`` dynamically in its weight-transfer path, so
-    this can safely be enabled after argument parsing.  It avoids building extra
-    unpinned/pinned host copies when fast persistent storage is preferable.
-    Real files physically stored in /dev/shm still consume RAM; the companion
-    migration tool relocates those files while preserving their registered path.
-    """
+    """Enable ComfyUI's disk-backed DynamicVRAM path on small host-RAM systems."""
 
     if _env_flag("H3STUDIO_DISABLE_AUTO_FAST_DISK"):
         return "disabled-by-env"
@@ -67,17 +58,15 @@ def configure_low_ram_fast_disk() -> str:
 
 
 def accelerated_preview_steps(total_steps: int) -> frozenset[int]:
-    """Return sampler indices allowed to create a tiny preview on short runs.
-
-    One early preview is enough for a 4-8 step accelerated image run.  More CPU
-    decodes can fight ComfyUI's CPU->GPU weight streaming for host bandwidth and
-    turn a 1-2 s denoise step into multi-second stalls.
-    """
+    """Return sampler indices allowed to create a tiny preview on short runs."""
 
     total_steps = max(0, int(total_steps))
     if total_steps <= 0:
         return frozenset()
     if total_steps <= 8:
+        # One early frame is enough to prove that an accelerated run is alive.
+        # Extra CPU TAEH3 decodes can steal the exact host bandwidth that
+        # DynamicVRAM needs for diffusion-weight streaming.
         return frozenset({0})
     return frozenset(range(total_steps))
 
@@ -128,8 +117,6 @@ def _install_preview_stability_guard() -> bool:
         total_steps_i = int(total_steps)
         if total_steps_i <= 8 and int(step) not in accelerated_preview_steps(total_steps_i):
             return
-        # If even the first tiny decode is slow, stop asking the CPU for more
-        # preview work on this run.  Output generation always wins over previews.
         if float(getattr(self, "_h3studio_last_preview_seconds", 0.0)) > 1.25 and int(step) > 0:
             return
         old_max = int(getattr(self, "max_resolution", FAST_PREVIEW_MAX_RESOLUTION))
@@ -170,8 +157,8 @@ def _install_preview_stability_guard() -> bool:
         try:
             return original_call(self, *args, **kwargs)
         finally:
-            # No preview is useful after the sampler has finished.  Invalidate
-            # queued work so it cannot overlap the expensive exact H3 VAE decode.
+            # No preview is useful after sampling. Invalidate and drain queued
+            # jobs so CPU preview work cannot overlap exact H3 VAE decode.
             self.active_run_id = ""
             _drain_pending_preview_jobs(self)
 
@@ -183,13 +170,7 @@ def _install_preview_stability_guard() -> bool:
 
 
 def _remove_experimental_sampling_residency(model: Any) -> bool:
-    """Remove Studio's old force-full PREPARE_SAMPLING experiment.
-
-    Real L4 logs showed that forcing residency before/native sampling could spend
-    minutes materializing a model and still be followed by ComfyUI's own
-    ``Model Initializing`` pass.  The proven warm path is ComfyUI's native
-    DynamicVRAM manager, so it is the default again.
-    """
+    """Remove Studio's old force-full PREPARE_SAMPLING experiment."""
 
     try:
         import comfy.patcher_extension
@@ -203,29 +184,40 @@ def _remove_experimental_sampling_residency(model: Any) -> bool:
         return False
 
 
-class H3StudioStableContextSamplingPreset(H3StudioOptimizedContextSamplingPreset):
-    """Keep acceleration/LoRA caching but leave diffusion residency to ComfyUI."""
+def runtime_node_classes() -> tuple[type, type]:
+    """Build Comfy-facing node subclasses lazily at actual ComfyUI import time."""
 
-    def build(self, model, studio_context):
-        built_model, sampler, sigmas, info = super().build(model, studio_context)
-        if not _env_flag("H3STUDIO_EXPERIMENTAL_FULL_DIFFUSION"):
-            _remove_experimental_sampling_residency(built_model)
-            info = f"{info} | sampling_residency=native-comfy-manager"
-            LOGGER.info("[H3 Studio] Sampling residency restored to native ComfyUI manager")
-        return built_model, sampler, sigmas, info
+    global _RUNTIME_NODE_CLASSES
+    if _RUNTIME_NODE_CLASSES is not None:
+        return _RUNTIME_NODE_CLASSES
 
+    from .nodes.performance import H3StudioFastDecode, H3StudioOptimizedContextSamplingPreset
 
-class H3StudioStableDecode(H3StudioFastDecode):
-    """Exact H3 decode with an explicit old-core diagnostic."""
+    class H3StudioStableContextSamplingPreset(H3StudioOptimizedContextSamplingPreset):
+        """Keep acceleration/LoRA caching but leave diffusion residency to ComfyUI."""
 
-    def decode(self, samples, vae):
-        first_stage = getattr(vae, "first_stage_model", None)
-        if not bool(getattr(first_stage, "comfy_has_chunked_io", False)):
-            LOGGER.warning(
-                "[H3 Studio] This ComfyUI core lacks MiniMax H3 chunked VAE I/O. Exact decode can become extremely slow or memory-heavy. "
-                "Update ComfyUI to a build containing the H3 chunked-I/O changes before judging decode performance."
-            )
-        return super().decode(samples, vae)
+        def build(self, model, studio_context):
+            built_model, sampler, sigmas, info = super().build(model, studio_context)
+            if not _env_flag("H3STUDIO_EXPERIMENTAL_FULL_DIFFUSION"):
+                _remove_experimental_sampling_residency(built_model)
+                info = f"{info} | sampling_residency=native-comfy-manager"
+                LOGGER.info("[H3 Studio] Sampling residency restored to native ComfyUI manager")
+            return built_model, sampler, sigmas, info
+
+    class H3StudioStableDecode(H3StudioFastDecode):
+        """Exact H3 decode with an explicit old-core diagnostic."""
+
+        def decode(self, samples, vae):
+            first_stage = getattr(vae, "first_stage_model", None)
+            if not bool(getattr(first_stage, "comfy_has_chunked_io", False)):
+                LOGGER.warning(
+                    "[H3 Studio] This ComfyUI core lacks MiniMax H3 chunked VAE I/O. Exact decode can become extremely slow or memory-heavy. "
+                    "Update ComfyUI to a build containing the H3 chunked-I/O changes before judging decode performance."
+                )
+            return super().decode(samples, vae)
+
+    _RUNTIME_NODE_CLASSES = H3StudioStableContextSamplingPreset, H3StudioStableDecode
+    return _RUNTIME_NODE_CLASSES
 
 
 def install_runtime_stability() -> None:
