@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .nodes import benchmark as benchmark_module
 from .nodes.benchmark import NODE_CLASS_MAPPINGS as BENCHMARK_NODE_CLASS_MAPPINGS
 from .nodes.benchmark import NODE_DISPLAY_NAME_MAPPINGS as BENCHMARK_NODE_DISPLAY_NAME_MAPPINGS
 from .nodes.comparison import NODE_CLASS_MAPPINGS as COMPARISON_NODE_CLASS_MAPPINGS
@@ -27,6 +28,14 @@ from .web_routes import register_routes
 install_max_speed_runtime()
 install_runtime_guards()
 register_routes()
+
+# Benchmark Lab calls the sampling/decode classes directly instead of resolving
+# them through NODE_CLASS_MAPPINGS. Point those module globals at the active v5
+# implementations so benchmark runs cannot silently fall back to the old
+# lifecycle or reintroduce a different residency policy.
+benchmark_module.H3StudioContextSamplingPreset = H3StudioMaxSpeedSamplingPreset
+benchmark_module.H3StudioDecode = H3StudioMaxSpeedDecode
+
 start_component_prewarm()
 
 NODE_CLASS_MAPPINGS = {
