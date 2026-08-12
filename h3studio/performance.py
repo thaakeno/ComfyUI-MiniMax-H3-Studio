@@ -89,7 +89,7 @@ class ResidencyResult:
 
     @property
     def full(self) -> bool:
-        return self.mode == "full"
+        return self.mode in {"full", "native-full"}
 
     def summary(self) -> str:
         size = f"{self.model_bytes / GIB:.2f}GiB" if self.model_bytes else "unknown"
@@ -122,12 +122,7 @@ class SamplingResidencyPlan:
 
 
 def force_full_residency(patcher: Any, *, label: str, nonfatal: bool = True) -> ResidencyResult:
-    """Ask ComfyUI to materialize one patcher completely on its load device.
-
-    This is appropriate for isolated stages such as the 32B text encoder. For
-    diffusion sampling use :func:`attach_sampling_residency_policy` instead so
-    the decision sees the real latent/conditioning activation budget.
-    """
+    """Ask ComfyUI to materialize one patcher completely on its load device."""
 
     if patcher is None:
         return ResidencyResult(label, "unavailable", detail="no_patcher")
@@ -223,16 +218,73 @@ def release_patcher(patcher: Any, result: ResidencyResult | None = None) -> floa
 
 @contextmanager
 def text_encoder_residency(clip: Any):
-    """Fully stage the H3 32B encoder only for an actual cache-miss encode."""
+    """Make the CLIP encoder's *native* load full-resident exactly once.
+
+    ComfyUI's ``CLIP.encode_from_tokens`` always calls ``CLIP.load_model``.
+    Pre-loading the patcher here and then calling encode caused a second model
+    manager pass on H3's dynamic 32B encoder. Instead temporarily replace only
+    this CLIP instance's ``load_model`` with the same native implementation plus
+    ``force_full_load=True``. The encode itself therefore owns the one and only
+    GPU materialization at the correct memory-estimation boundary.
+    """
 
     patcher = getattr(clip, "patcher", None)
-    result = force_full_residency(patcher, label="text_encoder")
+    original_load = getattr(clip, "load_model", None)
+    if patcher is None or not callable(original_load):
+        yield ResidencyResult("text_encoder", "native-dynamic", detail="no_load_hook")
+        return
+
     try:
+        import comfy.model_management as mm
+    except Exception as exc:
+        yield ResidencyResult("text_encoder", "native-dynamic", detail=f"manager={type(exc).__name__}")
+        return
+
+    result = ResidencyResult("text_encoder", "native-full-pending", model_bytes=_model_size(patcher))
+    had_instance_override = "load_model" in getattr(clip, "__dict__", {})
+    previous_override = getattr(clip, "__dict__", {}).get("load_model") if had_instance_override else None
+
+    def native_full_load(tokens=None):
+        tokens = {} if tokens is None else tokens
+        memory_used = 0
+        cond_stage = getattr(clip, "cond_stage_model", None)
+        estimator = getattr(cond_stage, "memory_estimation_function", None)
+        if callable(estimator):
+            with suppress(Exception):
+                memory_used = int(estimator(tokens, device=patcher.load_device))
+
+        started = time.perf_counter()
+        try:
+            mm.load_models_gpu([patcher], memory_required=memory_used, force_full_load=True)
+            _sync(getattr(patcher, "load_device", None))
+            result.mode = "native-full"
+            result.loaded_bytes = _loaded_size(patcher)
+            result.detail = f"estimated_activation={memory_used / GIB:.2f}GiB"
+            return patcher
+        except Exception as exc:
+            result.mode = "native-dynamic-fallback"
+            result.detail = f"fallback={type(exc).__name__}"
+            LOGGER.warning(
+                "[H3 Studio] Native full text-encoder load failed (%s); retrying once with ComfyUI's normal dynamic policy.",
+                exc,
+            )
+            return original_load(tokens)
+        finally:
+            result.load_seconds += time.perf_counter() - started
+
+    try:
+        clip.load_model = native_full_load
         yield result
     finally:
+        if had_instance_override:
+            clip.load_model = previous_override
+        else:
+            with suppress(AttributeError):
+                delattr(clip, "load_model")
         keep = _env_flag("H3STUDIO_KEEP_TEXT_ENCODER")
-        if result.full and not keep:
+        if result.mode == "native-full" and not keep:
             release_patcher(patcher, result)
+        LOGGER.info("[H3 Studio] %s", result.summary())
 
 
 def _sampling_plan(model: Any, noise_shape: Any, conds: Any, adapter_bytes: int) -> SamplingResidencyPlan:
@@ -261,11 +313,6 @@ def _sampling_plan(model: Any, noise_shape: Any, conds: Any, adapter_bytes: int)
         floor = int(mm.minimum_inference_memory())
     inference_budget = max(floor, inference_bytes + reserve)
 
-    # This mirrors ComfyUI's own full-load pressure calculation closely enough
-    # to avoid the previous mistake: eagerly loading the full transformer before
-    # Comfy had reserved activation memory, only for prepare_sampling to evict
-    # and load it again. Adapter bytes are separate from ModelPatcher.model_size
-    # for bypass-forward LoRAs and therefore must be budgeted explicitly.
     projected = int(model_bytes * 1.10) + int(adapter_bytes) + inference_budget
     safety = float(os.environ.get("H3STUDIO_FULL_DIFFUSION_VRAM_FRACTION", "0.94"))
     safety = min(0.98, max(0.70, safety))
@@ -326,13 +373,7 @@ class _SamplingResidencyWrapper:
 
 
 def attach_sampling_residency_policy(model: Any, *, adapter_bytes: int = 0, profile: str = "") -> SamplingResidencyPlan:
-    """Attach one idempotent PREPARE_SAMPLING policy to a stable model patcher.
-
-    Crucially this does *not* clone or pre-load the model. ComfyUI performs one
-    load at its normal sampler boundary after it knows the actual activation
-    requirement. This prevents the duplicate ``Model Initializing`` cycle that
-    eager prewarming caused on 22 GiB cards.
-    """
+    """Attach one idempotent PREPARE_SAMPLING policy to a stable model patcher."""
 
     try:
         import comfy.model_management as mm
@@ -364,12 +405,7 @@ def attach_sampling_residency_policy(model: Any, *, adapter_bytes: int = 0, prof
 
 @contextmanager
 def vae_full_stage(vae: Any, *, label: str = "vae"):
-    """Let ComfyUI force-load the VAE at the exact encode/decode call boundary.
-
-    ``VAE.encode/decode`` already know their real activation budget. Temporarily
-    setting ``disable_offload`` makes those native calls request a full VAE load
-    once, rather than doing an eager prewarm followed by another manager pass.
-    """
+    """Let ComfyUI force-load the VAE at the exact encode/decode call boundary."""
 
     if vae is None:
         yield ResidencyResult(label, "unavailable", detail="no_vae")
