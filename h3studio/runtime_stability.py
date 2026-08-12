@@ -1,9 +1,9 @@
 """Runtime stability policy for memory-constrained MiniMax H3 sessions.
 
-The expensive H3 stages remain owned by ComfyUI's native model manager. Studio
-uses targeted manager-level handoffs only after a stage has finished, removing
-the dynamic-on-dynamic residency overlap that can make sequential H3 stages
-stream unpredictably on 22 GiB / 32 GiB systems.
+The proven L4 policy is stage-aware rather than globally aggressive: a fresh
+conditioning miss gets an isolated text-encoder stage, while seed-only reruns
+keep the H3 transformer hot. The final VAE is still released after decode so it
+cannot accumulate beside the next stage.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import os
 
-from .runtime_handoff import attach_sampling_stage_release, release_stage_patcher
+from .runtime_handoff import POST_SAMPLE_RELEASE_KEY, release_stage_patcher
 
 LOGGER = logging.getLogger(__name__)
 GIB = 1024**3
@@ -65,7 +65,7 @@ def accelerated_preview_steps(total_steps: int) -> frozenset[int]:
 
 
 def _install_conditioning_diagnostics() -> bool:
-    """Observe cache misses around the native CLIP encode without preloading it."""
+    """Observe cache misses around the installed conditioning policy."""
 
     try:
         from . import conditioning_cache
@@ -79,11 +79,9 @@ def _install_conditioning_diagnostics() -> bool:
         return True
 
     def diagnosed_encode(bundle, key, build_tokens):
-        # Preserve the zero-work cache-hit path: checking the same bounded cache
-        # here avoids adding psutil/CUDA queries to unchanged-prompt reruns.
         cached = conditioning_cache._PROMPT_CACHE.get(key)
         if cached is not None:
-            return cached, "HIT", 0.0, "warm-cache"
+            return cached, "HIT", 0.0, "warm-cache; diffusion=keep-hot"
 
         import time
 
@@ -131,6 +129,22 @@ def _remove_experimental_sampling_residency(model: object) -> bool:
         return False
 
 
+def _keep_diffusion_hot_after_sampling(model: object) -> str:
+    """Remove the old post-sample unload so seed-only reruns reuse hot H3 weights."""
+
+    try:
+        import comfy.patcher_extension
+
+        model.remove_wrappers_with_key(
+            comfy.patcher_extension.WrappersMP.OUTER_SAMPLE,
+            POST_SAMPLE_RELEASE_KEY,
+        )
+        return "keep-hot-until-conditioning-miss"
+    except Exception as exc:
+        LOGGER.debug("[H3 Studio] Could not remove post-sampling diffusion unload: %s", exc)
+        return "keep-hot-request-failed"
+
+
 def runtime_node_classes() -> tuple[type, type]:
     """Build Comfy-facing node subclasses lazily at actual ComfyUI import time."""
 
@@ -143,7 +157,7 @@ def runtime_node_classes() -> tuple[type, type]:
     from .runtime_diagnostics import attach_sampling_diagnostics, runtime_snapshot
 
     class H3StudioStableContextSamplingPreset(H3StudioOptimizedContextSamplingPreset):
-        """Keep acceleration/LoRA caching while leaving model loading to ComfyUI."""
+        """Keep acceleration/LoRA caching while preserving hot diffusion reruns."""
 
         def build(self, model, studio_context):
             import time
@@ -162,13 +176,14 @@ def runtime_node_classes() -> tuple[type, type]:
                 info = f"{info} | sampling_residency=native-comfy-manager"
                 LOGGER.info("[H3 Studio] Sampling residency restored to native ComfyUI manager")
 
-            handoff = attach_sampling_stage_release(built_model)
+            hot_policy = _keep_diffusion_hot_after_sampling(built_model)
             diagnostics = attach_sampling_diagnostics(built_model)
-            info = f"{info} | sampling_handoff={handoff} | runtime_diagnostics={diagnostics}"
+            info = f"{info} | sampling_handoff={hot_policy} | runtime_diagnostics={diagnostics}"
+            LOGGER.info("[H3 Studio] Diffusion warm-rerun policy | %s", hot_policy)
             return built_model, sampler, sigmas, info
 
     class H3StudioStableDecode(H3StudioFastDecode):
-        """Exact H3 decode with native chunked I/O and a clean final handoff."""
+        """Exact H3 decode with native chunked I/O and a clean VAE-only handoff."""
 
         def decode(self, samples, vae):
             import time
@@ -183,8 +198,6 @@ def runtime_node_classes() -> tuple[type, type]:
 
             try:
                 if chunked:
-                    # Current Comfy H3 streams spatial/temporal chunks into a
-                    # preallocated output. Do not set disable_offload here.
                     result = H3StudioDecode.decode(self, samples, vae)
                 else:
                     LOGGER.warning(
@@ -194,9 +207,8 @@ def runtime_node_classes() -> tuple[type, type]:
                     )
                     result = super().decode(samples, vae)
             finally:
-                # The next prompt's 32B encoder should never inherit final-VAE
-                # residency. This is a targeted Comfy manager unload, not a
-                # ModelPatcher partial-unload hack.
+                # Release only the final VAE. The diffusion transformer is kept
+                # hot for seed-only reruns and is evicted on the next cache miss.
                 release = release_stage_patcher(patcher, label="final_vae")
                 elapsed = time.perf_counter() - started
                 runtime_snapshot(
@@ -204,11 +216,11 @@ def runtime_node_classes() -> tuple[type, type]:
                     patcher=patcher,
                     previous=before,
                     elapsed=elapsed,
-                    detail=f"path={manager_path} | {release.summary()}",
+                    detail=f"path={manager_path} | {release.summary()} | diffusion=keep-hot",
                 )
 
             images, decoded_frames, info, recommended_index = result
-            info = f"{info} VAE manager path: {manager_path}. {release.summary()}."
+            info = f"{info} VAE manager path: {manager_path}. {release.summary()}. Diffusion kept hot."
             return images, decoded_frames, info, recommended_index
 
     _RUNTIME_NODE_CLASSES = H3StudioStableContextSamplingPreset, H3StudioStableDecode
