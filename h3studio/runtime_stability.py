@@ -1,15 +1,17 @@
 """Runtime stability policy for memory-constrained MiniMax H3 sessions.
 
-The expensive H3 text/diffusion stages remain owned by ComfyUI's native model
-manager. Studio only configures the low-RAM fast-disk preference, removes the
-retired force-full sampler experiment, installs passive runtime diagnostics, and
-warns when the active ComfyUI core lacks native H3 chunked VAE I/O.
+The expensive H3 stages remain owned by ComfyUI's native model manager. Studio
+uses targeted manager-level handoffs only after a stage has finished, removing
+the dynamic-on-dynamic residency overlap that can make sequential H3 stages
+stream unpredictably on 22 GiB / 32 GiB systems.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+
+from .runtime_handoff import attach_sampling_stage_release, release_stage_patcher
 
 LOGGER = logging.getLogger(__name__)
 GIB = 1024**3
@@ -141,7 +143,7 @@ def runtime_node_classes() -> tuple[type, type]:
     from .runtime_diagnostics import attach_sampling_diagnostics, runtime_snapshot
 
     class H3StudioStableContextSamplingPreset(H3StudioOptimizedContextSamplingPreset):
-        """Keep acceleration/LoRA caching while leaving diffusion residency to ComfyUI."""
+        """Keep acceleration/LoRA caching while leaving model loading to ComfyUI."""
 
         def build(self, model, studio_context):
             import time
@@ -159,12 +161,14 @@ def runtime_node_classes() -> tuple[type, type]:
                 _remove_experimental_sampling_residency(built_model)
                 info = f"{info} | sampling_residency=native-comfy-manager"
                 LOGGER.info("[H3 Studio] Sampling residency restored to native ComfyUI manager")
+
+            handoff = attach_sampling_stage_release(built_model)
             diagnostics = attach_sampling_diagnostics(built_model)
-            info = f"{info} | runtime_diagnostics={diagnostics}"
+            info = f"{info} | sampling_handoff={handoff} | runtime_diagnostics={diagnostics}"
             return built_model, sampler, sigmas, info
 
     class H3StudioStableDecode(H3StudioFastDecode):
-        """Exact H3 decode with native chunked I/O on current ComfyUI cores."""
+        """Exact H3 decode with native chunked I/O and a clean final handoff."""
 
         def decode(self, samples, vae):
             import time
@@ -174,34 +178,37 @@ def runtime_node_classes() -> tuple[type, type]:
             patcher = getattr(vae, "patcher", None)
             before = runtime_snapshot("vae_decode.before", patcher=patcher)
             started = time.perf_counter()
+            manager_path = "native-comfy-chunked" if chunked else "legacy-full-stage-fallback"
+            release = None
 
-            if chunked:
-                # Current Comfy H3 already streams its own spatial/temporal chunks
-                # into a preallocated output buffer. Do not set disable_offload
-                # here: that would force the complete VAE resident and defeat the
-                # upstream low-peak-memory path.
-                result = H3StudioDecode.decode(self, samples, vae)
-                manager_path = "native-comfy-chunked"
-            else:
-                LOGGER.warning(
-                    "[H3 Studio] This ComfyUI core lacks MiniMax H3 chunked VAE I/O. Exact decode can become "
-                    "extremely slow or memory-heavy. Update ComfyUI to a build containing the H3 chunked-I/O changes "
-                    "before judging decode performance."
+            try:
+                if chunked:
+                    # Current Comfy H3 streams spatial/temporal chunks into a
+                    # preallocated output. Do not set disable_offload here.
+                    result = H3StudioDecode.decode(self, samples, vae)
+                else:
+                    LOGGER.warning(
+                        "[H3 Studio] This ComfyUI core lacks MiniMax H3 chunked VAE I/O. Exact decode can become "
+                        "extremely slow or memory-heavy. Update ComfyUI to a build containing the H3 chunked-I/O "
+                        "changes before judging decode performance."
+                    )
+                    result = super().decode(samples, vae)
+            finally:
+                # The next prompt's 32B encoder should never inherit final-VAE
+                # residency. This is a targeted Comfy manager unload, not a
+                # ModelPatcher partial-unload hack.
+                release = release_stage_patcher(patcher, label="final_vae")
+                elapsed = time.perf_counter() - started
+                runtime_snapshot(
+                    "vae_decode.after",
+                    patcher=patcher,
+                    previous=before,
+                    elapsed=elapsed,
+                    detail=f"path={manager_path} | {release.summary()}",
                 )
-                # Preserve the legacy full-stage fallback only for old cores.
-                result = super().decode(samples, vae)
-                manager_path = "legacy-full-stage-fallback"
 
-            elapsed = time.perf_counter() - started
-            runtime_snapshot(
-                "vae_decode.after",
-                patcher=patcher,
-                previous=before,
-                elapsed=elapsed,
-                detail=f"path={manager_path}",
-            )
             images, decoded_frames, info, recommended_index = result
-            info = f"{info} VAE manager path: {manager_path}."
+            info = f"{info} VAE manager path: {manager_path}. {release.summary()}."
             return images, decoded_frames, info, recommended_index
 
     _RUNTIME_NODE_CLASSES = H3StudioStableContextSamplingPreset, H3StudioStableDecode
