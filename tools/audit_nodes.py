@@ -8,10 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [
-    # extension.py is a compatibility shim. Audit the active concrete v3
+    # extension.py is a compatibility shim. Audit the active concrete v5
     # registration surface so static checks match what ComfyUI imports.
     ROOT / "h3studio" / "extension.py",
-    ROOT / "h3studio" / "extension_v3.py",
+    ROOT / "h3studio" / "extension_v5.py",
     ROOT / "h3studio" / "nodes" / "benchmark.py",
     ROOT / "h3studio" / "nodes" / "comparison.py",
     ROOT / "h3studio" / "nodes" / "image_runtime.py",
@@ -59,9 +59,7 @@ def main():
         raise SystemExit(f"Required node mappings are absent: {sorted(required - registered)}")
     if "H3StudioToImagePrepare" in registered:
         raise SystemExit("Legacy ambiguous H3StudioToImagePrepare mapping still present")
-    print(
-        f"Node surface is coherent: {len(registered)} registered classes; {len(referenced)} used by the bundled workflow."
-    )
+    print(f"Node surface is coherent: {len(registered)} registered classes; {len(referenced)} used by the bundled workflow.")
 
 
 if __name__ == "__main__":
