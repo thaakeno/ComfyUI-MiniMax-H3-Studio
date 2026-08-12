@@ -9,16 +9,16 @@ newest denoise state instead of getting stuck on step 2 while sampling advances.
 from __future__ import annotations
 
 import logging
-import math
 import queue
+import threading
 import time
 
 from .preview_runtime_v3 import (
     DEFAULT_TAEH3,
     LEGACY_WRAPPER_KEYS,
+    _first_h3_latent,
     _PreviewJob,
     _PreviewWrapperV3,
-    _first_h3_latent,
     _vae_choices,
 )
 
@@ -51,8 +51,6 @@ class _PreviewWrapperV4(_PreviewWrapperV3):
             if self._worker is not None and self._worker.is_alive():
                 return
             self._jobs = queue.Queue(maxsize=1)
-            import threading
-
             self._worker = threading.Thread(
                 target=self._worker_main,
                 name=f"H3StudioPreviewLatest-{self.node_id or 'preview'}",
