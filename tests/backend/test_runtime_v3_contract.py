@@ -25,12 +25,22 @@ def test_lightning_does_not_auto_enable_fast_disk() -> None:
     assert 'H3STUDIO_DISABLE_AUTO_FAST_DISK", "1"' in source
 
 
-def test_conditioning_restores_native_no_extra_unload_path() -> None:
+def test_conditioning_isolates_full_text_encoder_only_on_cache_miss() -> None:
     source = (ROOT / "h3studio" / "conditioning_fastpath.py").read_text(encoding="utf-8")
+    assert "force_full_load=True" in source
+    assert "release_stage_patcher" in source
+    assert "pre_text_diffusion" in source
+    assert "text_encoder" in source
+    assert '"HIT", 0.0, "warm-cache; diffusion=keep-hot"' in source
     assert "encode_from_tokens_scheduled" in source
-    assert '"HIT", 0.0, "warm-cache"' in source
-    assert "release_stage_patcher" not in source
-    assert "text_encoder_residency" not in source
+
+
+def test_sampling_keeps_diffusion_hot_until_next_conditioning_miss() -> None:
+    source = (ROOT / "h3studio" / "runtime_stability.py").read_text(encoding="utf-8")
+    assert "keep-hot-until-conditioning-miss" in source
+    assert "POST_SAMPLE_RELEASE_KEY" in source
+    assert "attach_sampling_stage_release" not in source
+    assert "Diffusion kept hot" in source
 
 
 def test_preview_decoder_never_allocates_on_cuda() -> None:
