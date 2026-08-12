@@ -37,7 +37,9 @@ def memory_enabled() -> bool:
 
 
 def models_enabled() -> bool:
-    return _flag("H3STUDIO_TRACE_MODELS", True)
+    # Expanded model lists make each console line much larger and add no value
+    # for normal runs. They remain available for one-off deep diagnostics.
+    return _flag("H3STUDIO_TRACE_MODELS", False)
 
 
 def _clean(value: Any) -> str:
