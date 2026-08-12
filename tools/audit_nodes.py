@@ -8,11 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [
-    # extension.py is a compatibility shim in the recovered runtime. Audit the
-    # concrete v2 registration surface as well so static checks see the public
-    # node ids without importing ComfyUI.
+    # extension.py is a compatibility shim. Audit the active concrete v3
+    # registration surface so static checks match what ComfyUI imports.
     ROOT / "h3studio" / "extension.py",
-    ROOT / "h3studio" / "extension_v2.py",
+    ROOT / "h3studio" / "extension_v3.py",
     ROOT / "h3studio" / "nodes" / "benchmark.py",
     ROOT / "h3studio" / "nodes" / "comparison.py",
     ROOT / "h3studio" / "nodes" / "image_runtime.py",
