@@ -7,9 +7,9 @@ general default; for H3 it can become much slower than an explicit stage handoff
 because the same large quantized weights are streamed repeatedly.
 
 These helpers never take permanent ownership of ComfyUI's model manager. They
-ask the manager for a full stage residency when it is useful, fall back without
-breaking generation when that cannot be satisfied, and keep the normal manager
-as the source of truth for eviction/offload.
+ask the manager for a full stage residency only when the *real* stage memory
+budget says it is safe, fall back without breaking generation when it is not,
+and keep the normal manager as the source of truth for eviction/offload.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from typing import Any
 
 LOGGER = logging.getLogger(__name__)
 GIB = 1024**3
+SAMPLING_RESIDENCY_WRAPPER_KEY = "h3studio_sampling_residency"
 
 
 def _model_size(patcher: Any) -> int:
@@ -69,6 +70,11 @@ def _sync(device: Any) -> None:
         pass
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = str(os.environ.get(name, "1" if default else "0")).strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
 @dataclass(slots=True)
 class ResidencyResult:
     label: str
@@ -95,13 +101,32 @@ class ResidencyResult:
         return "; ".join(bits)
 
 
+@dataclass(slots=True)
+class SamplingResidencyPlan:
+    mode: str
+    model_bytes: int
+    adapter_bytes: int
+    inference_bytes: int
+    projected_bytes: int
+    total_vram_bytes: int
+    loaded_bytes: int = 0
+    prepare_seconds: float = 0.0
+
+    def summary(self) -> str:
+        return (
+            f"sampling_residency={self.mode}; model={self.model_bytes / GIB:.2f}GiB; "
+            f"adapters={self.adapter_bytes / GIB:.2f}GiB; inference={self.inference_bytes / GIB:.2f}GiB; "
+            f"projected={self.projected_bytes / GIB:.2f}GiB/{self.total_vram_bytes / GIB:.2f}GiB; "
+            f"loaded={self.loaded_bytes / GIB:.2f}GiB; prepare={self.prepare_seconds:.3f}s"
+        )
+
+
 def force_full_residency(patcher: Any, *, label: str, nonfatal: bool = True) -> ResidencyResult:
     """Ask ComfyUI to materialize one patcher completely on its load device.
 
-    On quantized H3 this avoids per-layer DynamicVRAM transfers during the next
-    encode/sample/decode stage. The manager is still allowed to evict other
-    models to make room. If a full load does not fit, the optimization degrades
-    to the normal ComfyUI path instead of making the workflow unusable.
+    This is appropriate for isolated stages such as the 32B text encoder. For
+    diffusion sampling use :func:`attach_sampling_residency_policy` instead so
+    the decision sees the real latent/conditioning activation budget.
     """
 
     if patcher is None:
@@ -183,8 +208,6 @@ def release_patcher(patcher: Any, result: ResidencyResult | None = None) -> floa
         if callable(unload):
             unload(patcher, unload_additional_models=False)
         else:
-            # Older managers do not expose targeted unloading. Avoid a global
-            # unload unless explicitly requested; normal allocation can evict it.
             return 0.0
         mm.soft_empty_cache()
         device = getattr(patcher, "load_device", None) or mm.get_torch_device()
@@ -207,24 +230,172 @@ def text_encoder_residency(clip: Any):
     try:
         yield result
     finally:
-        keep = str(os.environ.get("H3STUDIO_KEEP_TEXT_ENCODER", "0")).strip().lower() in {"1", "true", "yes", "on"}
+        keep = _env_flag("H3STUDIO_KEEP_TEXT_ENCODER")
         if result.full and not keep:
             release_patcher(patcher, result)
 
 
-def prewarm_diffusion_model(model: Any) -> ResidencyResult:
-    """Materialize the selected H3 transformer before KSampler starts.
+def _sampling_plan(model: Any, noise_shape: Any, conds: Any, adapter_bytes: int) -> SamplingResidencyPlan:
+    import comfy.model_management as mm
+    import comfy.sampler_helpers as sampler_helpers
 
-    This moves the expensive DynamicVRAM materialization out of KSampler's
-    opaque ``Model Initializing`` phase and, when the full model fits, prevents
-    repeated layer streaming during each denoise step.
+    device = getattr(model, "load_device", None) or mm.get_torch_device()
+    model_bytes = _model_size(model)
+    loaded_bytes = _loaded_size(model)
+    try:
+        total_vram = int(mm.get_total_memory(device))
+    except Exception:
+        total_vram = 0
+    try:
+        memory_required, _minimum = sampler_helpers.estimate_memory(model, noise_shape, conds)
+        inference_bytes = int(memory_required)
+    except Exception as exc:
+        LOGGER.debug("[H3 Studio] sampling memory estimate unavailable: %s", exc)
+        inference_bytes = 0
+
+    reserve = 0
+    with suppress(Exception):
+        reserve = int(mm.extra_reserved_memory())
+    floor = 0
+    with suppress(Exception):
+        floor = int(mm.minimum_inference_memory())
+    inference_budget = max(floor, inference_bytes + reserve)
+
+    # This mirrors ComfyUI's own full-load pressure calculation closely enough
+    # to avoid the previous mistake: eagerly loading the full transformer before
+    # Comfy had reserved activation memory, only for prepare_sampling to evict
+    # and load it again. Adapter bytes are separate from ModelPatcher.model_size
+    # for bypass-forward LoRAs and therefore must be budgeted explicitly.
+    projected = int(model_bytes * 1.10) + int(adapter_bytes) + inference_budget
+    safety = float(os.environ.get("H3STUDIO_FULL_DIFFUSION_VRAM_FRACTION", "0.94"))
+    safety = min(0.98, max(0.70, safety))
+    fits = bool(total_vram and projected <= int(total_vram * safety))
+    if _env_flag("H3STUDIO_FORCE_FULL_DIFFUSION"):
+        fits = True
+    if _env_flag("H3STUDIO_DISABLE_FULL_DIFFUSION"):
+        fits = False
+    mode = "full-at-sampler" if fits else "dynamic-at-sampler"
+    return SamplingResidencyPlan(
+        mode=mode,
+        model_bytes=model_bytes,
+        adapter_bytes=int(adapter_bytes),
+        inference_bytes=inference_budget,
+        projected_bytes=projected,
+        total_vram_bytes=total_vram,
+        loaded_bytes=loaded_bytes,
+    )
+
+
+@dataclass(slots=True)
+class _SamplingResidencyWrapper:
+    adapter_bytes: int = 0
+    profile: str = ""
+
+    def __call__(
+        self,
+        executor,
+        model,
+        noise_shape,
+        conds,
+        model_options=None,
+        force_full_load=False,
+        force_offload=False,
+    ):
+        plan = _sampling_plan(model, noise_shape, conds, self.adapter_bytes)
+        request_full = bool(force_full_load or (plan.mode == "full-at-sampler" and not force_offload))
+        LOGGER.info(
+            "[H3 Studio] Sampling memory plan | profile=%s | %s",
+            self.profile or "unknown",
+            plan.summary(),
+        )
+        started = time.perf_counter()
+        result = executor(
+            model,
+            noise_shape,
+            conds,
+            model_options=model_options,
+            force_full_load=request_full,
+            force_offload=force_offload,
+        )
+        device = getattr(model, "load_device", None)
+        _sync(device)
+        plan.prepare_seconds = time.perf_counter() - started
+        plan.loaded_bytes = _loaded_size(model)
+        LOGGER.info("[H3 Studio] Sampling model prepared | %s", plan.summary())
+        return result
+
+
+def attach_sampling_residency_policy(model: Any, *, adapter_bytes: int = 0, profile: str = "") -> SamplingResidencyPlan:
+    """Attach one idempotent PREPARE_SAMPLING policy to a stable model patcher.
+
+    Crucially this does *not* clone or pre-load the model. ComfyUI performs one
+    load at its normal sampler boundary after it knows the actual activation
+    requirement. This prevents the duplicate ``Model Initializing`` cycle that
+    eager prewarming caused on 22 GiB cards.
     """
 
+    try:
+        import comfy.patcher_extension
+        import comfy.model_management as mm
+
+        model.remove_wrappers_with_key(
+            comfy.patcher_extension.WrappersMP.PREPARE_SAMPLING,
+            SAMPLING_RESIDENCY_WRAPPER_KEY,
+        )
+        model.add_wrapper_with_key(
+            comfy.patcher_extension.WrappersMP.PREPARE_SAMPLING,
+            SAMPLING_RESIDENCY_WRAPPER_KEY,
+            _SamplingResidencyWrapper(max(0, int(adapter_bytes)), str(profile or "")),
+        )
+        total = int(mm.get_total_memory(getattr(model, "load_device", None) or mm.get_torch_device()))
+    except Exception as exc:
+        LOGGER.warning("[H3 Studio] Could not attach sampler residency policy: %s", exc)
+        return SamplingResidencyPlan("unavailable", _model_size(model), int(adapter_bytes), 0, 0, 0, _loaded_size(model))
+    return SamplingResidencyPlan(
+        "deferred-to-sampler",
+        _model_size(model),
+        int(adapter_bytes),
+        0,
+        0,
+        total,
+        _loaded_size(model),
+    )
+
+
+@contextmanager
+def vae_full_stage(vae: Any, *, label: str = "vae"):
+    """Let ComfyUI force-load the VAE at the exact encode/decode call boundary.
+
+    ``VAE.encode/decode`` already know their real activation budget. Temporarily
+    setting ``disable_offload`` makes those native calls request a full VAE load
+    once, rather than doing an eager prewarm followed by another manager pass.
+    """
+
+    if vae is None:
+        yield ResidencyResult(label, "unavailable", detail="no_vae")
+        return
+    old = bool(getattr(vae, "disable_offload", False))
+    setattr(vae, "disable_offload", True)
+    result = ResidencyResult(label, "native-full-stage", model_bytes=_model_size(getattr(vae, "patcher", None)))
+    started = time.perf_counter()
+    try:
+        yield result
+    finally:
+        result.load_seconds = time.perf_counter() - started
+        setattr(vae, "disable_offload", old)
+
+
+def prewarm_diffusion_model(model: Any) -> ResidencyResult:
+    """Deprecated compatibility helper; use sampler-time residency instead."""
+
+    LOGGER.warning(
+        "[H3 Studio] eager diffusion prewarm requested; sampler-time residency is preferred to avoid duplicate loads"
+    )
     return force_full_residency(model, label="diffusion")
 
 
 def prewarm_vae(vae: Any) -> ResidencyResult:
-    """Make the final VAE fully resident before its tiled H3 decoder loops."""
+    """Compatibility helper for callers not yet migrated to :func:`vae_full_stage`."""
 
     return force_full_residency(getattr(vae, "patcher", None), label="vae")
 
