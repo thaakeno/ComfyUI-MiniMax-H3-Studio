@@ -3,6 +3,10 @@ from __future__ import annotations
 import sys
 from types import ModuleType, SimpleNamespace
 
+# The runtime class intentionally subclasses Comfy-facing nodes. CI unit tests do
+# not install ComfyUI itself, so provide the import-only module those nodes expect.
+sys.modules.setdefault("folder_paths", ModuleType("folder_paths"))
+
 from h3studio import runtime_stability
 
 
