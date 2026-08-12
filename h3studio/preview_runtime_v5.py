@@ -46,7 +46,9 @@ def _stable_preview_clone(model, node_id: str):
         except TypeError:
             # ModelPatcher is weak-referenceable in supported ComfyUI builds;
             # keep a conservative strong identity fallback for unusual forks.
-            upstream_ref = lambda: model
+            def upstream_ref():
+                return model
+
         _PATCHER_CACHE[key] = (upstream_ref, patched)
         return patched, "new"
 
