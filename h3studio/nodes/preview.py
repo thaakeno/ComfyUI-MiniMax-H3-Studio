@@ -228,6 +228,17 @@ class _PreviewWrapper:
         )
         return decoder
 
+    def _release_decoder(self) -> None:
+        """Drop tiny-decoder device tensors as soon as denoising is finished."""
+
+        if self.decoder is None:
+            return
+        device = self.decoder_device
+        self.decoder = None
+        self.decoder_device = None
+        self.decoder_dtype = None
+        LOGGER.debug("[H3 Studio] TAEH3 decoder residency released after sampling | device=%s", device)
+
     def _decode_pixels(self, torch, x0, latent_shapes):
         decoder = self._load_decoder(torch)
         latent = _limit_latent(
@@ -342,7 +353,7 @@ class _PreviewWrapper:
         elapsed_seconds,
         average_step_seconds,
     ):
-        if step % self.every != 0 and step + 1 < total_steps:
+        if step % self.every != 0:
             return
 
         decode_started = time.perf_counter()
@@ -476,17 +487,20 @@ class _PreviewWrapper:
             if callback is not None:
                 callback(step, x0, x, total_steps)
 
-        return executor(
-            noise,
-            latent_image,
-            sampler,
-            sigmas,
-            denoise_mask,
-            preview_callback,
-            disable_pbar,
-            seed,
-            latent_shapes=latent_shapes,
-        )
+        try:
+            return executor(
+                noise,
+                latent_image,
+                sampler,
+                sigmas,
+                denoise_mask,
+                preview_callback,
+                disable_pbar,
+                seed,
+                latent_shapes=latent_shapes,
+            )
+        finally:
+            self._release_decoder()
 
 
 class H3StudioTAEH3Preview:
