@@ -11,7 +11,7 @@ from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 from typing import Any
 
-from .performance import prewarm_vae, text_encoder_residency
+from .performance import text_encoder_residency, vae_full_stage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -184,8 +184,12 @@ def _source_stage(bundle: Any, image: Any, image_id: Hashable, width: int, heigh
     if cached is not None:
         return (*cached, "HIT")
     fitted = _resize_image(image[:1], width, height, source_fit)
-    prewarm_vae(bundle.video_vae)
-    latent = bundle.video_vae.encode(fitted)
+    # Let ComfyUI's own VAE.encode call reserve its activation memory and force
+    # the H3 VAE full at that exact boundary. This avoids eager-prewarm ->
+    # manager-reload duplication while keeping the decoder/encoder weights from
+    # streaming once per tile.
+    with vae_full_stage(bundle.video_vae, label="source_vae"):
+        latent = bundle.video_vae.encode(fitted)
     value = fitted, latent
     _SOURCE_VAE_CACHE.put(key, value)
     return (*value, "MISS")
@@ -210,8 +214,8 @@ def _reference_vae_stage(
         return (*cached, "HIT")
     if resized_image is None:
         resized_image, tw, th = _reference_resize(image, width, height, reference_size)
-    prewarm_vae(bundle.video_vae)
-    latent = bundle.video_vae.encode(resized_image)
+    with vae_full_stage(bundle.video_vae, label="reference_vae"):
+        latent = bundle.video_vae.encode(resized_image)
     value = latent, tw, th
     _REFERENCE_VAE_CACHE.put(key, value)
     return (*value, "MISS")
