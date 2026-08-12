@@ -14,18 +14,20 @@ from .nodes.director import (
 )
 from .nodes.image_runtime import NODE_CLASS_MAPPINGS as IMAGE_NODE_CLASS_MAPPINGS
 from .nodes.image_runtime import NODE_DISPLAY_NAME_MAPPINGS as IMAGE_NODE_DISPLAY_NAME_MAPPINGS
-from .nodes.performance import (
-    H3StudioFastDecode,
-    H3StudioOptimizedContextSamplingPreset,
-    H3StudioOptimizedLoader,
-)
+from .nodes.performance import H3StudioOptimizedLoader
 from .nodes.preview import H3StudioTAEH3Preview
 from .nodes.save import NODE_CLASS_MAPPINGS as SAVE_NODE_CLASS_MAPPINGS
 from .nodes.save import NODE_DISPLAY_NAME_MAPPINGS as SAVE_NODE_DISPLAY_NAME_MAPPINGS
 from .runtime_guards import install_runtime_guards
+from .runtime_stability import (
+    H3StudioStableContextSamplingPreset,
+    H3StudioStableDecode,
+    install_runtime_stability,
+)
 from .web_routes import register_routes
 
 install_runtime_guards()
+install_runtime_stability()
 register_routes()
 
 NODE_CLASS_MAPPINGS = {
@@ -38,11 +40,11 @@ NODE_CLASS_MAPPINGS = {
     **COMPARISON_NODE_CLASS_MAPPINGS,
     **IMAGE_NODE_CLASS_MAPPINGS,
     **SAVE_NODE_CLASS_MAPPINGS,
-    # Keep the public node ids stable while routing the expensive stages through
-    # H3-specific residency/caching policies.
+    # Keep public node ids stable while applying only the performance policies
+    # that survived real L4 validation.
     "H3StudioLoader": H3StudioOptimizedLoader,
-    "H3StudioContextSamplingPreset": H3StudioOptimizedContextSamplingPreset,
-    "H3StudioDecode": H3StudioFastDecode,
+    "H3StudioContextSamplingPreset": H3StudioStableContextSamplingPreset,
+    "H3StudioDecode": H3StudioStableDecode,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
