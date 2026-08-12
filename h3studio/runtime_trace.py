@@ -12,8 +12,9 @@ import itertools
 import logging
 import os
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 LOGGER = logging.getLogger(__name__)
 PREFIX = "[H3 Studio Trace]"
