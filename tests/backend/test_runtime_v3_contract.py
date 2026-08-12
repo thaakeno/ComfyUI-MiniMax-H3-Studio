@@ -59,15 +59,19 @@ def test_model_loading_remains_on_demand_and_never_starts_at_import() -> None:
     assert "_VAE_COMPONENT_CACHE" in performance
 
 
-def test_unlocked_seed_is_reserved_at_queue_time_not_waiting_for_execution_success() -> None:
+def test_unlocked_seed_reservation_is_fail_open_after_real_queue_dispatch() -> None:
     source = (ROOT / "web" / "js" / "seed_queue_extension.js").read_text(encoding="utf-8")
     assert "api.queuePrompt" in source
     assert "app.queuePrompt has already serialized" in source
-    assert "reserveNextSeeds(data)" in source
     assert "advanceSeedAfterGeneration" in source
     assert "queued seed=" in source
     assert "reserved next=" in source
     assert "seed_locked === true" in source
+    assert "FAIL-OPEN ORDERING IS INTENTIONAL" in source
+    assert "generation continues" in source
+    dispatch = source.index("const request = originalQueuePrompt(number, data, options)")
+    reserve = source.index("reservations = reserveNextSeeds(data)")
+    assert dispatch < reserve
 
 
 def test_preview_decoder_never_allocates_on_cuda() -> None:
