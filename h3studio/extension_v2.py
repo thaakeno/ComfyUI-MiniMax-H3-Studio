@@ -6,15 +6,15 @@ from .nodes.benchmark import NODE_CLASS_MAPPINGS as BENCHMARK_NODE_CLASS_MAPPING
 from .nodes.benchmark import NODE_DISPLAY_NAME_MAPPINGS as BENCHMARK_NODE_DISPLAY_NAME_MAPPINGS
 from .nodes.comparison import NODE_CLASS_MAPPINGS as COMPARISON_NODE_CLASS_MAPPINGS
 from .nodes.comparison import NODE_DISPLAY_NAME_MAPPINGS as COMPARISON_NODE_DISPLAY_NAME_MAPPINGS
+from .nodes.director import H3StudioCondition as H3StudioConditionBase
 from .nodes.director import (
-    H3StudioCondition as H3StudioConditionBase,
     H3StudioContextInspector,
     H3StudioDirector,
     H3StudioOutput,
 )
-from .nodes.image_runtime import H3StudioDecode as H3StudioDecodeBase
 from .nodes.image_runtime import NODE_CLASS_MAPPINGS as IMAGE_NODE_CLASS_MAPPINGS
 from .nodes.image_runtime import NODE_DISPLAY_NAME_MAPPINGS as IMAGE_NODE_DISPLAY_NAME_MAPPINGS
+from .nodes.image_runtime import H3StudioDecode as H3StudioDecodeBase
 from .nodes.performance import H3StudioOptimizedContextSamplingPreset, H3StudioOptimizedLoader
 from .nodes.save import NODE_CLASS_MAPPINGS as SAVE_NODE_CLASS_MAPPINGS
 from .nodes.save import NODE_DISPLAY_NAME_MAPPINGS as SAVE_NODE_DISPLAY_NAME_MAPPINGS
