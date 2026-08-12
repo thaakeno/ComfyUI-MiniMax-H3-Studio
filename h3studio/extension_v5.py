@@ -21,11 +21,13 @@ from .runtime_v5 import (
     install_max_speed_runtime,
     start_component_prewarm,
 )
+from .runtime_v5_conditioning import install_conditioning_residency_policy
 from .web_routes import register_routes
 
 # Install model-loader/cache/conditioning policy before graph execution. Unlike
 # v3 this does not hard-disable ComfyUI fast-disk on low-RAM systems.
 install_max_speed_runtime()
+install_conditioning_residency_policy()
 install_runtime_guards()
 register_routes()
 
