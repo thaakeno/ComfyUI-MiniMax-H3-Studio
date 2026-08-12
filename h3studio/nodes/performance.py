@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from .loader import (
     DISABLED_IMAGE_VAE,
     SAME_AS_ANALYZER,
     H3StudioLoader,
+    _resolve_text_encoder,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -25,6 +27,7 @@ LOGGER = logging.getLogger(__name__)
 _LOADER_CACHE_LOCK = threading.RLock()
 _LOADER_CACHE_KEY: tuple[str, ...] | None = None
 _LOADER_CACHE_VALUE: tuple[Any, ...] | None = None
+_PATH_PRIORITY_LOCK = threading.RLock()
 
 
 def _full_path(category: str, name: str) -> str:
@@ -39,6 +42,15 @@ def _full_path(category: str, name: str) -> str:
         return str(folder_paths.get_full_path(category, name) or "")
     except Exception:
         return ""
+
+
+def _is_tmpfs_path(value: str | Path) -> bool:
+    try:
+        path = Path(value).resolve()
+    except OSError:
+        path = Path(value)
+    tmpfs = Path("/dev/shm")
+    return path == tmpfs or tmpfs in path.parents
 
 
 def _artifact_bytes(category: str, names: list[str]) -> int:
@@ -77,8 +89,6 @@ def _storage_pressure_for_selection(
         _full_path("vae", video_vae),
         _full_path("vae", image_vae),
     ]
-    # Analyzer/writer selections may be Auto/Same as analyzer rather than a
-    # filename, so only include them when folder_paths can resolve them.
     paths.extend([
         _full_path("text_encoders", image_analyzer),
         _full_path("text_encoders", prompt_writer),
@@ -88,8 +98,81 @@ def _storage_pressure_for_selection(
         LOGGER.warning("[H3 Studio] Host-memory pressure: %s", note)
 
 
+@contextmanager
+def _prefer_persistent_model_source(category: str, name: str):
+    """Prefer an existing disk-backed duplicate over a real /dev/shm copy.
+
+    Lightning H3 launchers can register RAM-cache folders ahead of normal model
+    folders. On a 32 GiB host a 15 GiB text-encoder file in tmpfs competes with
+    the staged model itself and can turn safetensor construction into minutes of
+    memory pressure. If ComfyUI already knows a persistent duplicate of the
+    exact same relative filename, temporarily move that root to the front only
+    for this load. Symlinks into persistent storage are left alone because their
+    resolved path is already disk-backed.
+    """
+
+    if not str(name or "").strip():
+        yield ""
+        return
+
+    try:
+        import folder_paths
+
+        mapped = folder_paths.map_legacy(category)
+        current = folder_paths.get_full_path(mapped, name)
+    except Exception:
+        yield ""
+        return
+
+    if not current or not _is_tmpfs_path(current):
+        yield str(current or "")
+        return
+
+    with _PATH_PRIORITY_LOCK:
+        try:
+            roots, _extensions = folder_paths.folder_names_and_paths[mapped]
+        except Exception:
+            yield str(current)
+            return
+
+        original = list(roots)
+        chosen_root = ""
+        chosen_path = ""
+        relative = str(name).replace("\\", "/")
+        for root in original:
+            candidate = Path(root) / relative
+            try:
+                if candidate.is_file() and not _is_tmpfs_path(candidate):
+                    chosen_root = root
+                    chosen_path = str(candidate.resolve())
+                    break
+            except OSError:
+                continue
+
+        if not chosen_root:
+            LOGGER.warning(
+                "[H3 Studio] %s resolves to real tmpfs (%s), but no registered disk-backed duplicate exists. "
+                "On low-RAM hosts this can dominate cold-load time.",
+                name,
+                current,
+            )
+            yield str(current)
+            return
+
+        roots[:] = [chosen_root, *[root for root in original if root != chosen_root]]
+        LOGGER.info(
+            "[H3 Studio] Model source override | %s -> %s (avoiding /dev/shm pressure)",
+            current,
+            chosen_path,
+        )
+        try:
+            yield chosen_path
+        finally:
+            roots[:] = original
+
+
 class H3StudioOptimizedLoader(H3StudioLoader):
-    """Reuse an unchanged H3 bundle even when ComfyUI recreates the node object."""
+    """Reuse an unchanged H3 bundle and avoid pathological tmpfs cold loads."""
 
     @staticmethod
     def load(
@@ -115,18 +198,37 @@ class H3StudioOptimizedLoader(H3StudioLoader):
             if key == _LOADER_CACHE_KEY and _LOADER_CACHE_VALUE is not None:
                 LOGGER.info("[H3 Studio] Model bundle cache hit; reused unchanged CLIP/VAE/bundle objects")
                 return _LOADER_CACHE_VALUE
-            result = H3StudioLoader.load(
+
+            resolved_text_encoder = _resolve_text_encoder(text_encoder)
+            # Diagnose before loading. Previously this warning ran only after a
+            # multi-minute CLIP construction had already completed.
+            _storage_pressure_for_selection(
                 fl2va_model,
                 ref2va_model,
-                text_encoder,
+                resolved_text_encoder,
                 video_vae,
                 image_vae,
                 image_analyzer,
                 prompt_writer,
             )
+
+            started = time.perf_counter()
+            with _prefer_persistent_model_source("text_encoders", resolved_text_encoder), _prefer_persistent_model_source(
+                "vae", video_vae
+            ):
+                result = H3StudioLoader.load(
+                    fl2va_model,
+                    ref2va_model,
+                    text_encoder,
+                    video_vae,
+                    image_vae,
+                    image_analyzer,
+                    prompt_writer,
+                )
+            elapsed = time.perf_counter() - started
+            LOGGER.info("[H3 Studio] Model bundle constructed in %.3fs", elapsed)
             _LOADER_CACHE_KEY = key
             _LOADER_CACHE_VALUE = result
-        _storage_pressure_for_selection(*key)
         return result
 
 
@@ -152,9 +254,6 @@ class H3StudioOptimizedContextSamplingPreset(H3StudioContextSamplingPreset):
             adapter_names.append(filename)
 
         if custom_specs and not accelerated:
-            # Base sampling creates a shifted ModelPatcher clone. Apply custom
-            # LoRAs to the stable base patcher first so prompt/seed reruns hit
-            # the stack cache instead of reloading the same adapter files.
             from .director import SAMPLING_PROFILE_TO_RUNTIME, _sampling_profile
             from .image_runtime import H3StudioSamplingPreset
 
@@ -176,13 +275,6 @@ class H3StudioOptimizedContextSamplingPreset(H3StudioContextSamplingPreset):
 
         adapter_names.extend(spec.name for spec in custom_specs)
         adapter_bytes = _artifact_bytes("loras", adapter_names)
-
-        # Do not eagerly force the transformer onto the GPU here. ComfyUI has
-        # not yet calculated the real activation reservation, so an eager full
-        # load can be immediately evicted and loaded a second time at KSampler's
-        # ``Model Initializing`` boundary. Attach an idempotent PREPARE_SAMPLING
-        # wrapper to this *same stable patcher* instead; it decides full-vs-
-        # dynamic residency once, using the actual latent/conditioning budget.
         residency = attach_sampling_residency_policy(
             built_model,
             adapter_bytes=adapter_bytes,
@@ -197,11 +289,6 @@ class H3StudioFastDecode(H3StudioDecode):
     """Decode with one native full-VAE handoff instead of eager double loading."""
 
     def decode(self, samples, vae):
-        # ComfyUI's VAE.decode already knows the exact H3 activation budget and
-        # the H3 video VAE already owns its spatial/temporal tiling. Temporarily
-        # requesting native full residency at that exact boundary keeps the
-        # ~5 GiB decoder weights resident across all internal tile passes without
-        # the previous eager-prewarm -> second manager-load cycle.
         started = time.perf_counter()
         with vae_full_stage(vae, label="vae_decode") as residency:
             result = super().decode(samples, vae)
