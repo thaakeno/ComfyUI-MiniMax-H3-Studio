@@ -3,10 +3,6 @@ from __future__ import annotations
 import sys
 from types import ModuleType, SimpleNamespace
 
-# The runtime class intentionally subclasses Comfy-facing nodes. CI unit tests do
-# not install ComfyUI itself, so provide the import-only module those nodes expect.
-sys.modules.setdefault("folder_paths", ModuleType("folder_paths"))
-
 from h3studio import runtime_stability
 
 
@@ -49,37 +45,19 @@ def test_high_ram_leaves_fast_disk_unchanged(monkeypatch) -> None:
     assert manager.args.fast_disk is False
 
 
-def test_stable_sampling_removes_experimental_prepare_wrapper(monkeypatch) -> None:
+def test_experimental_prepare_sampling_wrapper_is_removed(monkeypatch) -> None:
     calls = []
 
     class Model:
         def remove_wrappers_with_key(self, wrapper, key):
             calls.append((wrapper, key))
 
-    fake_model = Model()
-
-    def parent_build(self, model, studio_context):
-        return fake_model, "sampler", "sigmas", "base-info"
-
-    monkeypatch.setattr(
-        runtime_stability.H3StudioOptimizedContextSamplingPreset,
-        "build",
-        parent_build,
-    )
     patcher_extension = ModuleType("comfy.patcher_extension")
     patcher_extension.WrappersMP = SimpleNamespace(PREPARE_SAMPLING="prepare-sampling")
     comfy = ModuleType("comfy")
     comfy.patcher_extension = patcher_extension
     monkeypatch.setitem(sys.modules, "comfy", comfy)
     monkeypatch.setitem(sys.modules, "comfy.patcher_extension", patcher_extension)
-    monkeypatch.delenv("H3STUDIO_EXPERIMENTAL_FULL_DIFFUSION", raising=False)
 
-    model, sampler, sigmas, info = runtime_stability.H3StudioStableContextSamplingPreset().build(
-        object(), object()
-    )
-
-    assert model is fake_model
-    assert sampler == "sampler"
-    assert sigmas == "sigmas"
+    assert runtime_stability._remove_experimental_sampling_residency(Model()) is True
     assert calls == [("prepare-sampling", runtime_stability.SAMPLING_RESIDENCY_WRAPPER_KEY)]
-    assert "sampling_residency=native-comfy-manager" in info
