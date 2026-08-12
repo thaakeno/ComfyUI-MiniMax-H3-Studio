@@ -5,94 +5,125 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_entrypoint_activates_v3_not_v2() -> None:
-    source = (ROOT / "__init__.py").read_text(encoding="utf-8")
-    assert "extension_v3" in source
+def read(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
+
+
+def test_entrypoint_activates_v5_only() -> None:
+    source = read("__init__.py")
+    assert "extension_v5" in source
+    assert "extension_v3" not in source
     assert "extension_v2" not in source
 
 
-def test_v3_registration_reuses_proven_stable_runtime_classes() -> None:
-    source = (ROOT / "h3studio" / "extension_v3.py").read_text(encoding="utf-8")
-    assert "runtime_node_classes" in source
-    assert "H3StudioStableContextSamplingPreset" in source
-    assert "H3StudioStableDecode" in source
-    assert "runtime_v2" not in source
-    assert "recovered_node_classes" not in source
+def test_v5_surface_uses_adaptive_max_speed_runtime() -> None:
+    source = read("h3studio/extension_v5.py")
+    assert "install_max_speed_runtime" in source
+    assert "H3StudioMaxSpeedLoader" in source
+    assert "H3StudioMaxSpeedSamplingPreset" in source
+    assert "H3StudioMaxSpeedDecode" in source
+    assert "H3StudioTAEH3PreviewV5" in source
+    assert "start_component_prewarm" in source
+    assert "runtime_stability" not in source
+    assert "runtime_diagnostics" not in source
+    assert "H3STUDIO_DISABLE_AUTO_FAST_DISK" not in source
 
 
-def test_lightning_does_not_auto_enable_fast_disk() -> None:
-    source = (ROOT / "h3studio" / "extension_v3.py").read_text(encoding="utf-8")
-    assert 'H3STUDIO_DISABLE_AUTO_FAST_DISK", "1"' in source
+def test_low_ram_restores_known_fast_comfy_fast_disk_policy() -> None:
+    source = read("h3studio/runtime_v5.py")
+    assert "LOW_HOST_RAM = 48 * GIB" in source
+    assert "args.fast_disk = True" in source
+    assert "H3STUDIO_DISABLE_AUTO_FAST_DISK" in source
+    assert "fast-disk enabled for DynamicVRAM" in source
 
 
-def test_conditioning_has_exactly_one_scheduled_text_encoder_load_owner() -> None:
-    source = (ROOT / "h3studio" / "conditioning_fastpath.py").read_text(encoding="utf-8")
-    assert "single-scheduled-text-encode" in source
-    assert "encode_from_tokens_scheduled" in source
+def test_conditioning_has_one_native_load_owner_and_zero_manual_sync_flushes() -> None:
+    source = read("h3studio/runtime_v5.py")
+    assert source.count("encode_from_tokens_scheduled(tokens)") == 1
+    assert '"HIT", 0.0, "max-speed-v5; cache=hit; model_management=zero"' in source
     assert "release_stage_patcher" in source
-    assert "pre_text_diffusion" in source
-    assert "text_encoder" in source
-    assert '"HIT", 0.0, "warm-cache; diffusion=keep-hot"' in source
-    # CLIP.encode_from_tokens_scheduled owns model loading internally. A second
-    # explicit preload was the 2x 14.6 GiB I/O regression on the L4.
-    assert "force_full_load=True" not in source
+    assert "torch.cuda.synchronize" not in source
+    assert "soft_empty_cache" not in source
     assert "load_models_gpu([patcher]" not in source
 
 
-def test_sampling_keeps_diffusion_hot_until_next_conditioning_miss() -> None:
-    source = (ROOT / "h3studio" / "runtime_stability.py").read_text(encoding="utf-8")
-    assert "keep-hot-until-conditioning-miss" in source
-    assert "POST_SAMPLE_RELEASE_KEY" in source
-    assert "attach_sampling_stage_release" not in source
-    assert "Diffusion kept hot" in source
+def test_memory_policy_keeps_l4_diffusion_hot_but_stages_text_encoder() -> None:
+    source = read("h3studio/runtime_v5.py")
+    assert "KEEP_DIFFUSION_FOR_VAE = 20 * GIB" in source
+    assert "KEEP_ALL_HOT = 40 * GIB" in source
+    assert "hot-diffusion-staged-text" in source
+    assert "strict-stage-handoff" in source
+    assert "resident-high-vram" in source
+    assert "attach_sampling_stage_release" in source
+    assert 'handoff = "keep-hot"' in source
 
 
-def test_model_loading_remains_on_demand_and_never_starts_at_import() -> None:
-    extension = (ROOT / "h3studio" / "extension_v3.py").read_text(encoding="utf-8")
-    performance = (ROOT / "h3studio" / "nodes" / "performance.py").read_text(encoding="utf-8")
-    assert "start_default_bundle_prewarm" not in extension
-    assert "Startup prewarm policy" not in extension
-    assert "H3StudioOptimizedLoader" in extension
-    # Component caches are allowed once the user actually runs the workflow;
-    # importing Studio must never launch model construction on its own.
-    assert "_CLIP_COMPONENT_CACHE" in performance
-    assert "_VAE_COMPONENT_CACHE" in performance
+def test_sampler_never_force_preloads_diffusion() -> None:
+    source = read("h3studio/runtime_v5.py")
+    assert "sampling_residency=native-comfy-manager" in source
+    assert "_remove_force_full_experiment" in source
+    # GPU prewarm is intentionally CLIP/VAE-only. Diffusion/LightX remains lazy
+    # so the sampler owns the one real diffusion load.
+    worker = source[source.index("def start_component_prewarm"):]
+    assert "_cached_unet(" not in worker
+    assert "diffusion=lazy" in worker
 
 
-def test_unlocked_seed_reservation_is_fail_open_after_real_queue_dispatch() -> None:
-    source = (ROOT / "web" / "js" / "seed_queue_extension.js").read_text(encoding="utf-8")
-    assert "api.queuePrompt" in source
-    assert "app.queuePrompt has already serialized" in source
+def test_component_construction_has_independent_locks() -> None:
+    source = read("h3studio/runtime_v5.py")
+    assert "_CLIP_LOCK = threading.RLock()" in source
+    assert "_VAE_LOCK = threading.RLock()" in source
+    assert "_UNET_LOCK = threading.RLock()" in source
+    assert "_CLIP_CACHE" in source
+    assert "_VAE_CACHE" in source
+    assert "_UNET_CACHE" in source
+
+
+def test_seed_has_one_authority_and_does_not_wrap_prompt_submission() -> None:
+    # Queue-time mutation was a second seed authority beside studio_extension's
+    # success-based advancement and could touch live graph state while /prompt
+    # was still in flight. v5 removes that extension completely.
+    assert not (ROOT / "web" / "js" / "seed_queue_extension.js").exists()
+    source = read("web/js/studio_extension.js")
+    assert "queueSeedAdvance" in source
+    assert "finishSeedAdvances" in source
+    assert "execution_success" in source
     assert "advanceSeedAfterGeneration" in source
-    assert "queued seed=" in source
-    assert "reserved next=" in source
-    assert "seed_locked === true" in source
-    assert "FAIL-OPEN ORDERING IS INTENTIONAL" in source
-    assert "generation continues" in source
-    dispatch = source.index("const request = originalQueuePrompt(number, data, options)")
-    reserve = source.index("reservations = reserveNextSeeds(data)")
-    assert dispatch < reserve
+    assert "api.queuePrompt =" not in source
 
 
-def test_preview_decoder_never_allocates_on_cuda() -> None:
-    source = (ROOT / "h3studio" / "preview_runtime_v4.py").read_text(encoding="utf-8")
-    assert "_PreviewWrapperV3" in source
+def test_preview_reuses_stable_model_patcher_identity() -> None:
+    source = read("h3studio/preview_runtime_v5.py")
+    assert "_PATCHER_CACHE" in source
+    assert "_stable_preview_clone" in source
+    assert 'return cached[1], "reused"' in source
+    assert "patcher_identity=%s" in source
+    attach = source[source.index("def attach("):]
+    assert "patched, identity = _stable_preview_clone(model, node_id)" in attach
+    assert "patched = model.clone()" not in attach
+
+
+def test_preview_has_zero_decoder_vram_and_zero_gpu_resize_compute() -> None:
+    source = read("h3studio/preview_runtime_v5.py")
     assert "gpu-decoder-residency=0" in source
+    assert "gpu-preview-compute=0" in source
+    assert 'to(device="cpu", dtype=torch.float32, copy=True)' in source
     assert "vae_device" not in source
-    assert "decoder_device" not in source
+    assert "queue.Queue(maxsize=1)" not in source  # inherited from v4, not duplicated
 
 
-def test_preview_drops_stale_backlog_and_keeps_latest_frame() -> None:
-    source = (ROOT / "h3studio" / "preview_runtime_v4.py").read_text(encoding="utf-8")
-    assert "queue.Queue(maxsize=1)" in source
-    assert "latest-only" in source
-    assert "get_nowait" in source
-    assert "put_nowait" in source
-    assert "LIVE_MAX_RESOLUTION = 448" in source
+def test_lightx_v1_official_recipe_is_unchanged() -> None:
+    source = read("h3studio/acceleration.py")
+    assert '"lightx_v1_fl2v_8"' in source
+    assert 'sampler="euler"' in source
+    assert 'steps=8' in source
+    assert 'shift_video=6.0' in source
+    assert 'shift_audio=3.0' in source
+    assert 'lora_strength=1.0' in source
+    assert "LIGHTX_V1_LORA_FILENAME" in source
 
 
-def test_v3_preview_preserves_existing_pagination_frontend() -> None:
-    source = (ROOT / "web" / "js" / "preview_extension.js").read_text(encoding="utf-8")
-    assert "Previous sampling preview" in source
-    assert "Next sampling preview" in source
-    assert "state.history.push(detail)" in source
+def test_node_audit_targets_v5() -> None:
+    source = read("tools/audit_nodes.py")
+    assert "extension_v5.py" in source
+    assert "extension_v3.py" not in source
