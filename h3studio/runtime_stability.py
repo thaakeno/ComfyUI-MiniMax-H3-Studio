@@ -178,7 +178,9 @@ def runtime_node_classes() -> tuple[type, type]:
 
             hot_policy = _keep_diffusion_hot_after_sampling(built_model)
             diagnostics = attach_sampling_diagnostics(built_model)
-            seed = int(getattr(getattr(studio_context, "state", None).generation, "seed", 0))
+            state = getattr(studio_context, "state", None)
+            generation = getattr(state, "generation", None)
+            seed = int(getattr(generation, "seed", 0))
             info = f"{info} | sampling_handoff={hot_policy} | runtime_diagnostics={diagnostics} | seed={seed}"
             LOGGER.info("[H3 Studio] Sampling request | seed=%d | %s", seed, hot_policy)
             return built_model, sampler, sigmas, info
