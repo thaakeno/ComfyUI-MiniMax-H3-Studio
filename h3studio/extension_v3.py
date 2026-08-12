@@ -1,14 +1,13 @@
 """ComfyUI registration surface for the L4-stable H3 runtime.
 
 The sampler/decode classes stay on the proven stable runtime. Conditioning keeps
-its isolated text-encoder stage, live preview stays off CUDA, and the maintained
-H3 bundle is constructed in the background as soon as ComfyUI imports Studio so
-the first prompt does not pay a multi-minute cold CLIP construction.
+its isolated text-encoder stage, live preview stays off CUDA, and model loading
+remains strictly on demand. The first generation pays only the normal selected
+model load; seed-only reruns reuse the hot diffusion model.
 """
 
 from __future__ import annotations
 
-import logging
 import os
 
 from .conditioning_fastpath import install_conditioning_fastpath
@@ -24,15 +23,13 @@ from .nodes.director import (
 )
 from .nodes.image_runtime import NODE_CLASS_MAPPINGS as IMAGE_NODE_CLASS_MAPPINGS
 from .nodes.image_runtime import NODE_DISPLAY_NAME_MAPPINGS as IMAGE_NODE_DISPLAY_NAME_MAPPINGS
-from .nodes.performance import H3StudioOptimizedLoader, start_default_bundle_prewarm
+from .nodes.performance import H3StudioOptimizedLoader
 from .nodes.save import NODE_CLASS_MAPPINGS as SAVE_NODE_CLASS_MAPPINGS
 from .nodes.save import NODE_DISPLAY_NAME_MAPPINGS as SAVE_NODE_DISPLAY_NAME_MAPPINGS
 from .preview_runtime_v4 import H3StudioTAEH3PreviewV4
 from .runtime_guards import install_runtime_guards
 from .runtime_stability import install_runtime_stability, runtime_node_classes
 from .web_routes import register_routes
-
-LOGGER = logging.getLogger(__name__)
 
 # Do not silently enable ComfyUI's disk-backed DynamicVRAM path merely because
 # host RAM is below 48 GiB. Normal RAM/pinned-memory behavior is the safe default
@@ -76,10 +73,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **IMAGE_NODE_DISPLAY_NAME_MAPPINGS,
     **SAVE_NODE_DISPLAY_NAME_MAPPINGS,
 }
-
-# This is deliberately asynchronous: server startup remains responsive, while
-# the first prompt either gets an already-warm bundle or waits for the one
-# in-flight construction instead of starting a second 15+ GiB load.
-LOGGER.info("[H3 Studio] Startup prewarm policy | %s", start_default_bundle_prewarm())
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
