@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from contextlib import contextmanager
@@ -16,9 +17,14 @@ from .image_runtime import H3StudioDecode
 from .loader import (
     AUTO_ANALYZER,
     DISABLED_IMAGE_VAE,
+    NONE_MODEL,
     SAME_AS_ANALYZER,
     H3StudioLoader,
     _resolve_text_encoder,
+    clip_choices,
+    fl2va_choices,
+    ref2va_choices,
+    vae_choices,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -28,6 +34,17 @@ _LOADER_CACHE_LOCK = threading.RLock()
 _LOADER_CACHE_KEY: tuple[str, ...] | None = None
 _LOADER_CACHE_VALUE: tuple[Any, ...] | None = None
 _PATH_PRIORITY_LOCK = threading.RLock()
+_PREWARM_STATE_LOCK = threading.RLock()
+_PREWARM_DONE = threading.Event()
+_PREWARM_THREAD: threading.Thread | None = None
+_PREWARM_KEY: tuple[str, ...] | None = None
+_PREWARM_STARTED = False
+_PREWARM_ERROR = ""
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = str(os.environ.get(name, "1" if default else "0")).strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def _full_path(category: str, name: str) -> str:
@@ -151,6 +168,28 @@ def _prefer_persistent_model_source(category: str, name: str):
             roots[:] = original
 
 
+def _loader_key(values: tuple[Any, ...]) -> tuple[str, ...]:
+    return tuple(map(str, values))
+
+
+def _wait_for_matching_prewarm(key: tuple[str, ...]) -> None:
+    """Reuse an in-flight startup construction instead of loading 20 GiB twice."""
+
+    with _PREWARM_STATE_LOCK:
+        thread = _PREWARM_THREAD
+        matches = bool(_PREWARM_STARTED and _PREWARM_KEY == key and not _PREWARM_DONE.is_set())
+    if not matches or thread is threading.current_thread():
+        return
+
+    started = time.perf_counter()
+    LOGGER.info(
+        "[H3 Studio] First prompt reached the loader while startup prewarm is still running; "
+        "waiting for the same bundle instead of constructing a duplicate."
+    )
+    _PREWARM_DONE.wait()
+    LOGGER.info("[H3 Studio] Startup bundle handoff ready after %.3fs wait", time.perf_counter() - started)
+
+
 class H3StudioOptimizedLoader(H3StudioLoader):
     """Reuse an unchanged H3 bundle and avoid pathological tmpfs cold loads."""
 
@@ -164,15 +203,19 @@ class H3StudioOptimizedLoader(H3StudioLoader):
         image_analyzer: str = AUTO_ANALYZER,
         prompt_writer: str = SAME_AS_ANALYZER,
     ):
-        key = tuple(map(str, (
-            fl2va_model,
-            ref2va_model,
-            text_encoder,
-            video_vae,
-            image_vae,
-            image_analyzer,
-            prompt_writer,
-        )))
+        key = _loader_key(
+            (
+                fl2va_model,
+                ref2va_model,
+                text_encoder,
+                video_vae,
+                image_vae,
+                image_analyzer,
+                prompt_writer,
+            )
+        )
+        _wait_for_matching_prewarm(key)
+
         global _LOADER_CACHE_KEY, _LOADER_CACHE_VALUE
         with _LOADER_CACHE_LOCK:
             if key == _LOADER_CACHE_KEY and _LOADER_CACHE_VALUE is not None:
@@ -266,3 +309,81 @@ class H3StudioFastDecode(H3StudioDecode):
         info = f"{info} VAE decode runtime: {residency.summary()}."
         LOGGER.info("[H3 Studio - Decode] %s", residency.summary())
         return images, decoded_frames, info, recommended_index
+
+
+def _default_loader_args() -> tuple[str, ...]:
+    """Resolve the maintained workflow's default model bundle without loading diffusion."""
+
+    fl_choices = fl2va_choices()
+    ref_choices = ref2va_choices()
+    clips = clip_choices()
+    vaes = vae_choices()
+    fl2va = next((value for value in fl_choices if value != NONE_MODEL), NONE_MODEL)
+    ref2va = next((value for value in ref_choices if value != NONE_MODEL), NONE_MODEL)
+    if not clips or not vaes or (fl2va == NONE_MODEL and ref2va == NONE_MODEL):
+        raise RuntimeError("default H3 bundle artifacts are not available")
+    return (
+        fl2va,
+        ref2va,
+        clips[0],
+        vaes[0],
+        DISABLED_IMAGE_VAE,
+        AUTO_ANALYZER,
+        SAME_AS_ANALYZER,
+    )
+
+
+def start_default_bundle_prewarm() -> str:
+    """Construct the default CLIP/VAE/bundle once in the background at startup.
+
+    The 32B H3 CLIP object can take minutes to construct from genuinely cold
+    Lightning storage. Doing that work as soon as the custom node is imported
+    hides the cold cost behind server startup / workflow setup. The normal loader
+    reuses the exact same bundle object, so there is no duplicate 15 GiB model.
+    Diffusion remains lazy and is not loaded by this prewarm.
+    """
+
+    global _PREWARM_STARTED, _PREWARM_THREAD, _PREWARM_KEY, _PREWARM_ERROR
+
+    if _env_flag("H3STUDIO_DISABLE_STARTUP_PREWARM"):
+        return "disabled-by-env"
+
+    with _PREWARM_STATE_LOCK:
+        if _PREWARM_STARTED:
+            return "already-started"
+        try:
+            args = _default_loader_args()
+        except Exception as exc:
+            _PREWARM_ERROR = f"{type(exc).__name__}: {exc}"
+            _PREWARM_DONE.set()
+            LOGGER.info("[H3 Studio] Startup bundle prewarm skipped: %s", _PREWARM_ERROR)
+            return "unavailable"
+
+        _PREWARM_STARTED = True
+        _PREWARM_KEY = _loader_key(args)
+        _PREWARM_DONE.clear()
+
+        def worker() -> None:
+            global _PREWARM_ERROR
+            started = time.perf_counter()
+            LOGGER.info(
+                "[H3 Studio] Startup bundle prewarm started | text_encoder=%s | video_vae=%s | diffusion=lazy",
+                args[2],
+                args[3],
+            )
+            try:
+                H3StudioOptimizedLoader.load(*args)
+            except Exception as exc:
+                _PREWARM_ERROR = f"{type(exc).__name__}: {exc}"
+                LOGGER.warning("[H3 Studio] Startup bundle prewarm failed nonfatally: %s", _PREWARM_ERROR)
+            else:
+                LOGGER.info(
+                    "[H3 Studio] Startup bundle prewarm complete in %.3fs; first prompt reuses the warm bundle",
+                    time.perf_counter() - started,
+                )
+            finally:
+                _PREWARM_DONE.set()
+
+        _PREWARM_THREAD = threading.Thread(target=worker, name="h3studio-startup-prewarm", daemon=True)
+        _PREWARM_THREAD.start()
+        return "background-started"
