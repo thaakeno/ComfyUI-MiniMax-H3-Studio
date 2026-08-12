@@ -19,16 +19,13 @@ from .nodes.preview import H3StudioTAEH3Preview
 from .nodes.save import NODE_CLASS_MAPPINGS as SAVE_NODE_CLASS_MAPPINGS
 from .nodes.save import NODE_DISPLAY_NAME_MAPPINGS as SAVE_NODE_DISPLAY_NAME_MAPPINGS
 from .runtime_guards import install_runtime_guards
-from .runtime_stability import (
-    H3StudioStableContextSamplingPreset,
-    H3StudioStableDecode,
-    install_runtime_stability,
-)
+from .runtime_stability import install_runtime_stability, runtime_node_classes
 from .web_routes import register_routes
 
 install_runtime_guards()
 install_runtime_stability()
 register_routes()
+H3StudioStableContextSamplingPreset, H3StudioStableDecode = runtime_node_classes()
 
 NODE_CLASS_MAPPINGS = {
     "H3StudioDirector": H3StudioDirector,
