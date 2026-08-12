@@ -11,6 +11,8 @@ from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 from typing import Any
 
+from .runtime_handoff import release_stage_patcher
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -89,6 +91,10 @@ def _vae_key(bundle: Any) -> tuple[Any, ...]:
     return str(getattr(bundle, "video_vae_name", "")), id(getattr(vae, "patcher", vae))
 
 
+def _release_video_vae(bundle: Any, label: str):
+    return release_stage_patcher(getattr(getattr(bundle, "video_vae", None), "patcher", None), label=label)
+
+
 def _reference_target_size(image: Any, reference_size: str, width: int, height: int) -> tuple[int, int]:
     from .nodes.image_runtime import CANVAS_MULTIPLE, REF_IMAGE_SHORT_EDGE
 
@@ -150,15 +156,22 @@ def _encode_prompt(bundle: Any, key: Hashable, build_tokens: Callable[[], Any]):
     cached = _PROMPT_CACHE.get(key)
     if cached is not None:
         return cached, "HIT", 0.0, "warm-cache"
+
     started = time.perf_counter()
     tokens = build_tokens()
     tokenized = time.perf_counter()
     conditioning = bundle.clip.encode_from_tokens_scheduled(tokens)
-    finished = time.perf_counter()
+    encoded = time.perf_counter()
     _PROMPT_CACHE.put(key, conditioning)
+
+    release = release_stage_patcher(getattr(bundle.clip, "patcher", None), label="text_encoder")
+    finished = time.perf_counter()
     tokenize_seconds = tokenized - started
-    encode_seconds = finished - tokenized
-    runtime = f"native-comfy-manager; tokenize={tokenize_seconds:.3f}s; encode={encode_seconds:.3f}s"
+    encode_seconds = encoded - tokenized
+    runtime = (
+        f"native-comfy-manager; tokenize={tokenize_seconds:.3f}s; encode={encode_seconds:.3f}s; "
+        f"{release.summary()}"
+    )
     return conditioning, "MISS", finished - started, runtime
 
 
@@ -227,8 +240,12 @@ def run_conditioning_pipeline(
     )
     fitted_source = _preview_black(width, height)
     reference_state = "N/A"
+    vae_handoff = "N/A"
 
     if runtime_mode == "text_to_image (FL2VA)":
+        # The previous prompt's final VAE decode may still be resident. Give the
+        # 32B text encoder a clean stage before asking Comfy to load it.
+        vae_handoff = _release_video_vae(bundle, "pre_text_vae").summary()
         conditioning, text_state, text_seconds, residency = _encode_prompt(
             bundle, (*prompt_key_base, "text-only"), lambda: bundle.clip.tokenize(prompt, images=[])
         )
@@ -241,6 +258,9 @@ def run_conditioning_pipeline(
             bundle, used_images[0], source_id, width, height, source_fit
         )
         reference_state = f"source_vae:{source_state}"
+        # Release after source encode (or clean up a previous decode on a cache
+        # hit) before the much larger Qwen stage starts.
+        vae_handoff = _release_video_vae(bundle, "source_vae").summary()
         conditioning, text_state, text_seconds, residency = _encode_prompt(
             bundle,
             (*prompt_key_base, "i2i", source_id, width, height, source_fit),
@@ -248,7 +268,10 @@ def run_conditioning_pipeline(
         )
         conditioning = node_helpers.conditioning_set_values(
             conditioning,
-            {"minimax_keyframes": [{"resolved_frame_index": 0, "latent": keyframe_latent}], "minimax_frame_count": natural_frames},
+            {
+                "minimax_keyframes": [{"resolved_frame_index": 0, "latent": keyframe_latent}],
+                "minimax_frame_count": natural_frames,
+            },
         )
         checkpoint_note = "Use an FL2VA checkpoint; frame 0 is the exact source anchor."
     else:
@@ -266,17 +289,23 @@ def run_conditioning_pipeline(
         prompt_key = (*prompt_key_base, "ref2va", signatures, reference_size)
         cached_prompt = _PROMPT_CACHE.get(prompt_key)
         resized_refs = []
+
+        # REF2VA's Qwen vision/text pass happens before its video-VAE reference
+        # encodes, so clear any VAE residency left by the previous generation.
+        _release_video_vae(bundle, "pre_reference_text_vae")
         if cached_prompt is None:
             resized_refs = [_reference_resize(image, width, height, reference_size)[0] for image in used_images]
             conditioning, text_state, text_seconds, residency = _encode_prompt(
                 bundle,
                 prompt_key,
                 lambda: bundle.clip.tokenize(
-                    prompt, minimax_ref_items=[{"type": "image", "data": image} for image in resized_refs]
+                    prompt,
+                    minimax_ref_items=[{"type": "image", "data": image} for image in resized_refs],
                 ),
             )
         else:
             conditioning, text_state, text_seconds, residency = cached_prompt, "HIT", 0.0, "warm-cache"
+
         ref_blocks, ref_states, ref_sizes = [], [], []
         for index, (image, image_id) in enumerate(zip(used_images, image_ids, strict=False)):
             resized = resized_refs[index] if index < len(resized_refs) else None
@@ -287,13 +316,14 @@ def run_conditioning_pipeline(
             ref_states.append(state)
             ref_sizes.append(f"{tw}x{th}")
         reference_state = f"reference_vae:{sum(state == 'HIT' for state in ref_states)}/{len(ref_states)} HIT"
+        vae_handoff = _release_video_vae(bundle, "reference_vae").summary()
         conditioning = node_helpers.conditioning_set_values(
-            conditioning, {"minimax_refs": ref_blocks, "minimax_frame_count": natural_frames}
+            conditioning,
+            {"minimax_refs": ref_blocks, "minimax_frame_count": natural_frames},
         )
         checkpoint_note = (
             f"Use a REF2VA checkpoint; {len(used_images)} ordered reference image(s) encoded as "
-            f"{', '.join(ref_sizes)} and exposed as <Picture 1> through <Picture {len(used_images)}>."
-        )
+            f"{', '.join(ref_sizes)} and exposed as <Picture 1> through <Picture {len(used_images)}>.")
 
     trained_note = (
         "beyond the documented 124-362-frame training range"
@@ -315,7 +345,7 @@ def run_conditioning_pipeline(
     )
     diagnostics = (
         f"text_conditioning={text_state} ({text_seconds:.3f}s) | reference_conditioning={reference_state} | "
-        f"latent_prepare={latent_state} | text_encoder_runtime={residency}"
+        f"latent_prepare={latent_state} | text_encoder_runtime={residency} | vae_handoff={vae_handoff}"
     )
     LOGGER.info("[H3 Studio] Conditioning stages\n  %s", diagnostics)
     return ConditioningStages(conditioning, latent, fitted_source, requested_frames, runtime_info, diagnostics)
