@@ -255,6 +255,7 @@ def _remove_sampling_release(model: Any) -> None:
 def _remove_force_full_experiment(model: Any) -> None:
     try:
         import comfy.patcher_extension
+
         from .runtime_stability import SAMPLING_RESIDENCY_WRAPPER_KEY
 
         model.remove_wrappers_with_key(
