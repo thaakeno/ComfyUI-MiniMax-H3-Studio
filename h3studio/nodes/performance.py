@@ -12,18 +12,16 @@ from typing import Any
 
 from ..lora_stack import apply_custom_lora_stack, normalize_custom_loras
 from ..performance import tmpfs_pressure_note, vae_full_stage
+from . import loader as loader_module
 from .director import H3StudioContextSamplingPreset
 from .image_runtime import H3StudioDecode
 from .loader import (
     AUTO_ANALYZER,
     DISABLED_IMAGE_VAE,
-    NONE_MODEL,
     SAME_AS_ANALYZER,
     H3StudioLoader,
     _resolve_text_encoder,
     clip_choices,
-    fl2va_choices,
-    ref2va_choices,
     vae_choices,
 )
 
@@ -34,10 +32,13 @@ _LOADER_CACHE_LOCK = threading.RLock()
 _LOADER_CACHE_KEY: tuple[str, ...] | None = None
 _LOADER_CACHE_VALUE: tuple[Any, ...] | None = None
 _PATH_PRIORITY_LOCK = threading.RLock()
+_COMPONENT_CACHE_LOCK = threading.RLock()
+_CLIP_COMPONENT_CACHE: dict[str, Any] = {}
+_VAE_COMPONENT_CACHE: dict[str, Any] = {}
+_COMPONENT_CACHE_INSTALLED = False
 _PREWARM_STATE_LOCK = threading.RLock()
 _PREWARM_DONE = threading.Event()
 _PREWARM_THREAD: threading.Thread | None = None
-_PREWARM_KEY: tuple[str, ...] | None = None
 _PREWARM_STARTED = False
 _PREWARM_ERROR = ""
 
@@ -168,30 +169,65 @@ def _prefer_persistent_model_source(category: str, name: str):
             roots[:] = original
 
 
-def _loader_key(values: tuple[Any, ...]) -> tuple[str, ...]:
-    return tuple(map(str, values))
+def _install_component_cache() -> None:
+    """Make H3 CLIP/VAE construction process-wide and reusable by every bundle."""
+
+    global _COMPONENT_CACHE_INSTALLED
+    with _COMPONENT_CACHE_LOCK:
+        if _COMPONENT_CACHE_INSTALLED:
+            return
+        original_clip_loader = loader_module._load_clip
+        original_vae_loader = loader_module._load_vae
+
+        def cached_clip_loader(name: str):
+            key = str(name)
+            with _COMPONENT_CACHE_LOCK:
+                cached = _CLIP_COMPONENT_CACHE.get(key)
+                if cached is not None:
+                    LOGGER.info("[H3 Studio] H3 text-encoder object cache hit | %s", key)
+                    return cached
+                # Keep the lock through construction. A foreground prompt that
+                # arrives during startup prewarm waits for this same object
+                # instead of starting a second 15+ GiB construction.
+                started = time.perf_counter()
+                value = original_clip_loader(name)
+                _CLIP_COMPONENT_CACHE[key] = value
+                LOGGER.info(
+                    "[H3 Studio] H3 text-encoder object cached | %s | %.3fs",
+                    key,
+                    time.perf_counter() - started,
+                )
+                return value
+
+        def cached_vae_loader(name: str):
+            key = str(name)
+            with _COMPONENT_CACHE_LOCK:
+                cached = _VAE_COMPONENT_CACHE.get(key)
+                if cached is not None:
+                    LOGGER.info("[H3 Studio] H3 VAE object cache hit | %s", key)
+                    return cached
+                started = time.perf_counter()
+                value = original_vae_loader(name)
+                _VAE_COMPONENT_CACHE[key] = value
+                LOGGER.info(
+                    "[H3 Studio] H3 VAE object cached | %s | %.3fs",
+                    key,
+                    time.perf_counter() - started,
+                )
+                return value
+
+        cached_clip_loader.__h3studio_component_cache__ = True
+        cached_vae_loader.__h3studio_component_cache__ = True
+        loader_module._load_clip = cached_clip_loader
+        loader_module._load_vae = cached_vae_loader
+        _COMPONENT_CACHE_INSTALLED = True
 
 
-def _wait_for_matching_prewarm(key: tuple[str, ...]) -> None:
-    """Reuse an in-flight startup construction instead of loading 20 GiB twice."""
-
-    with _PREWARM_STATE_LOCK:
-        thread = _PREWARM_THREAD
-        matches = bool(_PREWARM_STARTED and _PREWARM_KEY == key and not _PREWARM_DONE.is_set())
-    if not matches or thread is threading.current_thread():
-        return
-
-    started = time.perf_counter()
-    LOGGER.info(
-        "[H3 Studio] First prompt reached the loader while startup prewarm is still running; "
-        "waiting for the same bundle instead of constructing a duplicate."
-    )
-    _PREWARM_DONE.wait()
-    LOGGER.info("[H3 Studio] Startup bundle handoff ready after %.3fs wait", time.perf_counter() - started)
+_install_component_cache()
 
 
 class H3StudioOptimizedLoader(H3StudioLoader):
-    """Reuse an unchanged H3 bundle and avoid pathological tmpfs cold loads."""
+    """Reuse unchanged H3 objects and avoid pathological tmpfs cold loads."""
 
     @staticmethod
     def load(
@@ -203,19 +239,20 @@ class H3StudioOptimizedLoader(H3StudioLoader):
         image_analyzer: str = AUTO_ANALYZER,
         prompt_writer: str = SAME_AS_ANALYZER,
     ):
-        key = _loader_key(
-            (
-                fl2va_model,
-                ref2va_model,
-                text_encoder,
-                video_vae,
-                image_vae,
-                image_analyzer,
-                prompt_writer,
+        key = tuple(
+            map(
+                str,
+                (
+                    fl2va_model,
+                    ref2va_model,
+                    text_encoder,
+                    video_vae,
+                    image_vae,
+                    image_analyzer,
+                    prompt_writer,
+                ),
             )
         )
-        _wait_for_matching_prewarm(key)
-
         global _LOADER_CACHE_KEY, _LOADER_CACHE_VALUE
         with _LOADER_CACHE_LOCK:
             if key == _LOADER_CACHE_KEY and _LOADER_CACHE_VALUE is not None:
@@ -223,8 +260,6 @@ class H3StudioOptimizedLoader(H3StudioLoader):
                 return _LOADER_CACHE_VALUE
 
             resolved_text_encoder = _resolve_text_encoder(text_encoder)
-            # Diagnose before loading. Previously this warning ran only after a
-            # multi-minute CLIP construction had already completed.
             _storage_pressure_for_selection(
                 fl2va_model,
                 ref2va_model,
@@ -311,39 +346,15 @@ class H3StudioFastDecode(H3StudioDecode):
         return images, decoded_frames, info, recommended_index
 
 
-def _default_loader_args() -> tuple[str, ...]:
-    """Resolve the maintained workflow's default model bundle without loading diffusion."""
-
-    fl_choices = fl2va_choices()
-    ref_choices = ref2va_choices()
-    clips = clip_choices()
-    vaes = vae_choices()
-    fl2va = next((value for value in fl_choices if value != NONE_MODEL), NONE_MODEL)
-    ref2va = next((value for value in ref_choices if value != NONE_MODEL), NONE_MODEL)
-    if not clips or not vaes or (fl2va == NONE_MODEL and ref2va == NONE_MODEL):
-        raise RuntimeError("default H3 bundle artifacts are not available")
-    return (
-        fl2va,
-        ref2va,
-        clips[0],
-        vaes[0],
-        DISABLED_IMAGE_VAE,
-        AUTO_ANALYZER,
-        SAME_AS_ANALYZER,
-    )
-
-
 def start_default_bundle_prewarm() -> str:
-    """Construct the default CLIP/VAE/bundle once in the background at startup.
+    """Construct the default H3 text encoder and video VAE in the background.
 
-    The 32B H3 CLIP object can take minutes to construct from genuinely cold
-    Lightning storage. Doing that work as soon as the custom node is imported
-    hides the cold cost behind server startup / workflow setup. The normal loader
-    reuses the exact same bundle object, so there is no duplicate 15 GiB model.
-    Diffusion remains lazy and is not loaded by this prewarm.
+    Component-level caching is deliberate: the warm objects are reused even if
+    the workflow later selects a different FL2VA/REF2VA diffusion checkpoint.
+    Diffusion itself stays lazy so idle prewarm cannot consume another ~12 GiB.
     """
 
-    global _PREWARM_STARTED, _PREWARM_THREAD, _PREWARM_KEY, _PREWARM_ERROR
+    global _PREWARM_STARTED, _PREWARM_THREAD, _PREWARM_ERROR
 
     if _env_flag("H3STUDIO_DISABLE_STARTUP_PREWARM"):
         return "disabled-by-env"
@@ -352,33 +363,40 @@ def start_default_bundle_prewarm() -> str:
         if _PREWARM_STARTED:
             return "already-started"
         try:
-            args = _default_loader_args()
+            clips = clip_choices()
+            vaes = vae_choices()
+            if not clips or not vaes:
+                raise RuntimeError("default H3 text encoder or video VAE is unavailable")
+            text_encoder = _resolve_text_encoder(clips[0])
+            video_vae = vaes[0]
         except Exception as exc:
             _PREWARM_ERROR = f"{type(exc).__name__}: {exc}"
             _PREWARM_DONE.set()
-            LOGGER.info("[H3 Studio] Startup bundle prewarm skipped: %s", _PREWARM_ERROR)
+            LOGGER.info("[H3 Studio] Startup component prewarm skipped: %s", _PREWARM_ERROR)
             return "unavailable"
 
         _PREWARM_STARTED = True
-        _PREWARM_KEY = _loader_key(args)
         _PREWARM_DONE.clear()
 
         def worker() -> None:
             global _PREWARM_ERROR
             started = time.perf_counter()
             LOGGER.info(
-                "[H3 Studio] Startup bundle prewarm started | text_encoder=%s | video_vae=%s | diffusion=lazy",
-                args[2],
-                args[3],
+                "[H3 Studio] Startup component prewarm started | text_encoder=%s | video_vae=%s | diffusion=lazy",
+                text_encoder,
+                video_vae,
             )
             try:
-                H3StudioOptimizedLoader.load(*args)
+                with _prefer_persistent_model_source("text_encoders", text_encoder):
+                    loader_module._load_clip(text_encoder)
+                with _prefer_persistent_model_source("vae", video_vae):
+                    loader_module._load_vae(video_vae)
             except Exception as exc:
                 _PREWARM_ERROR = f"{type(exc).__name__}: {exc}"
-                LOGGER.warning("[H3 Studio] Startup bundle prewarm failed nonfatally: %s", _PREWARM_ERROR)
+                LOGGER.warning("[H3 Studio] Startup component prewarm failed nonfatally: %s", _PREWARM_ERROR)
             else:
                 LOGGER.info(
-                    "[H3 Studio] Startup bundle prewarm complete in %.3fs; first prompt reuses the warm bundle",
+                    "[H3 Studio] Startup component prewarm complete in %.3fs; first prompt reuses warm CLIP/VAE objects",
                     time.perf_counter() - started,
                 )
             finally:
