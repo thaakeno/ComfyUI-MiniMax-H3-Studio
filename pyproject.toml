@@ -52,3 +52,6 @@ extend-exclude = ["h3studio/nodes/image_runtime.py"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"h3studio/runtime_v7.py" = ["I001"]
