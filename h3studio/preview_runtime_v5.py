@@ -20,6 +20,7 @@ import weakref
 
 from .preview_runtime_v3 import DEFAULT_TAEH3, LEGACY_WRAPPER_KEYS, _first_h3_latent, _PreviewJob, _vae_choices
 from .preview_runtime_v4 import _PreviewWrapperV4
+from .runtime_trace import emit
 
 LOGGER = logging.getLogger(__name__)
 WRAPPER_KEY = "h3studio_taeh3_preview_v5"
@@ -33,6 +34,13 @@ def _stable_preview_clone(model, node_id: str):
     with _CACHE_LOCK:
         cached = _PATCHER_CACHE.get(key)
         if cached is not None and cached[0]() is model:
+            emit(
+                "preview.patcher.reuse",
+                node=node_id,
+                upstream_patcher_id=id(model),
+                preview_patcher_id=id(cached[1]),
+                model_id=id(getattr(model, "model", model)),
+            )
             return cached[1], "reused"
 
         patched = model.clone()
@@ -40,6 +48,7 @@ def _stable_preview_clone(model, node_id: str):
         def cleanup(_ref, cache_key=key):
             with _CACHE_LOCK:
                 _PATCHER_CACHE.pop(cache_key, None)
+            emit("preview.patcher.evict", node=node_id, upstream_patcher_id=key[0])
 
         try:
             upstream_ref = weakref.ref(model, cleanup)
@@ -50,6 +59,13 @@ def _stable_preview_clone(model, node_id: str):
                 return model
 
         _PATCHER_CACHE[key] = (upstream_ref, patched)
+        emit(
+            "preview.patcher.create",
+            node=node_id,
+            upstream_patcher_id=id(model),
+            preview_patcher_id=id(patched),
+            model_id=id(getattr(model, "model", model)),
+        )
         return patched, "new"
 
 
@@ -83,12 +99,19 @@ class _PreviewWrapperV5(_PreviewWrapperV4):
             self._reset_frontend(total_steps, run_id)
         except Exception as error:
             LOGGER.debug("[H3 Studio Preview v5] reset skipped: %s", error)
+            emit("preview.frontend_reset.error", run=run_id, error_type=type(error).__name__, error=str(error))
 
-        LOGGER.info(
-            "[H3 Studio Preview v5] sampler entered | node=%s | steps=%d | every=%d | latest-only=yes | decoder=cpu | gpu-decoder-residency=0",
-            self.node_id,
-            total_steps,
-            self.every,
+        emit(
+            "sampling.execute.begin",
+            memory=True,
+            models=True,
+            run=run_id,
+            node=self.node_id,
+            seed=seed,
+            steps=total_steps,
+            preview_every=self.every,
+            preview_decoder="cpu",
+            gpu_preview_compute=0,
         )
 
         def preview_callback(step, x0, x, callback_total_steps):
@@ -121,22 +144,57 @@ class _PreviewWrapperV5(_PreviewWrapperV4):
                     )
                 except Exception as error:
                     LOGGER.warning("[H3 Studio Preview v5] preview snapshot skipped: %s", error)
+                    emit(
+                        "preview.snapshot.error",
+                        run=run_id,
+                        step=int(step) + 1,
+                        total_steps=int(callback_total_steps),
+                        error_type=type(error).__name__,
+                        error=str(error),
+                    )
                     self._report_error(error, run_id)
 
             if callback is not None:
                 callback(step, x0, x, callback_total_steps)
 
-        return executor(
-            noise,
-            latent_image,
-            sampler,
-            sigmas,
-            denoise_mask,
-            preview_callback,
-            disable_pbar,
-            seed,
-            latent_shapes=latent_shapes,
+        try:
+            result = executor(
+                noise,
+                latent_image,
+                sampler,
+                sigmas,
+                denoise_mask,
+                preview_callback,
+                disable_pbar,
+                seed,
+                latent_shapes=latent_shapes,
+            )
+        except Exception as error:
+            emit(
+                "sampling.execute.error",
+                memory=True,
+                models=True,
+                run=run_id,
+                node=self.node_id,
+                seed=seed,
+                steps=total_steps,
+                elapsed_s=time.perf_counter() - sampling_started,
+                error_type=type(error).__name__,
+                error=str(error),
+            )
+            raise
+        emit(
+            "sampling.execute.end",
+            memory=True,
+            models=True,
+            run=run_id,
+            node=self.node_id,
+            seed=seed,
+            steps=total_steps,
+            elapsed_s=time.perf_counter() - sampling_started,
+            avg_step_s=(time.perf_counter() - sampling_started) / max(1, total_steps),
         )
+        return result
 
 
 class H3StudioTAEH3PreviewV5:
@@ -164,6 +222,7 @@ class H3StudioTAEH3PreviewV5:
     @staticmethod
     def attach(model, enabled, tiny_vae, max_resolution, jpeg_quality, preview_every_n_steps, unique_id=None):
         if not enabled:
+            emit("preview.attach.skip", node=str(unique_id or ""), reason="disabled")
             return (model,)
 
         import comfy.patcher_extension
@@ -171,6 +230,7 @@ class H3StudioTAEH3PreviewV5:
 
         checkpoint_path = folder_paths.get_full_path("vae_approx", tiny_vae)
         if not checkpoint_path:
+            emit("preview.attach.error", node=str(unique_id or ""), error="tiny_vae_missing", tiny_vae=tiny_vae)
             raise FileNotFoundError(
                 f"TAEH3 preview file '{tiny_vae}' was not found. Put it in ComfyUI/models/vae_approx/."
             )
@@ -191,13 +251,21 @@ class H3StudioTAEH3PreviewV5:
                 every=max(1, int(preview_every_n_steps)),
             ),
         )
-        LOGGER.info(
-            "[H3 Studio Preview v5] attached | node=%s | patcher_identity=%s | decoder=%s | max=%d | every=%d | latest-only=yes | cpu-decoder=yes | gpu-decoder-residency=0",
-            node_id,
-            identity,
-            tiny_vae,
-            int(max_resolution),
-            max(1, int(preview_every_n_steps)),
+        emit(
+            "preview.attach",
+            memory=True,
+            models=True,
+            node=node_id,
+            patcher_identity=identity,
+            upstream_patcher_id=id(model),
+            preview_patcher_id=id(patched),
+            model_id=id(getattr(model, "model", model)),
+            decoder=tiny_vae,
+            max_resolution=int(max_resolution),
+            jpeg_quality=int(jpeg_quality),
+            every=max(1, int(preview_every_n_steps)),
+            decoder_device="cpu",
+            gpu_decoder_residency=0,
         )
         return (patched,)
 
