@@ -5,8 +5,8 @@ memory-constrained GPUs those stages should not compete for residency. Current
 ComfyUI intentionally keeps dynamic models around for other dynamic models, so
 Studio explicitly asks the *public Comfy manager* to release a completed stage.
 
-This module never calls ModelPatcher.partially_unload(), never preloads the next
-stage, and never changes quantization or model math. The next stage is still
+This module never performs direct partial patcher unloads, never preloads the
+next stage, and never changes quantization or model math. The next stage is still
 loaded normally by ComfyUI at the point where it is actually used.
 """
 
