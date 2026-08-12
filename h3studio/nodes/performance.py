@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
+from pathlib import Path
 from typing import Any
 
 from ..lora_stack import apply_custom_lora_stack, normalize_custom_loras
-from ..performance import prewarm_diffusion_model, prewarm_vae, tmpfs_pressure_note
+from ..performance import attach_sampling_residency_policy, tmpfs_pressure_note, vae_full_stage
 from .director import H3StudioContextSamplingPreset
 from .image_runtime import H3StudioDecode
 from .loader import (
@@ -37,6 +39,26 @@ def _full_path(category: str, name: str) -> str:
         return str(folder_paths.get_full_path(category, name) or "")
     except Exception:
         return ""
+
+
+def _artifact_bytes(category: str, names: list[str]) -> int:
+    """Return unique on-disk bytes for selected artifacts when resolvable."""
+
+    total = 0
+    seen: set[str] = set()
+    for name in names:
+        path = _full_path(category, name)
+        if not path:
+            continue
+        try:
+            resolved = str(Path(path).resolve())
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            total += int(Path(resolved).stat().st_size)
+        except OSError:
+            continue
+    return total
 
 
 def _storage_pressure_for_selection(
@@ -109,7 +131,7 @@ class H3StudioOptimizedLoader(H3StudioLoader):
 
 
 class H3StudioOptimizedContextSamplingPreset(H3StudioContextSamplingPreset):
-    """Apply acceleration + custom LoRAs, then pre-materialize the H3 model."""
+    """Apply acceleration + custom LoRAs, then defer residency to sampler preparation."""
 
     def build(self, model, studio_context):
         profile = str(studio_context.state.generation.sampling_profile)
@@ -119,10 +141,15 @@ class H3StudioOptimizedContextSamplingPreset(H3StudioContextSamplingPreset):
 
         accelerated = profile in LIGHTX_PROFILES or is_pdd_profile(profile)
         reserved: list[str] = []
+        adapter_names: list[str] = []
         if profile in LIGHTX_PROFILES:
-            reserved.append(LIGHTX_PROFILES[profile].lora_filename)
+            filename = LIGHTX_PROFILES[profile].lora_filename
+            reserved.append(filename)
+            adapter_names.append(filename)
         if profile in PDD_PROFILES:
-            reserved.append(PDD_PROFILES[profile].lora_filename)
+            filename = PDD_PROFILES[profile].lora_filename
+            reserved.append(filename)
+            adapter_names.append(filename)
 
         if custom_specs and not accelerated:
             # Base sampling creates a shifted ModelPatcher clone. Apply custom
@@ -147,23 +174,40 @@ class H3StudioOptimizedContextSamplingPreset(H3StudioContextSamplingPreset):
             else:
                 info = f"{info} | custom_loras=none"
 
-        residency = prewarm_diffusion_model(built_model)
+        adapter_names.extend(spec.name for spec in custom_specs)
+        adapter_bytes = _artifact_bytes("loras", adapter_names)
+
+        # Do not eagerly force the transformer onto the GPU here. ComfyUI has
+        # not yet calculated the real activation reservation, so an eager full
+        # load can be immediately evicted and loaded a second time at KSampler's
+        # ``Model Initializing`` boundary. Attach an idempotent PREPARE_SAMPLING
+        # wrapper to this *same stable patcher* instead; it decides full-vs-
+        # dynamic residency once, using the actual latent/conditioning budget.
+        residency = attach_sampling_residency_policy(
+            built_model,
+            adapter_bytes=adapter_bytes,
+            profile=profile,
+        )
         info = f"{info} | {residency.summary()}"
         LOGGER.info("[H3 Studio] Sampling ready\n  %s", info)
         return built_model, sampler, sigmas, info
 
 
 class H3StudioFastDecode(H3StudioDecode):
-    """Fully materialize the selected VAE before H3's internal tiled decoder."""
+    """Decode with one native full-VAE handoff instead of eager double loading."""
 
     def decode(self, samples, vae):
-        # H3's decoder is a 36-layer ViT and performs many spatial tile passes.
-        # If DynamicVRAM leaves the VAE partially resident, each tile can stream
-        # the same weights again. A 5.2 GiB VAE fits comfortably on a 20+ GiB
-        # GPU once the diffusion model is evicted, so force that stage handoff.
-        residency = prewarm_vae(vae)
-        result = super().decode(samples, vae)
+        # ComfyUI's VAE.decode already knows the exact H3 activation budget and
+        # the H3 video VAE already owns its spatial/temporal tiling. Temporarily
+        # requesting native full residency at that exact boundary keeps the
+        # ~5 GiB decoder weights resident across all internal tile passes without
+        # the previous eager-prewarm -> second manager-load cycle.
+        started = time.perf_counter()
+        with vae_full_stage(vae, label="vae_decode") as residency:
+            result = super().decode(samples, vae)
+        elapsed = time.perf_counter() - started
         images, decoded_frames, info, recommended_index = result
-        info = f"{info} VAE residency: {residency.summary()}."
-        LOGGER.info("[H3 Studio - Decode] residency | %s", residency.summary())
+        residency.load_seconds = elapsed
+        info = f"{info} VAE decode runtime: {residency.summary()}."
+        LOGGER.info("[H3 Studio - Decode] %s", residency.summary())
         return images, decoded_frames, info, recommended_index
