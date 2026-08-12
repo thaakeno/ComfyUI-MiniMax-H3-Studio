@@ -8,22 +8,26 @@ All notable changes are recorded here. The format follows Keep a Changelog; vers
 
 - Added the official LightX v1.0 FL2V eight-step ComfyUI profile while retaining the legacy Kijai v0.1 four-step recipes.
 - Added a persisted Director **Custom LoRAs** stack with installed-file discovery, up to six ordered H3-compatible adapters, per-LoRA enable/strength controls, refresh/reorder/remove actions, and exact artifact diagnostics.
-- Added stage-residency diagnostics for the H3 32B text encoder, final patched diffusion model, and VAE plus host-RAM warnings when large selected model files live in `/dev/shm`.
+- Added passive stage-residency diagnostics for the H3 32B text encoder, patched diffusion model, sampler steps, and H3 VAE, including CUDA allocation/reservation, host availability/RSS, process disk reads, pinned-memory totals, loaded-size telemetry, and current DynamicVRAM model state.
+- Added manager-safe sequential H3 stage handoffs, with `H3STUDIO_DISABLE_STAGE_HANDOFFS=1` available for controlled A/B testing without reverting code.
 
 ### Fixed
 
 - Recovered the alpha.13 flattened-latent TAEH3 preview, qualified preview IDs, Qwen helper-release behavior, compact conditioning prompt, Director size guard, release tooling, and regression coverage after the README-history rewrite dropped them from `main`.
-- Fully materializes the 32B text encoder only on conditioning cache misses, then targets it for release before diffusion, avoiding repeated DynamicVRAM layer streaming while keeping cache hits unchanged.
-- Fully materializes the final LightX/PDD/custom-LoRA-patched H3 transformer before KSampler so first materialization is no longer deferred into an opaque per-step `Model Initializing` path when the model fits.
-- Fully materializes the selected H3 VAE before the unchanged tiled decode path, targeting the multi-minute failure mode where a partially resident ViT3D decoder streams the same weights again for every spatial tile.
+- Removed the accelerated-run one-preview suppression. TAEH3 now honors `preview_every_n_steps` exactly, including every denoising step when set to `1`, decodes through the VAE device, bounds asynchronous JPEG/websocket work, and drops its tiny-decoder device residency immediately after sampling.
+- Kept the native `encode_from_tokens_scheduled(...)` path for H3's 32B conditioning encoder, then uses ComfyUI's targeted manager unload only after a cache miss has finished and its conditioning is cached. Exact prompt-cache hits still skip the encoder entirely.
+- Prevented completed giant H3 stages from lingering into the next sequential stage on DynamicVRAM systems: source/reference VAE residency is released before the 32B encoder where required, the encoder is released after conditioning, the transformer is released after denoising, and the final VAE is released after exact decode.
+- Removed the experimental force-full transformer preparation policy after real L4 logs showed it could materialize the model and still be followed by another native `Model Initializing` pass.
+- Current ComfyUI H3 chunked VAE I/O now runs through the native core decode path without Studio forcing `disable_offload`; old cores retain an explicit diagnostic/fallback rather than silently pretending to have the upstream memory fix.
 - Preserves every previous bypass-forward injection when another LoRA is stacked, so a custom style/character LoRA cannot silently replace the active LightX adapter.
 - Rejects duplicate use of the active acceleration artifact through the custom-LoRA stack and rejects FL2V LightX profiles on REF2VA routes.
 - Reuses an unchanged process-level H3 model bundle and keeps acceleration/custom-LoRA patch stacks bounded and cached across ordinary prompt/seed reruns.
 
 ### Changed
 
-- Performance ownership is now stage-scoped rather than globally forcing a VRAM mode: full-residency requests are nonfatal and fall back to normal ComfyUI DynamicVRAM when the complete stage cannot fit.
-- Kept MiniMax H3's upstream VAE tile geometry, chunking, temporal attention, frame-selection semantics, and final decode pixels unchanged; the decode optimization only changes model residency before that path.
+- ComfyUI remains the owner of every model load and offload decision while a stage is executing. Studio no longer preloads the text encoder or transformer and never calls direct patcher partial-unload APIs; it only requests a targeted manager unload after a completed sequential stage.
+- On low-host-RAM systems Studio enables ComfyUI's `fast_disk` preference unless explicitly disabled, while runtime diagnostics make its actual effect measurable instead of assuming it is universally faster.
+- Kept MiniMax H3's upstream VAE geometry, temporal semantics, frame selection, and final pixels unchanged. When `comfy_has_chunked_io` is present, native ComfyUI owns the chunked output buffers and memory behavior.
 - Removed internal `plans.md`, `prompt.md`, `implement.md`, and stale `documentation.md` from the public repository surface.
 
 ## [0.1.0-alpha.13] - 2026-08-11
