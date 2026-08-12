@@ -25,14 +25,18 @@ def test_lightning_does_not_auto_enable_fast_disk() -> None:
     assert 'H3STUDIO_DISABLE_AUTO_FAST_DISK", "1"' in source
 
 
-def test_conditioning_isolates_full_text_encoder_only_on_cache_miss() -> None:
+def test_conditioning_has_exactly_one_scheduled_text_encoder_load_owner() -> None:
     source = (ROOT / "h3studio" / "conditioning_fastpath.py").read_text(encoding="utf-8")
-    assert "force_full_load=True" in source
+    assert "single-scheduled-text-encode" in source
+    assert "encode_from_tokens_scheduled" in source
     assert "release_stage_patcher" in source
     assert "pre_text_diffusion" in source
     assert "text_encoder" in source
     assert '"HIT", 0.0, "warm-cache; diffusion=keep-hot"' in source
-    assert "encode_from_tokens_scheduled" in source
+    # CLIP.encode_from_tokens_scheduled owns model loading internally. A second
+    # explicit preload was the 2x 14.6 GiB I/O regression on the L4.
+    assert "force_full_load=True" not in source
+    assert "load_models_gpu([patcher]" not in source
 
 
 def test_sampling_keeps_diffusion_hot_until_next_conditioning_miss() -> None:
