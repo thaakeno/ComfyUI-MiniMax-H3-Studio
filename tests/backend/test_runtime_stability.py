@@ -6,9 +6,10 @@ from types import ModuleType, SimpleNamespace
 from h3studio import runtime_stability
 
 
-def test_accelerated_preview_is_intentionally_sparse() -> None:
-    assert runtime_stability.accelerated_preview_steps(4) == frozenset({0})
-    assert runtime_stability.accelerated_preview_steps(8) == frozenset({0})
+def test_accelerated_preview_no_longer_suppresses_requested_steps() -> None:
+    assert runtime_stability.accelerated_preview_steps(0) == frozenset()
+    assert runtime_stability.accelerated_preview_steps(4) == frozenset(range(4))
+    assert runtime_stability.accelerated_preview_steps(8) == frozenset(range(8))
     assert runtime_stability.accelerated_preview_steps(20) == frozenset(range(20))
 
 
