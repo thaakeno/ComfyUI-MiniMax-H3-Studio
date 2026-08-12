@@ -43,6 +43,30 @@ def test_sampling_keeps_diffusion_hot_until_next_conditioning_miss() -> None:
     assert "Diffusion kept hot" in source
 
 
+def test_startup_prewarm_reuses_clip_and_vae_components_without_loading_diffusion() -> None:
+    extension = (ROOT / "h3studio" / "extension_v3.py").read_text(encoding="utf-8")
+    performance = (ROOT / "h3studio" / "nodes" / "performance.py").read_text(encoding="utf-8")
+    assert "start_default_bundle_prewarm" in extension
+    assert "Startup prewarm policy" in extension
+    assert "_CLIP_COMPONENT_CACHE" in performance
+    assert "_VAE_COMPONENT_CACHE" in performance
+    assert "loader_module._load_clip = cached_clip_loader" in performance
+    assert "loader_module._load_vae = cached_vae_loader" in performance
+    assert "diffusion=lazy" in performance
+    assert "H3STUDIO_DISABLE_STARTUP_PREWARM" in performance
+
+
+def test_unlocked_seed_is_reserved_at_queue_time_not_waiting_for_execution_success() -> None:
+    source = (ROOT / "web" / "js" / "seed_queue_extension.js").read_text(encoding="utf-8")
+    assert "api.queuePrompt" in source
+    assert "app.queuePrompt has already serialized" in source
+    assert "reserveNextSeeds(data)" in source
+    assert "advanceSeedAfterGeneration" in source
+    assert "queued seed=" in source
+    assert "reserved next=" in source
+    assert "seed_locked === true" in source
+
+
 def test_preview_decoder_never_allocates_on_cuda() -> None:
     source = (ROOT / "h3studio" / "preview_runtime_v4.py").read_text(encoding="utf-8")
     assert "_PreviewWrapperV3" in source
