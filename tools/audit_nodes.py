@@ -8,10 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [
-    # extension.py is a compatibility shim. Audit the active concrete v6
+    # extension.py is a compatibility shim. Audit the active concrete v7
     # registration surface so static checks match what ComfyUI imports.
     ROOT / "h3studio" / "extension.py",
-    ROOT / "h3studio" / "extension_v6.py",
+    ROOT / "h3studio" / "extension_v7.py",
     ROOT / "h3studio" / "nodes" / "benchmark.py",
     ROOT / "h3studio" / "nodes" / "comparison.py",
     ROOT / "h3studio" / "nodes" / "image_runtime.py",
