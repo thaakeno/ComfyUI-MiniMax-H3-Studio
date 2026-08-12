@@ -335,8 +335,8 @@ def attach_sampling_residency_policy(model: Any, *, adapter_bytes: int = 0, prof
     """
 
     try:
-        import comfy.patcher_extension
         import comfy.model_management as mm
+        import comfy.patcher_extension
 
         model.remove_wrappers_with_key(
             comfy.patcher_extension.WrappersMP.PREPARE_SAMPLING,
@@ -375,14 +375,14 @@ def vae_full_stage(vae: Any, *, label: str = "vae"):
         yield ResidencyResult(label, "unavailable", detail="no_vae")
         return
     old = bool(getattr(vae, "disable_offload", False))
-    setattr(vae, "disable_offload", True)
+    vae.disable_offload = True
     result = ResidencyResult(label, "native-full-stage", model_bytes=_model_size(getattr(vae, "patcher", None)))
     started = time.perf_counter()
     try:
         yield result
     finally:
         result.load_seconds = time.perf_counter() - started
-        setattr(vae, "disable_offload", old)
+        vae.disable_offload = old
 
 
 def prewarm_diffusion_model(model: Any) -> ResidencyResult:
