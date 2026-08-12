@@ -120,6 +120,7 @@ export function defaultState() {
       route: "auto",
       seed: 0,
       seed_locked: false,
+      seed_queue_reservations: 0,
       aspect_ratio: "1:1",
       megapixels: 1,
       custom_width: 1024,
@@ -217,6 +218,7 @@ export function normalizeState(value) {
   generation.route = choice(generation.route, ["auto", "fl2va", "ref2va"], "auto");
   generation.seed = Math.max(0, Math.trunc(Number(generation.seed) || 0));
   generation.seed_locked = generation.seed_locked === true;
+  generation.seed_queue_reservations = Math.max(0, Math.trunc(Number(generation.seed_queue_reservations) || 0));
   generation.aspect_ratio = choice(generation.aspect_ratio, Object.keys(ASPECT_RATIOS), "1:1");
   generation.megapixels = clamp(generation.megapixels, MIN_MEGAPIXELS, MAX_MEGAPIXELS, 1);
   generation.custom_width = Math.round(clamp(generation.custom_width, 32, 16384, 1024));
@@ -292,12 +294,47 @@ export function parseState(value) {
   }
 }
 
-export function advanceSeedAfterGeneration(generation, randomizer) {
-  const current = Math.max(0, Math.trunc(Number(generation?.seed) || 0));
-  if (generation?.seed_locked === true) return { ...generation, seed: current, seed_locked: true };
+function nextSeedValue(current, randomizer) {
   let next = Math.max(0, Math.trunc(Number(randomizer?.()) || 0)) % Number.MAX_SAFE_INTEGER;
   if (next === current) next = (current + 1) % Number.MAX_SAFE_INTEGER;
-  return { ...generation, seed: next, seed_locked: false };
+  return next;
+}
+
+export function reserveSeedAfterQueue(generation, randomizer) {
+  const current = Math.max(0, Math.trunc(Number(generation?.seed) || 0));
+  if (generation?.seed_locked === true) {
+    return { ...generation, seed: current, seed_locked: true, seed_queue_reservations: 0 };
+  }
+  const reservations = Math.max(0, Math.trunc(Number(generation?.seed_queue_reservations) || 0));
+  return {
+    ...generation,
+    seed: nextSeedValue(current, randomizer),
+    seed_locked: false,
+    seed_queue_reservations: reservations + 1,
+  };
+}
+
+export function releaseSeedQueueReservation(generation) {
+  const current = Math.max(0, Math.trunc(Number(generation?.seed) || 0));
+  const reservations = Math.max(0, Math.trunc(Number(generation?.seed_queue_reservations) || 0));
+  return {
+    ...generation,
+    seed: current,
+    seed_queue_reservations: Math.max(0, reservations - 1),
+  };
+}
+
+export function advanceSeedAfterGeneration(generation, randomizer) {
+  const current = Math.max(0, Math.trunc(Number(generation?.seed) || 0));
+  if (generation?.seed_locked === true) return { ...generation, seed: current, seed_locked: true, seed_queue_reservations: 0 };
+  const reservations = Math.max(0, Math.trunc(Number(generation?.seed_queue_reservations) || 0));
+  if (reservations > 0) {
+    // v7 reserves the next visible seed immediately after /prompt accepts the
+    // current serialized prompt. The legacy execution_success path still calls
+    // this function, so consume one reservation without advancing a second time.
+    return { ...generation, seed: current, seed_locked: false, seed_queue_reservations: reservations - 1 };
+  }
+  return { ...generation, seed: nextSeedValue(current, randomizer), seed_locked: false, seed_queue_reservations: 0 };
 }
 
 export function restorePersistedState(primary, backup) {
