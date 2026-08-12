@@ -62,6 +62,58 @@ def accelerated_preview_steps(total_steps: int) -> frozenset[int]:
     return frozenset(range(max(0, int(total_steps))))
 
 
+def _install_conditioning_diagnostics() -> bool:
+    """Observe cache misses around the native CLIP encode without preloading it."""
+
+    try:
+        from . import conditioning_cache
+        from .runtime_diagnostics import runtime_snapshot
+    except Exception as exc:
+        LOGGER.debug("[H3 Studio Runtime] Conditioning diagnostics unavailable: %s", exc)
+        return False
+
+    original = conditioning_cache._encode_prompt
+    if bool(getattr(original, "__h3studio_runtime_diagnostics__", False)):
+        return True
+
+    def diagnosed_encode(bundle, key, build_tokens):
+        # Preserve the zero-work cache-hit path: checking the same bounded cache
+        # here avoids adding psutil/CUDA queries to unchanged-prompt reruns.
+        cached = conditioning_cache._PROMPT_CACHE.get(key)
+        if cached is not None:
+            return cached, "HIT", 0.0, "warm-cache"
+
+        import time
+
+        patcher = getattr(getattr(bundle, "clip", None), "patcher", None)
+        before = runtime_snapshot("conditioning.encode_request.before", patcher=patcher)
+        started = time.perf_counter()
+        result = original(bundle, key, build_tokens)
+        runtime_snapshot(
+            "conditioning.encode_request.after",
+            patcher=patcher,
+            previous=before,
+            elapsed=time.perf_counter() - started,
+            detail=f"cache={result[1]} {result[3]}",
+        )
+        return result
+
+    diagnosed_encode.__h3studio_runtime_diagnostics__ = True
+    conditioning_cache._encode_prompt = diagnosed_encode
+    return True
+
+
+def _log_comfy_runtime_identity() -> None:
+    try:
+        import comfy
+
+        path = str(getattr(comfy, "__file__", "unknown"))
+        version = str(getattr(comfy, "__version__", "unknown"))
+        LOGGER.info("[H3 Studio] Active ComfyUI import | version=%s | path=%s", version, path)
+    except Exception as exc:
+        LOGGER.debug("[H3 Studio] Could not report ComfyUI import identity: %s", exc)
+
+
 def _remove_experimental_sampling_residency(model: object) -> bool:
     """Remove Studio's old force-full PREPARE_SAMPLING experiment."""
 
@@ -92,7 +144,17 @@ def runtime_node_classes() -> tuple[type, type]:
         """Keep acceleration/LoRA caching while leaving diffusion residency to ComfyUI."""
 
         def build(self, model, studio_context):
+            import time
+
+            before = runtime_snapshot("sampling_profile.before", patcher=model)
+            started = time.perf_counter()
             built_model, sampler, sigmas, info = super().build(model, studio_context)
+            runtime_snapshot(
+                "sampling_profile.after",
+                patcher=built_model,
+                previous=before,
+                elapsed=time.perf_counter() - started,
+            )
             if not _env_flag("H3STUDIO_EXPERIMENTAL_FULL_DIFFUSION"):
                 _remove_experimental_sampling_residency(built_model)
                 info = f"{info} | sampling_residency=native-comfy-manager"
@@ -152,3 +214,5 @@ def install_runtime_stability() -> None:
         return
     _INSTALLED = True
     configure_low_ram_fast_disk()
+    _log_comfy_runtime_identity()
+    _install_conditioning_diagnostics()
