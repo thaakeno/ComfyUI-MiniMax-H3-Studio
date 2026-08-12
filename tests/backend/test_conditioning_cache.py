@@ -56,6 +56,9 @@ class FakeImage:
     def data_ptr(self):
         return self.pointer
 
+    def __getitem__(self, key):
+        return self
+
 
 def _runtime_stubs(monkeypatch):
     runtime = ModuleType("h3studio.nodes.image_runtime")
