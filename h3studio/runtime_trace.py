@@ -53,6 +53,22 @@ def _clean(value: Any) -> str:
     return text.replace(" | ", "/")
 
 
+def _process_io_fields() -> dict[str, Any]:
+    try:
+        with open("/proc/self/io", encoding="utf-8") as handle:
+            values = {}
+            for line in handle:
+                key, _, value = line.partition(":")
+                if key in {"read_bytes", "write_bytes"}:
+                    values[key] = int(value.strip())
+        return {
+            "io_read_gib": round(values.get("read_bytes", 0) / GIB, 3),
+            "io_write_gib": round(values.get("write_bytes", 0) / GIB, 3),
+        }
+    except Exception:
+        return {}
+
+
 def _memory_fields() -> dict[str, Any]:
     if not memory_enabled():
         return {}
@@ -67,6 +83,19 @@ def _memory_fields() -> dict[str, Any]:
         fields["rss_gib"] = round(int(process.memory_info().rss) / GIB, 3)
     except Exception:
         pass
+
+    try:
+        import comfy.model_management as mm
+
+        fields["pinned_gib"] = round(int(getattr(mm, "TOTAL_PINNED_MEMORY", 0)) / GIB, 3)
+        fields["pin_budget_gib"] = round(max(0, int(getattr(mm, "MAX_PINNED_MEMORY", 0))) / GIB, 3)
+        args = getattr(mm, "args", None)
+        if args is not None:
+            fields["fast_disk"] = bool(getattr(args, "fast_disk", False))
+    except Exception:
+        pass
+
+    fields.update(_process_io_fields())
 
     try:
         import torch
