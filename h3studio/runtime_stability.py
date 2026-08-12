@@ -178,8 +178,9 @@ def runtime_node_classes() -> tuple[type, type]:
 
             hot_policy = _keep_diffusion_hot_after_sampling(built_model)
             diagnostics = attach_sampling_diagnostics(built_model)
-            info = f"{info} | sampling_handoff={hot_policy} | runtime_diagnostics={diagnostics}"
-            LOGGER.info("[H3 Studio] Diffusion warm-rerun policy | %s", hot_policy)
+            seed = int(getattr(getattr(studio_context, "state", None).generation, "seed", 0))
+            info = f"{info} | sampling_handoff={hot_policy} | runtime_diagnostics={diagnostics} | seed={seed}"
+            LOGGER.info("[H3 Studio] Sampling request | seed=%d | %s", seed, hot_policy)
             return built_model, sampler, sigmas, info
 
     class H3StudioStableDecode(H3StudioFastDecode):
@@ -207,8 +208,6 @@ def runtime_node_classes() -> tuple[type, type]:
                     )
                     result = super().decode(samples, vae)
             finally:
-                # Release only the final VAE. The diffusion transformer is kept
-                # hot for seed-only reruns and is evicted on the next cache miss.
                 release = release_stage_patcher(patcher, label="final_vae")
                 elapsed = time.perf_counter() - started
                 runtime_snapshot(
