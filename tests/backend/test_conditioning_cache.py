@@ -6,6 +6,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 import h3studio.conditioning_cache as cache
+from h3studio.runtime_handoff import StageReleaseResult
 
 
 class FakeClip:
@@ -131,6 +132,64 @@ def test_prompt_cache_invalidates_for_encoder_and_model(monkeypatch) -> None:
         assert "text_conditioning=MISS" in result.diagnostics
 
 
+def test_prompt_miss_releases_text_encoder_but_cache_hit_does_not(monkeypatch) -> None:
+    bundle = FakeBundle()
+    releases = []
+
+    def release(patcher, *, label):
+        releases.append((patcher, label))
+        return StageReleaseResult(label, "released")
+
+    monkeypatch.setattr(cache, "release_stage_patcher", release)
+    first = cache._encode_prompt(bundle, ("prompt",), lambda: ("tokens",))
+    second = cache._encode_prompt(bundle, ("prompt",), lambda: ("should-not-run",))
+
+    assert first[1] == "MISS"
+    assert second[1] == "HIT"
+    assert bundle.clip.encode_calls == 1
+    assert releases == [(bundle.clip.patcher, "text_encoder")]
+    assert "text_encoder_handoff=released" in first[3]
+
+
+def test_i2i_releases_source_vae_before_text_encoder(monkeypatch) -> None:
+    _runtime_stubs(monkeypatch)
+    monkeypatch.setattr(cache, "_preview_black", lambda width, height: None)
+    order = []
+    bundle = FakeBundle()
+    image = FakeImage(1)
+
+    original_vae_encode = bundle.video_vae.encode
+    original_clip_encode = bundle.clip.encode_from_tokens_scheduled
+
+    def vae_encode(value):
+        order.append("vae-encode")
+        return original_vae_encode(value)
+
+    def clip_encode(tokens):
+        order.append("text-encode")
+        return original_clip_encode(tokens)
+
+    def release(patcher, *, label):
+        order.append(f"release:{label}")
+        return StageReleaseResult(label, "released")
+
+    bundle.video_vae.encode = vae_encode
+    bundle.clip.encode_from_tokens_scheduled = clip_encode
+    monkeypatch.setattr(cache, "release_stage_patcher", release)
+
+    cache.run_conditioning_pipeline(
+        bundle,
+        _context("edit", images=(image,)),
+        route="fl2va",
+        runtime_mode="image_to_image (FL2VA)",
+        used_images=(image,),
+        frame_preset="5",
+    )
+
+    assert order.index("vae-encode") < order.index("release:source_vae") < order.index("text-encode")
+    assert order.index("text-encode") < order.index("release:text_encoder")
+
+
 def test_reference_vae_cache_invalidates_only_changed_image(monkeypatch) -> None:
     _runtime_stubs(monkeypatch)
     monkeypatch.setattr(cache, "_reference_target_size", lambda *args: (512, 512))
@@ -153,6 +212,9 @@ def test_image_key_uses_fingerprint_or_live_tensor_identity() -> None:
     )
 
 
-def test_production_cache_has_no_manual_dynamic_vram_eviction() -> None:
-    assert not hasattr(cache, "release_dynamic_device_residency")
-    assert "partially_unload" not in __import__("inspect").getsource(cache)
+def test_conditioning_never_uses_manual_partial_unload() -> None:
+    import inspect
+
+    source = inspect.getsource(cache)
+    assert "partially_unload" not in source
+    assert "unload_model_and_clones" not in source
