@@ -14,6 +14,7 @@ from .nodes.save import NODE_CLASS_MAPPINGS as SAVE_NODE_CLASS_MAPPINGS
 from .nodes.save import NODE_DISPLAY_NAME_MAPPINGS as SAVE_NODE_DISPLAY_NAME_MAPPINGS
 from .preview_runtime_v5 import H3StudioTAEH3PreviewV5
 from .runtime_guards import install_runtime_guards
+from .runtime_trace import emit
 from .runtime_v5 import (
     H3StudioMaxSpeedDecode,
     H3StudioMaxSpeedLoader,
@@ -21,6 +22,7 @@ from .runtime_v5 import (
     install_max_speed_runtime,
     start_component_prewarm,
 )
+from .runtime_v5_bundle_trace import install_bundle_route_trace
 from .runtime_v5_conditioning import install_conditioning_residency_policy
 from .web_routes import register_routes
 
@@ -28,6 +30,7 @@ from .web_routes import register_routes
 # v3 this does not hard-disable ComfyUI fast-disk on low-RAM systems.
 install_max_speed_runtime()
 install_conditioning_residency_policy()
+install_bundle_route_trace()
 install_runtime_guards()
 register_routes()
 
@@ -39,6 +42,7 @@ benchmark_module.H3StudioContextSamplingPreset = H3StudioMaxSpeedSamplingPreset
 benchmark_module.H3StudioDecode = H3StudioMaxSpeedDecode
 
 start_component_prewarm()
+emit("extension.ready", memory=True, models=True, runtime="v5", structured_trace=True)
 
 NODE_CLASS_MAPPINGS = {
     "H3StudioDirector": H3StudioDirector,
