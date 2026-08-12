@@ -16,7 +16,7 @@ def test_eight_step_preview_has_no_hidden_sparse_policy(monkeypatch) -> None:
     assert [job.step for job in queued] == list(range(8))
 
 
-def test_preview_interval_is_respected_and_final_frame_is_kept(monkeypatch) -> None:
+def test_preview_interval_is_respected_exactly(monkeypatch) -> None:
     wrapper = _PreviewWrapper("taeh3.safetensors", "16", 768, 90, 3)
     queued = []
 
@@ -26,4 +26,4 @@ def test_preview_interval_is_respected_and_final_frame_is_kept(monkeypatch) -> N
     for step in range(8):
         wrapper._enqueue(None, step, "x0", 8, [], "16:1", 1.0 + step, 1.0)
 
-    assert [job.step for job in queued] == [0, 3, 6, 7]
+    assert [job.step for job in queued] == [0, 3, 6]
