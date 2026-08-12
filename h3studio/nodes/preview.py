@@ -3,6 +3,12 @@
 The implementation uses ComfyUI's public sampler-wrapper and websocket APIs.
 It targets Kijai's Apache-2.0 ``taeh3.safetensors`` decoder checkpoint while
 remaining independent of KJNodes.
+
+Preview work is deliberately kept off the denoiser hot path: the sampler only
+copies a tiny downscaled latent to CPU, then a single background worker decodes,
+JPEG-encodes and sends the newest pending frame. Slow preview work can therefore
+never queue up behind an 8-step LightX run or make the progress bar appear to
+freeze on one denoise step.
 """
 
 from __future__ import annotations
@@ -11,13 +17,16 @@ import base64
 import io
 import logging
 import math
+import queue
+import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 LOGGER = logging.getLogger(__name__)
 WRAPPER_KEY = "h3studio_taeh3_preview"
 DEFAULT_TAEH3 = "taeh3.safetensors"
+FAST_PREVIEW_MAX_RESOLUTION = 512
 
 
 def _conv(torch, channels_in: int, channels_out: int, *, bias: bool = True):
@@ -167,6 +176,16 @@ def _jpeg_data_url(torch, image, quality: int) -> tuple[str, int, int]:
     return f"data:image/jpeg;base64,{encoded}", pil_image.width, pil_image.height
 
 
+@dataclass(slots=True)
+class _PreviewJob:
+    latent: Any
+    step: int
+    total_steps: int
+    run_id: str
+    elapsed_seconds: float
+    average_step_seconds: float
+
+
 @dataclass
 class _PreviewWrapper:
     checkpoint_path: str
@@ -177,24 +196,34 @@ class _PreviewWrapper:
     decoder: Any = None
     run_serial: int = 0
     first_frame_reported: bool = False
+    active_run_id: str = ""
+    _jobs: Any = field(default=None, repr=False)
+    _worker: Any = field(default=None, repr=False)
+    _worker_lock: Any = field(default_factory=threading.Lock, repr=False)
 
-    def _load(self, torch, device, dtype):
+    def _load_cpu(self, torch):
         if self.decoder is None:
             import comfy.utils
 
             state = comfy.utils.load_torch_file(self.checkpoint_path, safe_load=True)
             decoder = _decoder(torch, state)
             decoder.load_state_dict(state, strict=True)
-            self.decoder = decoder.eval()
-        self.decoder.to(device=device, dtype=dtype)
+            # CPU float32 is intentional: the sampler copies only the tiny
+            # downscaled latent to CPU, while all expensive preview decode/JPEG
+            # work happens away from the GPU and away from the sampler thread.
+            self.decoder = decoder.eval().float().cpu()
         return self.decoder
 
-    def _send(self, torch, step, x0, total_steps, latent_shapes, run_id, elapsed_seconds, average_step_seconds):
-        latent = _limit_latent(torch, _first_h3_latent(torch, x0, latent_shapes), self.max_resolution)
-        decoder = self._load(torch, latent.device, latent.dtype)
+    def _send_decoded(self, torch, job: _PreviewJob) -> None:
+        if job.run_id != self.active_run_id:
+            return
+        started = time.perf_counter()
+        decoder = self._load_cpu(torch)
         with torch.inference_mode():
-            image = decoder(latent).clamp(0, 1)
+            image = decoder(job.latent).clamp(0, 1)
         data_url, width, height = _jpeg_data_url(torch, image, self.jpeg_quality)
+        if job.run_id != self.active_run_id:
+            return
         from server import PromptServer
 
         server = PromptServer.instance
@@ -203,36 +232,128 @@ class _PreviewWrapper:
             {
                 "node_id": self.node_id,
                 "image": data_url,
-                "step": int(step) + 1,
-                "total": int(total_steps),
+                "step": int(job.step) + 1,
+                "total": int(job.total_steps),
                 "width": width,
                 "height": height,
-                "run_id": run_id,
-                "elapsed_seconds": float(elapsed_seconds),
-                "average_step_seconds": float(average_step_seconds),
-                "eta_seconds": max(0.0, float(average_step_seconds) * (int(total_steps) - int(step) - 1)),
+                "run_id": job.run_id,
+                "elapsed_seconds": float(job.elapsed_seconds),
+                "average_step_seconds": float(job.average_step_seconds),
+                "eta_seconds": max(0.0, float(job.average_step_seconds) * (int(job.total_steps) - int(job.step) - 1)),
             },
             server.client_id,
+        )
+        preview_seconds = time.perf_counter() - started
+        LOGGER.info(
+            "[H3 Studio] TAEH3 preview worker | step=%d/%d | %dx%d | %.3fs | sampler_blocked=no",
+            int(job.step) + 1,
+            int(job.total_steps),
+            width,
+            height,
+            preview_seconds,
         )
         if not self.first_frame_reported:
             self.first_frame_reported = True
             LOGGER.info("[H3 Studio] TAEH3 live preview active | first frame %dx%d", width, height)
 
-    def _enqueue(self, torch, step, x0, total_steps, latent_shapes, run_id, elapsed_seconds, average_step_seconds):
+    def _worker_main(self) -> None:
+        import torch
+
+        while True:
+            job = self._jobs.get()
+            try:
+                if job is None:
+                    return
+                self._send_decoded(torch, job)
+            except Exception as error:
+                LOGGER.warning("H3 Studio TAEH3 preview worker skipped a frame: %s", error)
+                if isinstance(job, _PreviewJob):
+                    self._report_error(error, job.run_id)
+            finally:
+                self._jobs.task_done()
+
+    def _ensure_worker(self) -> None:
+        with self._worker_lock:
+            if self._worker is not None and self._worker.is_alive():
+                return
+            self._jobs = queue.Queue(maxsize=1)
+            self._worker = threading.Thread(
+                target=self._worker_main,
+                name=f"H3StudioTAEH3-{self.node_id or 'preview'}",
+                daemon=True,
+            )
+            self._worker.start()
+
+    def _queue_latest(self, job: _PreviewJob) -> None:
+        self._ensure_worker()
+        try:
+            self._jobs.put_nowait(job)
+            return
+        except queue.Full:
+            pass
+        # Never let preview work accumulate. If CPU decode/JPEG is still busy,
+        # discard the older waiting frame and keep the newest sampler state.
+        try:
+            stale = self._jobs.get_nowait()
+            self._jobs.task_done()
+            del stale
+        except queue.Empty:
+            pass
+        try:
+            self._jobs.put_nowait(job)
+        except queue.Full:
+            # Worker raced us and filled the slot; dropping a preview is always
+            # preferable to stalling generation.
+            LOGGER.debug("[H3 Studio] TAEH3 preview dropped because worker is busy")
+
+    def _enqueue(
+        self,
+        torch,
+        step,
+        x0,
+        total_steps,
+        latent_shapes,
+        run_id,
+        elapsed_seconds,
+        average_step_seconds,
+    ):
         if step % self.every != 0 and step + 1 < total_steps:
             return
-        self._send(
-            torch,
-            step,
-            x0.detach(),
-            total_steps,
-            latent_shapes,
-            run_id,
-            elapsed_seconds,
-            average_step_seconds,
+
+        # Kijai's preview implementations intentionally cap preview work around
+        # 512px. Do the same for very short accelerated samplers: a 768px tiny-
+        # VAE frame on every one of eight steps is wasted work and can dominate
+        # wall time. The final output is unaffected.
+        effective_max = self.max_resolution
+        if int(total_steps) <= 8:
+            effective_max = min(effective_max, FAST_PREVIEW_MAX_RESOLUTION)
+
+        copy_started = time.perf_counter()
+        latent = _limit_latent(torch, _first_h3_latent(torch, x0, latent_shapes), effective_max)
+        # Copy the tiny latent, not the decoded RGB image. This is the only GPU
+        # synchronization preview adds to the sampler path and is normally tens
+        # of kilobytes rather than hundreds of thousands of pixels.
+        latent_cpu = latent.detach().to(device="cpu", dtype=torch.float32, copy=True)
+        copy_seconds = time.perf_counter() - copy_started
+        if copy_seconds > 0.5:
+            LOGGER.warning(
+                "[H3 Studio] TAEH3 latent handoff took %.3fs at step %d/%d; preview decode remains asynchronous",
+                copy_seconds,
+                int(step) + 1,
+                int(total_steps),
+            )
+        self._queue_latest(
+            _PreviewJob(
+                latent=latent_cpu,
+                step=int(step),
+                total_steps=int(total_steps),
+                run_id=run_id,
+                elapsed_seconds=float(elapsed_seconds),
+                average_step_seconds=float(average_step_seconds),
+            )
         )
 
-    def _report_error(self, message: str, run_id: str) -> None:
+    def _report_error(self, message: Any, run_id: str) -> None:
         try:
             from server import PromptServer
 
@@ -273,10 +394,11 @@ class _PreviewWrapper:
         self.run_serial += 1
         self.first_frame_reported = False
         run_id = f"{self.node_id}:{self.run_serial}"
+        self.active_run_id = run_id
         total_steps = max(0, len(sigmas) - 1) if sigmas is not None and hasattr(sigmas, "__len__") else 0
         sampling_started = time.perf_counter()
         LOGGER.info(
-            "[H3 Studio] TAEH3 sampler wrapper entered | node=%s | steps=%d | latent_shapes=%s",
+            "[H3 Studio] TAEH3 sampler wrapper entered | node=%s | steps=%d | latent_shapes=%s | async_cpu_preview=yes",
             self.node_id,
             total_steps,
             latent_shapes,
@@ -370,7 +492,7 @@ class H3StudioTAEH3Preview:
             ),
         )
         LOGGER.info(
-            "[H3 Studio] TAEH3 wrapper attached | node=%s | decoder=%s | max=%d | every=%d",
+            "[H3 Studio] TAEH3 wrapper attached | node=%s | decoder=%s | max=%d | every=%d | worker=async-cpu",
             str(unique_id or ""),
             tiny_vae,
             int(max_resolution),
