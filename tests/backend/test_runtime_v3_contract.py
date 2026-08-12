@@ -44,7 +44,7 @@ def test_preview_decoder_never_allocates_on_cuda() -> None:
 def test_preview_drops_stale_backlog_and_keeps_latest_frame() -> None:
     source = (ROOT / "h3studio" / "preview_runtime_v4.py").read_text(encoding="utf-8")
     assert "queue.Queue(maxsize=1)" in source
-    assert "latest-frame" in source
+    assert "latest-only" in source
     assert "get_nowait" in source
     assert "put_nowait" in source
     assert "LIVE_MAX_RESOLUTION = 448" in source
