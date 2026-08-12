@@ -32,8 +32,8 @@ def configure_low_ram_fast_disk() -> str:
     if _env_flag("H3STUDIO_DISABLE_AUTO_FAST_DISK"):
         return "disabled-by-env"
     try:
-        import psutil
         import comfy.model_management as mm
+        import psutil
 
         total_ram = int(psutil.virtual_memory().total)
         args = getattr(mm, "args", None)
