@@ -92,12 +92,26 @@ function rollbackReservations(reservations) {
 if (!api[WRAP_FLAG]) {
   const originalQueuePrompt = api.queuePrompt.bind(api);
   api.queuePrompt = async function h3studioQueuePrompt(number, data, options) {
+    // FAIL-OPEN ORDERING IS INTENTIONAL.
+    // ComfyUI's real queuePrompt starts the /prompt request synchronously before
+    // its first await. Dispatch that request first so H3 Studio seed bookkeeping
+    // can never turn the Run button into a no-op.
+    const request = originalQueuePrompt(number, data, options);
+
     // app.queuePrompt has already serialized `data` at this point. Mutating the
-    // live Director now cannot change the job being submitted, but it does make
-    // the very next click serialize a fresh seed even while this job is running.
-    const reservations = reserveNextSeeds(data);
+    // live Director now cannot change the submitted job; it only reserves the
+    // next seed for a subsequent click while this request/job is in flight.
+    let reservations = [];
     try {
-      return await originalQueuePrompt(number, data, options);
+      reservations = reserveNextSeeds(data);
+    } catch (error) {
+      // Seed reservation is optional UI bookkeeping. Never block generation if
+      // a custom widget/state shape changes underneath us.
+      console.warn("[H3 Studio] seed reservation failed after queue dispatch; generation continues", error);
+    }
+
+    try {
+      return await request;
     } catch (error) {
       rollbackReservations(reservations);
       throw error;
