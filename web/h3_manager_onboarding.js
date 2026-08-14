@@ -5,7 +5,6 @@ const WORKFLOW_ID = "51ffc0bb-1b7a-4a1c-a183-1ce99edb4e5e";
 const DIRECTOR = "H3StudioDirector";
 const SETUP = "H3StudioModelSetup";
 const LEGACY_UAD_NODE = "UniversalAssetDownloader";
-const UAD_REPO = "https://github.com/thaakeno/comfyui-universal-asset-downloader";
 const UAD_SLUG = "comfyui-universal-asset-downloader";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -68,9 +67,8 @@ async function uadReady() {
 }
 
 async function managerSnapshot() {
-  let installed = null;
   try {
-    installed = await fetchJson("/customnode/installed");
+    const installed = await fetchJson("/customnode/installed");
     return {
       available: true,
       installed,
@@ -213,7 +211,9 @@ function enhanceMissingPanel(node, snapshot) {
 
   const actions = card.querySelector(".h3ms-actions");
   if (!actions || snapshot.hasUad) return;
-  actions.querySelectorAll('[data-action="install-uad"], .h3ms-smart-install-uad').forEach((button) => button.remove());
+
+  actions.querySelectorAll('[data-action="install-uad"]').forEach((button) => button.remove());
+  if (actions.querySelector(".h3ms-smart-install-uad")) return;
 
   const button = document.createElement("button");
   button.type = "button";
