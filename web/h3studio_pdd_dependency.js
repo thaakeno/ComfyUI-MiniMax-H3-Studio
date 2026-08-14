@@ -54,7 +54,11 @@ async function installDependency(node) {
   node.__h3PddDependencyInstalling = true;
   log(node, "Installing the Mamad8 PDD custom node first…");
   try {
-    const result = await jsonFetch(INSTALL_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const result = await jsonFetch(INSTALL_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
     node.__h3PddDependencyReady = true;
     badge(node, true);
     log(node, `PDD custom node ${result.action || "installed"}. Installing the selected LoRA + heads pair now…`);
@@ -74,6 +78,14 @@ function attach(node) {
       node.__h3PddDependencyReady = installed;
       if (installed) badge(node, true);
     });
+
+    // Model Setup and the Smart PDD panel both rerender their own markup. Keep
+    // the dependency badge truthful even after those remounts.
+    const observer = new MutationObserver(() => {
+      if (node.__h3PddDependencyReady) queueMicrotask(() => badge(node, true));
+    });
+    observer.observe(root, { childList: true, subtree: true });
+    node.__h3PddDependencyObserver = observer;
 
     root.addEventListener("click", async (event) => {
       const button = event.target?.closest?.("[data-pdd-install],[data-pdd-repair]");
