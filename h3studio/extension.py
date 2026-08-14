@@ -17,6 +17,7 @@ from .nodes.director import (
 from .nodes.image_runtime import NODE_CLASS_MAPPINGS as IMAGE_NODE_CLASS_MAPPINGS
 from .nodes.image_runtime import NODE_DISPLAY_NAME_MAPPINGS as IMAGE_NODE_DISPLAY_NAME_MAPPINGS
 from .nodes.loader import H3StudioLoader
+from .nodes.model_setup import H3StudioModelSetup
 from .nodes.preview import H3StudioTAEH3Preview
 from .nodes.save import NODE_CLASS_MAPPINGS as SAVE_NODE_CLASS_MAPPINGS
 from .nodes.save import NODE_DISPLAY_NAME_MAPPINGS as SAVE_NODE_DISPLAY_NAME_MAPPINGS
@@ -34,6 +35,7 @@ NODE_CLASS_MAPPINGS = {
     "H3StudioContextInspector": H3StudioContextInspector,
     "H3StudioContextSamplingPreset": H3StudioContextSamplingPreset,
     "H3StudioTAEH3Preview": H3StudioTAEH3Preview,
+    "H3StudioModelSetup": H3StudioModelSetup,
     **BENCHMARK_NODE_CLASS_MAPPINGS,
     **COMPARISON_NODE_CLASS_MAPPINGS,
     **IMAGE_NODE_CLASS_MAPPINGS,
@@ -49,6 +51,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "H3StudioContextInspector": "H3 Studio · Context Inspector",
     "H3StudioContextSamplingPreset": "H3 Studio · Director Sampling Preset",
     "H3StudioTAEH3Preview": "H3 Studio · Live Preview (TAEH3)",
+    "H3StudioModelSetup": "H3 Studio · Model Setup",
     **BENCHMARK_NODE_DISPLAY_NAME_MAPPINGS,
     **COMPARISON_NODE_DISPLAY_NAME_MAPPINGS,
     **IMAGE_NODE_DISPLAY_NAME_MAPPINGS,
