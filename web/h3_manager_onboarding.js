@@ -1,47 +1,13 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
-const WORKFLOW_ID = "51ffc0bb-1b7a-4a1c-a183-1ce99edb4e5e";
-const DIRECTOR = "H3StudioDirector";
 const SETUP = "H3StudioModelSetup";
-const LEGACY_UAD_NODE = "UniversalAssetDownloader";
 const UAD_SLUG = "comfyui-universal-asset-downloader";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function className(node) {
   return String(node?.comfyClass || node?.type || "");
-}
-
-function maintained(graphData) {
-  const nodes = graphData?.nodes || [];
-  return String(graphData?.id || "") === WORKFLOW_ID || nodes.some((node) => String(node?.type || "") === DIRECTOR);
-}
-
-function removeLegacyUadNodes(graphData) {
-  if (!maintained(graphData)) return;
-  const nodes = Array.isArray(graphData?.nodes) ? graphData.nodes : [];
-  const staleIds = new Set(nodes.filter((node) => String(node?.type || "") === LEGACY_UAD_NODE).map((node) => Number(node.id)));
-  if (!staleIds.size) return;
-
-  const links = Array.isArray(graphData.links) ? graphData.links : [];
-  const removedLinkIds = new Set();
-  graphData.links = links.filter((link) => {
-    if (!Array.isArray(link)) return true;
-    const remove = staleIds.has(Number(link[1])) || staleIds.has(Number(link[3]));
-    if (remove) removedLinkIds.add(Number(link[0]));
-    return !remove;
-  });
-
-  graphData.nodes = nodes.filter((node) => !staleIds.has(Number(node.id)));
-  for (const node of graphData.nodes) {
-    for (const input of node.inputs || []) {
-      if (removedLinkIds.has(Number(input?.link))) input.link = null;
-    }
-    for (const output of node.outputs || []) {
-      if (Array.isArray(output?.links)) output.links = output.links.filter((id) => !removedLinkIds.has(Number(id)));
-    }
-  }
 }
 
 async function fetchJson(path, options = {}) {
@@ -291,9 +257,6 @@ function findSetupNode() {
 
 app.registerExtension({
   name: "H3Studio.ManagerOnboarding",
-  beforeConfigureGraph(graphData) {
-    removeLegacyUadNodes(graphData);
-  },
   afterConfigureGraph() {
     setTimeout(() => onboardNode(findSetupNode()), 50);
   },
