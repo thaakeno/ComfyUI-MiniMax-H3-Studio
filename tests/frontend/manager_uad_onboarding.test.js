@@ -5,7 +5,8 @@ import test from "node:test";
 const source = readFileSync(new URL("../../web/h3_manager_onboarding.js", import.meta.url), "utf8");
 
 test("Manager onboarding uses ComfyUI api.fetchApi and current registry queue", () => {
-  assert.match(source, /api\.fetchApi\("\/customnode\/installed"\)/);
+  assert.match(source, /const response = await api\.fetchApi\(path, options\)/);
+  assert.match(source, /fetchJson\("\/customnode\/installed"\)/);
   assert.match(source, /\/customnode\/getlist\?mode=default&skip_update=true/);
   assert.match(source, /api\.fetchApi\("\/manager\/queue\/install"/);
   assert.match(source, /api\.fetchApi\("\/manager\/queue\/start"/);
