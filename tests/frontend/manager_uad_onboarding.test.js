@@ -19,11 +19,10 @@ test("missing UAD gets native install confirmation and current Extensions wordin
   assert.match(source, /Install UAD now/);
 });
 
-test("legacy serialized UAD graph nodes are removed from the maintained workflow", () => {
-  assert.match(source, /LEGACY_UAD_NODE = "UniversalAssetDownloader"/);
-  assert.match(source, /removeLegacyUadNodes\(graphData\)/);
-  assert.match(source, /graphData\.nodes = nodes\.filter/);
-  assert.match(source, /removedLinkIds/);
+test("onboarding preserves intentionally added UAD graph nodes", () => {
+  assert.doesNotMatch(source, /removeLegacyUadNodes/);
+  assert.doesNotMatch(source, /LEGACY_UAD_NODE/);
+  assert.doesNotMatch(source, /beforeConfigureGraph/);
 });
 
 test("onboarding retries Manager startup instead of trusting the first probe", () => {
