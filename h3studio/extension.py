@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .dependency_web import register_dependency_routes
 from .nodes.benchmark import NODE_CLASS_MAPPINGS as BENCHMARK_NODE_CLASS_MAPPINGS
 from .nodes.benchmark import NODE_DISPLAY_NAME_MAPPINGS as BENCHMARK_NODE_DISPLAY_NAME_MAPPINGS
 from .nodes.comparison import NODE_CLASS_MAPPINGS as COMPARISON_NODE_CLASS_MAPPINGS
@@ -29,6 +30,7 @@ from .web_routes import register_routes
 install_runtime_guards()
 register_routes()
 register_runtime_routes()
+register_dependency_routes()
 
 NODE_CLASS_MAPPINGS = {
     "H3StudioLoader": H3StudioLoader,
