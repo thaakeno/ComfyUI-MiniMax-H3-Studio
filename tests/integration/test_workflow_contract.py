@@ -11,7 +11,6 @@ def load_workflow():
     return json.loads(WORKFLOW.read_text(encoding="utf-8"))
 
 
-
 def test_director_is_top_level_and_sampling_is_subgraphed():
     workflow = load_workflow()
     top_types = {node["type"] for node in workflow["nodes"]}
@@ -155,7 +154,8 @@ def test_prompt_editor_and_empty_result_regression_contract():
     assert "restoreWidgetHiddenByStudio(target)" in source
     assert "].filter(Boolean);" in source
     assert "STUDIO_NODE_HEIGHT = 780" in layout
-    assert "STUDIO_PANEL_HEIGHT = 530" in layout
+    assert "STUDIO_PANEL_HEIGHT = 640" in layout
+    assert "STUDIO_NODE_MAX_HEIGHT = 980" in layout
     assert "node.onResize = function h3studioResize" not in source
     assert "Path to an instruction-capable local VLM" not in source
     assert "Image-analysis model" not in source
