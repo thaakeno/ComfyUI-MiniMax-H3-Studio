@@ -239,17 +239,22 @@ function buildSection(node) {
   return section;
 }
 
+function sectionHost(panel) {
+  return panel?.querySelector?.(".h3s-v7-inspector") || panel;
+}
+
 function installRuntimeSection(node, replace = false) {
   const panel = node?.__h3studioPanel;
   if (!panel?.isConnected) return;
-  const existing = panel.querySelector(":scope > .h3s-runtime-section");
+  const existing = panel.querySelector(".h3s-runtime-section");
   if (existing && !replace) return;
   const section = buildSection(node);
   if (existing) existing.replaceWith(section);
   else {
-    const loras = panel.querySelector(":scope > .h3s-custom-loras");
-    const fallback = [...panel.children].find((child) => child.querySelector?.(".h3s-advanced-toggle"));
-    panel.insertBefore(section, loras || fallback || null);
+    const host = sectionHost(panel);
+    const loras = host.querySelector(".h3s-custom-loras");
+    const fallback = [...host.children].find((child) => child.querySelector?.(".h3s-advanced-toggle"));
+    host.insertBefore(section, loras || fallback || null);
   }
 }
 
