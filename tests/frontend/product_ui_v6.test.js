@@ -3,29 +3,34 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const ui = readFileSync(new URL("../../web/zz_h3studio_ui_v4.js", import.meta.url), "utf8");
+const layout = readFileSync(new URL("../../web/js/core/layout.js", import.meta.url), "utf8");
 
-test("Director v6 uses a work surface plus inspector instead of a vertical card wall", () => {
-  assert.match(ui, /H3Studio\.ProductUIV6/);
-  assert.match(ui, /h3s-v6-layout/);
-  assert.match(ui, /h3s-v6-main/);
-  assert.match(ui, /h3s-v6-inspector/);
-  assert.match(ui, /\["generation", "runtime", "advanced", "loras"\]/);
-  assert.match(ui, /Reference cards become rows, not cards/);
-  assert.match(ui, /Runtime becomes a compact segmented inspector/);
+test("Director v7 uses a stable primary workspace plus compact inspector", () => {
+  assert.match(ui, /H3Studio\.NativeToolUIV7/);
+  assert.match(ui, /h3s-v7-shell/);
+  assert.match(ui, /h3s-v7-primary/);
+  assert.match(ui, /h3s-v7-inspector/);
+  assert.match(ui, /\["Direction", "Generated output", "References"\]/);
+  assert.match(ui, /\["Generation", "Runtime", "Custom LoRAs", "Preset"\]/);
+  assert.match(ui, /title\.textContent = "Preset"/);
+  assert.match(ui, /button\.textContent = "Copy preset"/);
 });
 
-test("Product UI never overrides Smart Benchmark overlay width or enables parent overflow", () => {
-  assert.doesNotMatch(ui, /h3b4-parent-fix\{[^}]*overflow:visible/);
-  assert.doesNotMatch(ui, /\.h3b4\{[^}]*width:100%\s*!important/);
-  assert.doesNotMatch(ui, /\.h3b4\{[^}]*max-width:100%\s*!important/);
-  assert.match(ui, /root\.style\.removeProperty\("width"\)/);
-  assert.match(ui, /root\.style\.removeProperty\("max-width"\)/);
-  assert.match(ui, /root\.style\.setProperty\("overflow-x", "hidden", "important"\)/);
-  assert.match(ui, /ComfyUI canvas[\s\S]*own the overlay's exact pixel width and transform/);
+test("Director v7 mutation observer cannot retrigger itself while reparenting sections", () => {
+  assert.match(ui, /observer\?\.disconnect\?\.\(\)/);
+  assert.match(ui, /root\.__h3sDecorating = true/);
+  assert.match(ui, /observer\?\.observe\?\.\(root, \{ childList: true \}\)/);
+  assert.doesNotMatch(ui, /subtree:\s*true/);
 });
 
-test("Director DOM widget remains zoom-aware and avoids the old continuous repaint walk", () => {
+test("Director node height is bounded instead of ratcheting upward forever", () => {
+  assert.match(layout, /STUDIO_NODE_MAX_HEIGHT = 980/);
+  assert.match(layout, /Math\.min\(STUDIO_NODE_MAX_HEIGHT/);
+  assert.match(ui, /MAX_HEIGHT = 980/);
+});
+
+test("Director DOM widget remains zoom-aware and foreground work is throttled", () => {
   assert.match(ui, /widget\.options\.hideOnZoom = true/);
-  assert.match(ui, /DRAW_INTERVAL_MS = 160/);
+  assert.match(ui, /now - last < 140/);
   assert.match(ui, /MutationObserver/);
 });
