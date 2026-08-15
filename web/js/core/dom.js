@@ -181,7 +181,7 @@ export function rangeValueFromPointer(clientX, rect, options) {
   return Number(Math.max(minimum, Math.min(maximum, snapped)).toFixed(decimals));
 }
 
-export function rangeControl(value, options, label, onInput) {
+export function rangeControl(value, options, label, onCommit) {
   const minimum = Number(options.min);
   const maximum = Number(options.max);
   const input = element("input", {
@@ -199,19 +199,30 @@ export function rangeControl(value, options, label, onInput) {
     input,
   ]);
 
-  const synchronize = (nextValue, emit = false) => {
+  let lastCommitted = Number(value);
+  const synchronize = (nextValue) => {
     const bounded = Math.max(minimum, Math.min(maximum, Number(nextValue)));
     const progress = maximum === minimum ? 0 : ((bounded - minimum) / (maximum - minimum)) * 100;
     input.value = String(bounded);
     input.setAttribute("aria-valuenow", String(bounded));
     control.style.setProperty("--h3s-range-progress", `${progress}%`);
-    if (emit) onInput(bounded);
+    return bounded;
+  };
+  const commit = (nextValue) => {
+    const bounded = synchronize(nextValue);
+    if (bounded === lastCommitted) return;
+    lastCommitted = bounded;
+    onCommit(bounded);
   };
   const updateFromPointer = (event) => {
-    synchronize(rangeValueFromPointer(event.clientX, control.getBoundingClientRect(), options), true);
+    synchronize(rangeValueFromPointer(event.clientX, control.getBoundingClientRect(), options));
   };
 
-  input.addEventListener("input", (event) => synchronize(Number(event.target.value), true));
+  // Moving a range thumb used to call the Director state callback for every
+  // pointer pixel. That callback reconstructs the entire Director DOM, including
+  // all reference cards. Keep thumb feedback local and commit once on release.
+  input.addEventListener("input", (event) => synchronize(Number(event.target.value)));
+  input.addEventListener("change", (event) => commit(Number(event.target.value)));
   input.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     input.focus();
@@ -225,6 +236,7 @@ export function rangeControl(value, options, label, onInput) {
   });
   const releasePointer = (event) => {
     if (input.hasPointerCapture?.(event.pointerId)) input.releasePointerCapture?.(event.pointerId);
+    commit(Number(input.value));
   };
   input.addEventListener("pointerup", releasePointer);
   input.addEventListener("pointercancel", releasePointer);
