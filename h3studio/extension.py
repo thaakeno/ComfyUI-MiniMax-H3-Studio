@@ -29,6 +29,7 @@ from .nodes.save import NODE_CLASS_MAPPINGS as SAVE_NODE_CLASS_MAPPINGS
 from .nodes.save import NODE_DISPLAY_NAME_MAPPINGS as SAVE_NODE_DISPLAY_NAME_MAPPINGS
 from .nodes.smart_benchmark import NODE_CLASS_MAPPINGS as SMART_BENCHMARK_NODE_CLASS_MAPPINGS
 from .nodes.smart_benchmark import NODE_DISPLAY_NAME_MAPPINGS as SMART_BENCHMARK_NODE_DISPLAY_NAME_MAPPINGS
+from .prompt_pipeline_fixes import install as install_prompt_pipeline_fixes
 from .prompt_prep_hotfix_v2 import install as install_prompt_prep_hotfix_v2
 from .qwen35_gguf import install as install_qwen35_gguf
 from .qwen35_gguf_text_fallback import install as install_qwen35_gguf_text_fallback
@@ -60,6 +61,9 @@ install_qwen35_gguf()
 # llama-mtmd-cli is image-oriented; text-only prompt writing uses the shared
 # llama-server or llama-cli instead of ever falling into mtmd interactive mode.
 install_qwen35_gguf_text_fallback()
+# When analyzer + writer share one Qwen checkpoint, fresh references and prompt
+# direction are produced in one validated multimodal generation instead of two.
+install_prompt_pipeline_fixes()
 # The compiler's resolved generation mode is the final conditioning contract.
 # Install this after prompt-prep patches but before the runtime node subclasses
 # invoke H3StudioCondition.condition via super().
