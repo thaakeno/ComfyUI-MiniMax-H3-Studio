@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   STUDIO_NODE_HEIGHT,
+  STUDIO_NODE_MAX_HEIGHT,
   STUDIO_NODE_WIDTH,
   STUDIO_PANEL_HEIGHT,
   clampStudioNodeSize,
@@ -23,9 +24,10 @@ test("Director cannot shrink below its maintained minimum size", () => {
   assert.deepEqual(clampStudioNodeSize([760, 920]), [760, 920]);
 });
 
-test("Director preserves a previously accepted user size during automatic recompute", () => {
+test("Director preserves accepted user sizes but caps runaway automatic height", () => {
   assert.deepEqual(clampStudioNodeSize([620, 700], [760, 920]), [760, 920]);
-  assert.deepEqual(clampStudioNodeSize([900, 1000], [760, 920]), [900, 1000]);
+  assert.deepEqual(clampStudioNodeSize([900, 1000], [760, 920]), [900, STUDIO_NODE_MAX_HEIGHT]);
+  assert.deepEqual(clampStudioNodeSize([900, 4000], [760, 920]), [900, STUDIO_NODE_MAX_HEIGHT]);
 });
 
 test("initial Director normalization still resets runaway serialized height", () => {
