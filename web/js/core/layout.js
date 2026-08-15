@@ -1,6 +1,7 @@
-export const STUDIO_PANEL_HEIGHT = 530;
+export const STUDIO_PANEL_HEIGHT = 640;
 export const STUDIO_NODE_WIDTH = 680;
 export const STUDIO_NODE_HEIGHT = 780;
+export const STUDIO_NODE_MAX_HEIGHT = 980;
 
 export function studioPanelSize(width) {
   const safeWidth = Number.isFinite(Number(width)) ? Number(width) : 0;
@@ -12,6 +13,10 @@ export function clampStudioNodeSize(size, minimumSize = [STUDIO_NODE_WIDTH, STUD
   const height = Number(size?.[1]);
   const minimumWidth = Number(minimumSize?.[0]);
   const minimumHeight = Number(minimumSize?.[1]);
+  const resolvedMinHeight = Math.max(
+    STUDIO_NODE_HEIGHT,
+    Number.isFinite(minimumHeight) ? Math.min(minimumHeight, STUDIO_NODE_MAX_HEIGHT) : 0,
+  );
   return [
     Math.max(
       STUDIO_NODE_WIDTH,
@@ -19,9 +24,8 @@ export function clampStudioNodeSize(size, minimumSize = [STUDIO_NODE_WIDTH, STUD
       Number.isFinite(width) ? width : 0,
     ),
     Math.max(
-      STUDIO_NODE_HEIGHT,
-      Number.isFinite(minimumHeight) ? minimumHeight : 0,
-      Number.isFinite(height) ? height : 0,
+      resolvedMinHeight,
+      Math.min(STUDIO_NODE_MAX_HEIGHT, Number.isFinite(height) ? height : STUDIO_NODE_HEIGHT),
     ),
   ];
 }
