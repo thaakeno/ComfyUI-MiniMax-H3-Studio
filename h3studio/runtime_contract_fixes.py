@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .constants import MODE_IMAGE_TO_IMAGE, MODE_REFERENCE_EDIT, MODE_TEXT_TO_IMAGE
-from .context import H3StudioContext
+from .context import H3StudioContext, H3StudioGeneration
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +35,7 @@ def conditioning_contract(studio_context: H3StudioContext) -> ConditioningContra
         note = ""
         if images:
             note = (
-                f" {len(images)} connected reference card(s) are metadata/prompt-analysis only; "
+                f" {len(images)} connected reference card(s) are prompt-analysis metadata only; "
                 "no source VAE, keyframe, or REF2VA pixel conditioning is applied."
             )
         return ConditioningContract(
@@ -117,12 +117,27 @@ def install() -> None:
             f"Pixel conditioning: {contract.pixel_conditioning}\n"
             f"Runtime: {stages.runtime_info} Conditioning stages: {stages.diagnostics}.{contract.note}"
         )
+        final_vae = (
+            h3_bundle.image_vae_for_decode()
+            if studio_context.state.generation.frame_profile == "image_vae_1"
+            else h3_bundle.video_vae
+        )
+        generation = H3StudioGeneration(
+            model=model,
+            conditioning=stages.conditioning,
+            latent=stages.latent,
+            video_vae=final_vae,
+            requested_frames=stages.requested_frames,
+            context=studio_context,
+            fitted_source=stages.fitted_source,
+            run_info=run_info,
+        )
         return (
             model,
-            studio_context.generation,
+            generation,
             stages.conditioning,
             stages.latent,
-            h3_bundle.video_vae,
+            final_vae,
             stages.requested_frames,
             run_info,
         )
