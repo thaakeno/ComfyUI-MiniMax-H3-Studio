@@ -13,11 +13,11 @@ function installStyles() {
   style.id = STYLE_ID;
   style.textContent = `
     .h3s-share-body { display:flex; flex-direction:column; gap:8px; }
-    .h3s-share-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
-    .h3s-share-button { border:1px solid var(--h3s-border,#35414a); background:var(--h3s-panel-2,#172127); color:inherit; border-radius:8px; padding:7px 8px; cursor:pointer; font:inherit; min-width:0; }
-    .h3s-share-button.primary { border-color:color-mix(in srgb,var(--h3s-accent,#00cfa6) 65%,var(--h3s-border,#35414a)); }
-    .h3s-share-button:hover { border-color:var(--h3s-accent,#00cfa6); }
-    .h3s-share-meta { font-size:10px; opacity:.65; line-height:1.4; }
+    .h3s-share-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+    .h3s-share-button { border:1px solid var(--h3s-border,#4a4f57); background:var(--h3s-panel-2,#363a40); color:inherit; border-radius:6px; padding:6px 8px; cursor:pointer; font:inherit; min-width:0; }
+    .h3s-share-button.primary { border-color:color-mix(in srgb,var(--h3s-accent,#91a7c7) 55%,var(--h3s-border,#4a4f57)); }
+    .h3s-share-button:hover { border-color:var(--h3s-accent,#91a7c7); }
+    .h3s-share-meta { font-size:9px; opacity:.65; line-height:1.4; }
     @media (max-width:560px) { .h3s-share-actions { grid-template-columns:1fr; } }
   `;
   document.head.append(style);
@@ -80,9 +80,7 @@ function compactPreset(node) {
 
 function bytesToBase64Url(bytes) {
   let binary = "";
-  for (let index = 0; index < bytes.length; index += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-  }
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
 }
 
@@ -213,7 +211,8 @@ function summaryLine(node) {
   const state = stateFromNode(node);
   const ui = state.ui || {};
   const loras = (ui.custom_loras || []).filter((item) => item?.enabled !== false && item?.name).length;
-  return `H3 Studio · ${String(ui.runtime_optimization || "auto").replaceAll("_", " ")} · ${state.generation.sampling_profile} · ${Number(state.generation.megapixels || 0).toFixed(2)} MP · ${loras} custom LoRA${loras === 1 ? "" : "s"}`;
+  const preset = String(ui.runtime_optimization || "auto") === "og_current" ? "OG" : String(ui.runtime_optimization || "auto").replaceAll("_", " ");
+  return `H3 Studio · ${preset} · ${state.generation.sampling_profile} · ${Number(state.generation.megapixels || 0).toFixed(2)} MP · ${loras} custom LoRA${loras === 1 ? "" : "s"}`;
 }
 
 function effectiveText(node) {
@@ -238,16 +237,16 @@ function effectiveText(node) {
 }
 
 function button(text, title, click, primary = false) {
-  const el = document.createElement("button");
-  el.type = "button";
-  el.className = `h3s-share-button${primary ? " primary" : ""}`;
-  el.textContent = text;
-  el.title = title;
-  el.addEventListener("click", async (event) => {
+  const item = document.createElement("button");
+  item.type = "button";
+  item.className = `h3s-share-button${primary ? " primary" : ""}`;
+  item.textContent = text;
+  item.title = title;
+  item.addEventListener("click", async (event) => {
     event.preventDefault(); event.stopPropagation();
     try { await click(); } catch (error) { toast("H3 Studio preset", String(error?.message || error), "error"); }
   });
-  return el;
+  return item;
 }
 
 function buildSection(node) {
@@ -255,23 +254,22 @@ function buildSection(node) {
   section.className = "h3s-section h3s-share-section";
   const header = document.createElement("div");
   header.className = "h3s-section-header";
-  const title = document.createElement("span"); title.className = "h3s-section-title"; title.textContent = "Share Preset";
-  const pill = document.createElement("span"); pill.className = "h3s-status-pill"; pill.textContent = "DISCORD";
-  header.append(title, pill);
+  const title = document.createElement("span"); title.className = "h3s-section-title"; title.textContent = "Preset";
+  header.append(title);
   const body = document.createElement("div"); body.className = "h3s-section-stack h3s-share-body";
   const help = document.createElement("p"); help.className = "h3s-context-help";
-  help.textContent = "One pasteable H3S code carries runtime, Sampling Profile, resolution, custom LoRAs + strengths and connected Loader model choices. Prompts and reference images are never included.";
+  help.textContent = "Portable H3S presets carry runtime, Sampling Profile, resolution, custom LoRAs + strengths and connected Loader model choices. Prompts and reference images are never included.";
   const actions = document.createElement("div"); actions.className = "h3s-share-actions";
   actions.append(
-    button("Copy Discord", "Copy a readable one-line summary plus the shortest supported H3S code", async () => {
+    button("Copy preset", "Copy a readable one-line summary plus the shortest supported H3S code", async () => {
       const code = await encodePreset(node);
       await copyText(`${summaryLine(node)}\n${code}`);
-      toast("Copied for Discord", `${code.length} character ${code.startsWith(ZIP_PREFIX) ? "compressed " : ""}preset code`);
+      toast("Preset copied", `${code.length} character ${code.startsWith(ZIP_PREFIX) ? "compressed " : ""}preset code`);
     }, true),
     button("Copy code", "Copy only the compact H3S preset code", async () => {
       const code = await encodePreset(node); await copyText(code); toast("Preset code copied", `${code.length} characters`);
     }),
-    button("Paste / Import", "Paste an H3S1/H3S1Z code or JSON preset", async () => {
+    button("Import", "Paste an H3S1/H3S1Z code or JSON preset", async () => {
       const raw = globalThis.prompt?.("Paste H3S preset code or JSON:", "");
       if (!raw) return;
       const preset = await decodePreset(raw);
@@ -284,28 +282,33 @@ function buildSection(node) {
       if (missing.length) console.warn("[H3 Studio] Shared preset assets missing locally:\n" + missing.join("\n"));
       installShareSection(node, true);
     }),
+    button("Copy run config", "Copy exactly what Auto resolved on the last completed generation", async () => {
+      await copyText(effectiveText(node));
+      toast("Run config copied", "Ready to paste into an issue or benchmark note.");
+    }),
   );
-  const effective = button("Copy effective run config", "Copy exactly what Auto resolved on the last completed generation", async () => {
-    await copyText(effectiveText(node));
-    toast("Effective config copied", "Ready to paste into Discord or an issue.");
-  });
   const meta = document.createElement("div"); meta.className = "h3s-share-meta";
-  meta.textContent = "H3S1/H3S1Z is versioned and path-safe. Discord sharing automatically uses gzip when it makes the code shorter; older uncompressed H3S1 codes still import.";
-  body.append(help, actions, effective, meta);
+  meta.textContent = "H3S1/H3S1Z is versioned and path-safe. Compression is automatic when it makes the preset shorter; older uncompressed H3S1 codes still import.";
+  body.append(help, actions, meta);
   section.append(header, body);
   return section;
+}
+
+function sectionHost(panel) {
+  return panel?.querySelector?.(".h3s-v7-inspector") || panel;
 }
 
 function installShareSection(node, replace = false) {
   const panel = node?.__h3studioPanel;
   if (!panel?.isConnected) return;
-  const existing = panel.querySelector(":scope > .h3s-share-section");
+  const existing = panel.querySelector(".h3s-share-section");
   if (existing && !replace) return;
   const section = buildSection(node);
   if (existing) existing.replaceWith(section);
   else {
-    const advanced = [...panel.children].find((child) => child.querySelector?.(".h3s-advanced-toggle"));
-    panel.insertBefore(section, advanced || null);
+    const host = sectionHost(panel);
+    const advanced = [...host.children].find((child) => child.querySelector?.(".h3s-advanced-toggle"));
+    host.insertBefore(section, advanced || null);
   }
 }
 
