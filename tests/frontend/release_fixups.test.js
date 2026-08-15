@@ -33,22 +33,23 @@ test("legacy benchmark absorbs into an existing Smart Benchmark instead of dupli
   assert.match(migration, /app\.graph\.remove\(oldNode\)/);
 });
 
-test("Smart Benchmark v4 owns one scrollable renderer and presets update visible state immediately", () => {
-  assert.match(benchmark, /max-height:700px;overflow:auto/);
+test("Smart Benchmark v7 owns one stable bounded renderer and comparisons update visible state immediately", () => {
+  assert.match(benchmark, /max-height:560px/);
   assert.match(benchmark, /dedupeDomWidgets/);
   assert.match(benchmark, /h3studio_benchmark_preset/);
+  assert.match(benchmark, /root\.replaceChildren/);
   assert.match(benchmark, /render\(node\)/);
   assert.match(benchmark, /Auto vs OG/);
-  assert.match(benchmark, /Runtime sweep/);
-  assert.match(benchmark, /Memory sweep/);
-  assert.match(benchmark, /assets unavailable · retry/);
+  assert.match(benchmark, /\["runtime", "Runtime"\]/);
+  assert.match(benchmark, /\["memory", "Memory"\]/);
+  assert.match(benchmark, /Assets unavailable/);
   assert.match(benchmark, /\/h3studio\/assets/);
 });
 
-test("Director v4 force-hides leaked legacy widgets such as Height using the real hidden type", () => {
+test("Director v7 force-hides leaked legacy widgets using zero-size hidden widgets", () => {
   assert.match(ui, /VISIBLE_NATIVE/);
-  assert.match(ui, /widget\.type = "hidden"/);
-  assert.match(ui, /widget\.computeSize = \(\) => \[0, -4\]/);
+  assert.match(ui, /item\.type = "hidden"/);
+  assert.match(ui, /item\.computeSize = \(\) => \[0, 0\]/);
   assert.match(ui, /onDrawForeground/);
   assert.match(ui, /h3s-choice-menu/);
 });
