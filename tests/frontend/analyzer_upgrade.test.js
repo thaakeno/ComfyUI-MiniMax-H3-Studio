@@ -15,19 +15,20 @@ test("analyzer uses strict factual records and validates every reference ordinal
   assert.match(analyzer, /visually_analyzed/);
 });
 
-test("analyzer cache keys include image identity and source metadata", () => {
+test("analyzer cache keys follow stable source identity before falling back to pixels", () => {
   assert.match(analyzer, /_analysis_cache_key/);
-  assert.match(analyzer, /reference\.source_node_id/);
-  assert.match(analyzer, /reference\.source_slot/);
+  assert.match(analyzer, /reference\.fingerprint/);
+  assert.match(analyzer, /reference\.storage_name/);
   assert.match(analyzer, /reference\.filename/);
+  assert.match(analyzer, /image_metadata\(image\)\[2\]/);
 });
 
-test("runtime diagnostics expose prompt-prep and conditioning residency truth", () => {
-  assert.match(runtimeWeb, /prompt_prep/);
-  assert.match(runtimeWeb, /text_encoder/);
-  assert.match(runtimeWeb, /analyzer/);
+test("runtime asset discovery exposes prompt models, H3 conditioners and runtime presets", () => {
+  assert.match(runtimeWeb, /prompt_models/);
+  assert.match(runtimeWeb, /prompt_profiles/);
   assert.match(runtimeWeb, /minicpm_status/);
   assert.match(runtimeWeb, /h3_conditioner/);
+  assert.match(runtimeWeb, /runtime_presets/);
 });
 
 test("prompt prep benchmark measures end-to-end latency instead of only tokens per second", () => {
