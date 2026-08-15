@@ -175,9 +175,7 @@ function strengthControl(item, onChange) {
     number.value = String(value);
     onChange({ strength: value });
   };
-  range.addEventListener("input", () => {
-    number.value = range.value;
-  });
+  range.addEventListener("input", () => { number.value = range.value; });
   range.addEventListener("change", () => update(range.value));
   number.addEventListener("change", () => update(number.value));
   wrap.append(range, number);
@@ -307,17 +305,21 @@ function buildSection(node) {
   return section;
 }
 
+function sectionHost(panel) {
+  return panel?.querySelector?.(".h3s-v7-inspector") || panel;
+}
+
 function installLoraSection(node, replace = false) {
   const panel = node?.__h3studioPanel;
   if (!panel?.isConnected) return;
-  const existing = panel.querySelector(":scope > .h3s-custom-loras");
+  const existing = panel.querySelector(".h3s-custom-loras");
   if (existing && !replace) return;
   const section = buildSection(node);
-  if (existing) {
-    existing.replaceWith(section);
-  } else {
-    const advanced = [...panel.children].find((child) => child.querySelector?.(".h3s-advanced-toggle"));
-    panel.insertBefore(section, advanced || null);
+  if (existing) existing.replaceWith(section);
+  else {
+    const host = sectionHost(panel);
+    const advanced = [...host.children].find((child) => child.querySelector?.(".h3s-advanced-toggle"));
+    host.insertBefore(section, advanced || null);
   }
 }
 
@@ -337,7 +339,7 @@ function watchDirector(node) {
     installStyles();
     installLoraSection(node);
     const observer = new MutationObserver(() => {
-      if (!panel.querySelector(":scope > .h3s-custom-loras")) installLoraSection(node);
+      if (!panel.querySelector(".h3s-custom-loras")) installLoraSection(node);
     });
     observer.observe(panel, { childList: true });
     node.__h3studioLoraObserver = observer;
