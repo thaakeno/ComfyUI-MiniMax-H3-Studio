@@ -2,46 +2,30 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const setup = readFileSync(new URL("../../web/h3studio_prompt_models_setup.js", import.meta.url), "utf8");
-const notes = readFileSync(new URL("../../web/h3studio_analyzer_notes_migration.js", import.meta.url), "utf8");
-const benchmark = readFileSync(new URL("../../web/h3studio_smart_benchmark.js", import.meta.url), "utf8");
+const analyzer = readFileSync(new URL("../../h3studio/prompting/comfy_analyzer.py", import.meta.url), "utf8");
 const runtimeWeb = readFileSync(new URL("../../h3studio/runtime_web.py", import.meta.url), "utf8");
 const promptBenchmark = readFileSync(new URL("../../h3studio/nodes/prompt_prep_benchmark.py", import.meta.url), "utf8");
+const benchmark = readFileSync(new URL("../../web/h3studio_smart_benchmark.js", import.meta.url), "utf8");
 
-test("model setup recommends one shared Qwen3.5-4B and keeps modern speed profiles", () => {
-  assert.match(setup, /Qwen3\.5-4B · shared/);
-  assert.match(setup, /Auto · Qwen3\.5 4B/);
-  assert.match(setup, /Same as image analyzer/);
-  assert.match(setup, /Fast · Qwen3\.5 2B/);
-  assert.match(setup, /Fastest Vision · MiniCPM-V 4\.6/);
-  assert.match(setup, /models\/h3studio_vlm/);
+test("analyzer uses strict factual records and validates every reference ordinal", () => {
+  assert.match(analyzer, /factual visual reference analyst/);
+  assert.match(analyzer, /expected_ordinals/);
+  assert.match(analyzer, /missing = sorted/);
+  assert.match(analyzer, /word_count < 35/);
+  assert.match(analyzer, /visually_analyzed/);
 });
 
-test("MiniCPM download declares both GGUF and mmproj in the deliberate VLM folder", () => {
-  assert.match(setup, /MiniCPM-V-4_6-Q4_K_M\.gguf/);
-  assert.match(setup, /mmproj-model-f16\.gguf/);
-  assert.match(setup, /destination: "h3studio_vlm"/);
-  assert.match(setup, /UAD 2\.1\.4\+/);
+test("analyzer cache keys include image identity and source metadata", () => {
+  assert.match(analyzer, /_analysis_cache_key/);
+  assert.match(analyzer, /reference\.source_node_id/);
+  assert.match(analyzer, /reference\.source_slot/);
+  assert.match(analyzer, /reference\.filename/);
 });
 
-test("old automatic Qwen3-VL default migrates but explicit legacy files remain visible as legacy", () => {
-  assert.match(setup, /OLD_AUTO_ANALYZER/);
-  assert.match(setup, /analyzer\.value = "Auto · Qwen3\.5 4B"/);
-  assert.match(setup, /Legacy · Qwen3-VL 4B \/ 8B/);
-  assert.match(setup, /not broken/);
-});
-
-test("workflow onboarding notes explain the new recommended, fast and fastest-vision stacks", () => {
-  assert.match(notes, /Recommended.*Qwen3\.5-4B/s);
-  assert.match(notes, /Fast.*Qwen3\.5-2B/s);
-  assert.match(notes, /Fastest Vision.*MiniCPM-V 4\.6/s);
-  assert.match(notes, /Legacy.*Qwen3-VL 4B\/8B/s);
-  assert.match(notes, /35-70 dense words/);
-});
-
-test("asset catalog exposes prompt-model family and MiniCPM backend status", () => {
-  assert.match(runtimeWeb, /prompt_models/);
-  assert.match(runtimeWeb, /prompt_profiles/);
+test("runtime diagnostics expose prompt-prep and conditioning residency truth", () => {
+  assert.match(runtimeWeb, /prompt_prep/);
+  assert.match(runtimeWeb, /text_encoder/);
+  assert.match(runtimeWeb, /analyzer/);
   assert.match(runtimeWeb, /minicpm_status/);
   assert.match(runtimeWeb, /h3_conditioner/);
 });
@@ -60,12 +44,15 @@ test("prompt prep benchmark measures end-to-end latency instead of only tokens p
   assert.match(promptBenchmark, /text \/ OCR/);
 });
 
-test("smart benchmark is one bounded scroll surface with understandable presets", () => {
-  assert.match(benchmark, /max-height:700px;overflow:auto/);
+test("smart benchmark v7 is one bounded native editor with understandable comparisons", () => {
+  assert.match(benchmark, /max-height:560px/);
+  assert.match(benchmark, /overflow:auto/);
   assert.match(benchmark, /dedupeDomWidgets/);
-  assert.match(benchmark, /Current only/);
-  assert.match(benchmark, /Auto vs OG/);
-  assert.match(benchmark, /Runtime sweep/);
-  assert.match(benchmark, /Memory sweep/);
-  assert.match(benchmark, /assets unavailable · retry/);
+  assert.match(benchmark, /\["current", "Current"\]/);
+  assert.match(benchmark, /\["auto-og", "Auto vs OG"\]/);
+  assert.match(benchmark, /\["runtime", "Runtime"\]/);
+  assert.match(benchmark, /\["memory", "Memory"\]/);
+  assert.match(benchmark, /h3b7-scenario/);
+  assert.match(benchmark, /h3b7-select/);
+  assert.match(benchmark, /Assets unavailable/);
 });
