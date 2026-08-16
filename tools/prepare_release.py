@@ -61,7 +61,10 @@ def main() -> None:
         raise SystemExit(f"Unsupported prerelease version: {version}")
     py_version = f"{match.group('base')}a{match.group('serial')}"
 
-    replace_once(ROOT / "pyproject.toml", r'^version\s*=\s*"[^"]+"$', f'version = "{py_version}"')
+    # Keep the raw SemVer prerelease spelling in pyproject.toml because the
+    # Comfy Registry validates this field as semantic versioning. Python's
+    # packaging stack accepts the same string and normalizes it to `aN`.
+    replace_once(ROOT / "pyproject.toml", r'^version\s*=\s*"[^"]+"$', f'version = "{version}"')
     replace_once(ROOT / "h3studio/constants.py", r'^VERSION:\s*Final\s*=\s*"[^"]+"$', f'VERSION: Final = "{version}"')
 
     package_path = ROOT / "package.json"
@@ -83,7 +86,7 @@ def main() -> None:
         changelog_path.write_text(changelog, encoding="utf-8")
 
     subprocess.run(["uv", "lock"], cwd=ROOT, check=True)
-    print(f"Prepared {version} ({py_version}) and refreshed uv.lock")
+    print(f"Prepared {version} ({py_version} when normalized by Python packaging) and refreshed uv.lock")
 
 
 if __name__ == "__main__":
