@@ -253,7 +253,7 @@
         "Node name for S&R": "H3StudioTAEH3Preview"
       },
       "widgets_values": [
-        false,
+        true,
         "taeh3.safetensors",
         768,
         90,
@@ -261,7 +261,7 @@
         ""
       ],
       "widgets_values_named": {
-        "enabled": false,
+        "enabled": true,
         "tiny_vae": "taeh3.safetensors",
         "max_resolution": 768,
         "jpeg_quality": 90,
