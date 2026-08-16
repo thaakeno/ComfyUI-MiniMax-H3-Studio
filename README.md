@@ -311,7 +311,7 @@ To install the current pinned release instead of following later development com
 
 ```bash
 cd /path/to/ComfyUI/custom_nodes
-git clone --branch v0.1.0-alpha.17 --depth 1 https://github.com/thaakeno/ComfyUI-MiniMax-H3-Studio.git
+git clone --branch v0.1.0-alpha.18 --depth 1 https://github.com/thaakeno/ComfyUI-MiniMax-H3-Studio.git
 cd ComfyUI-MiniMax-H3-Studio
 python -m pip install -r requirements.txt
 ```

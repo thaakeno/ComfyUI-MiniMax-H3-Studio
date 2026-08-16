@@ -2,6 +2,32 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while runtime validation is incomplete.
 
+## [0.1.0-alpha.18] - 2026-08-16
+
+### Added
+
+- Added a persistent SQLite-backed Director generation library with prompt/seed/reference search, favorites, sampler filtering, sorting, and output re-indexing from embedded H3 Studio image metadata.
+- Added SQLite-first history restore with an indexed per-image lookup and PNG/WebP metadata fallback, keeping restores fast while preserving metadata-backed recoverability.
+- Added compact lazy history thumbnails and a bounded browser cache so large generation libraries remain practical without storing full Director states in localStorage.
+
+### Fixed
+
+- Fixed duplicate History entries by using the actual output image identity across live runs, browser migration, SQLite indexing, and re-indexed PNGs.
+- Fixed History card restore, favorite, expand, hover, and scrolling regressions caused by competing capture handlers and self-triggering MutationObserver/card-reorder loops.
+- Fixed localStorage QuotaExceededError failures by moving authoritative history state to SQLite/embedded image metadata and limiting browser storage to a compact cache.
+- Fixed slow History restores that downloaded and parsed the full output PNG on every click; normal restores now use the already indexed SQLite state and only read PNG metadata as a fallback.
+- Fixed severe TAEH3 live-preview artifacts at higher resolutions while restoring realtime cadence by using a distribution-preserving moderate latent decode budget and resizing only the decoded RGB preview to the requested display size.
+- Fixed single-reference Guided T2I conditioning so the 512 px semantic Qwen copy optimization applies to one or more references while full-resolution FL2VA keyframes remain untouched.
+- Made automatic reference roles prompt-aware and more conservative so obvious subject/character references no longer get mislabeled as environment as often.
+- Improved Director timing telemetry so sampling remains backend wall-clock accurate and average-step reporting uses observed sampling intervals rather than including model initialization overhead.
+
+### Changed
+
+- Made embedded PNG/WebP H3 Studio metadata the recoverable source of truth for generated-image state while SQLite acts as the fast searchable index and browser storage acts only as a lightweight cache.
+- Kept the original polished strip card hover motion and full-resolution expand behavior while serving small cached thumbnails for History browsing.
+- Refined the History strip into a generation-library workflow without changing the existing Demos interaction model.
+- Enabled TAEH3 Live Preview by default in the maintained H3 Studio workflow while preserving saved user workflow choices.
+
 ## [0.1.0-alpha.17] - 2026-08-16
 
 ### Added

@@ -239,7 +239,7 @@ wheels = [
 
 [[package]]
 name = "comfyui-minimax-h3-studio"
-version = "0.1.0a17"
+version = "0.1.0a18"
 source = { virtual = "." }
 
 [package.optional-dependencies]
