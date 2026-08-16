@@ -1,0 +1,49 @@
+name: Temporary maintained workflow preview toggle
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - ".github/workflows/_tmp_set_live_preview_on.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: dev
+          fetch-depth: 0
+      - name: Set maintained workflow live preview on
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('example_workflows/H3_Studio_Unified_Image.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          matches = [node for node in data.get('nodes', []) if node.get('type') == 'H3StudioTAEH3Preview']
+          if len(matches) != 1:
+              raise SystemExit(f'Expected one H3StudioTAEH3Preview node, found {len(matches)}')
+          node = matches[0]
+          widgets = list(node.get('widgets_values') or [])
+          if not widgets:
+              raise SystemExit('Preview node has no widgets_values')
+          widgets[0] = True
+          node['widgets_values'] = widgets
+          named = dict(node.get('widgets_values_named') or {})
+          named['enabled'] = True
+          node['widgets_values_named'] = named
+          path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+          PY
+          rm .github/workflows/_tmp_set_live_preview_on.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: ship maintained workflow with live preview on"
+          git push origin HEAD:dev
