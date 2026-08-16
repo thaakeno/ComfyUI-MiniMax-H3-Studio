@@ -8,10 +8,9 @@ from contextlib import suppress
 
 LOGGER = logging.getLogger(__name__)
 _MARKER = "__h3studio_post_merge_v21__"
-_PREVIEW_MARKER = "__h3studio_native_preview_decode_v24__"
-_NATIVE_PREVIEW_MAX_PIXELS = 2_600_000
-_NATIVE_PREVIEW_MAX_EDGE = 2304
-_MIN_LARGE_PREVIEW_DECODE_EDGE = 1536
+_PREVIEW_MARKER = "__h3studio_native_preview_decode_v25__"
+_REALTIME_PREVIEW_DECODE_EDGE = 1280
+_MIN_REALTIME_PREVIEW_DECODE_EDGE = 1024
 
 
 def _install_single_reference_semantic_resize() -> None:
@@ -95,7 +94,7 @@ def _install_prompt_aware_auto_roles() -> None:
 
 
 def _rgb_preview_limit(torch, image, max_resolution: int):
-    """Resize only decoded RGB pixels; never mix H3 latent neighborhoods for normal 2MP previews."""
+    """Resize decoded RGB pixels to the requested display size."""
 
     height, width = int(image.shape[-2]), int(image.shape[-1])
     longest = max(height, width)
@@ -107,17 +106,22 @@ def _rgb_preview_limit(torch, image, max_resolution: int):
     return torch.nn.functional.interpolate(image, size=(target_h, target_w), mode="area")
 
 
-def _latent_for_large_preview(torch, latent, max_resolution: int):
-    """Bound only genuinely large previews so CPU TAEH3 does not explode at 4MP/8MP."""
+def _latent_for_realtime_preview(torch, latent, max_resolution: int):
+    """Keep TAEH3 close to the sampler without returning to destructive 768px latent decoding.
+
+    Full native 2MP decoding is visually clean but too expensive on CPU: the
+    preview worker can take longer than one H3 denoising step and then displays
+    stale frames. Decode a moderately reduced latent instead. The 1280px ceiling
+    keeps far more latent spatial structure than the old direct-768 path while
+    cutting convolution work enough for the one-slot latest-frame queue to keep up.
+    """
 
     output_h = int(latent.shape[-2]) * 16
     output_w = int(latent.shape[-1]) * 16
-    pixels = output_h * output_w
     longest = max(output_h, output_w)
-    if pixels <= _NATIVE_PREVIEW_MAX_PIXELS and longest <= _NATIVE_PREVIEW_MAX_EDGE:
-        return latent, "native-latent"
 
-    decode_edge = max(_MIN_LARGE_PREVIEW_DECODE_EDGE, int(max_resolution) * 2)
+    requested = max(_MIN_REALTIME_PREVIEW_DECODE_EDGE, int(max_resolution) * 5 // 3)
+    decode_edge = min(_REALTIME_PREVIEW_DECODE_EDGE, requested)
     if longest <= decode_edge:
         return latent, "native-latent"
 
@@ -126,18 +130,19 @@ def _latent_for_large_preview(torch, latent, max_resolution: int):
     target_w = max(2, round(int(latent.shape[-1]) * scale))
     reduced = torch.nn.functional.interpolate(latent, size=(target_h, target_w), mode="area")
 
-    # Preserve per-channel first/second moments when a very large latent must be
-    # reduced. This path is intentionally reserved for >~2.5MP previews.
+    # Preserve each latent channel's first/second moments. The previous 768px
+    # resize collapsed those distributions and produced severe doubled/smeared
+    # structures; this gentler reduction plus moment restoration avoids that path.
     src_mean = latent.mean(dim=(-2, -1), keepdim=True)
     src_std = latent.std(dim=(-2, -1), keepdim=True, unbiased=False).clamp_min(1e-6)
     dst_mean = reduced.mean(dim=(-2, -1), keepdim=True)
     dst_std = reduced.std(dim=(-2, -1), keepdim=True, unbiased=False).clamp_min(1e-6)
     reduced = (reduced - dst_mean) * (src_std / dst_std).clamp(0.25, 4.0) + src_mean
-    return reduced, f"latent-cap-{decode_edge}"
+    return reduced, f"realtime-latent-{decode_edge}"
 
 
 def _install_preview_decode_quality() -> None:
-    """Decode normal 2MP H3 previews before applying the display-size cap."""
+    """Use a quality-preserving realtime TAEH3 decode budget, then resize in RGB."""
 
     from .nodes import preview as preview_module
 
@@ -151,8 +156,20 @@ def _install_preview_decode_quality() -> None:
         import torch
 
         started = time.perf_counter()
-        latent, decode_mode = _latent_for_large_preview(torch, job.latent, self.max_resolution)
+        latent, decode_mode = _latent_for_realtime_preview(torch, job.latent, self.max_resolution)
         decoder = self._load(torch)
+
+        # channels_last lets oneDNN/MKLDNN use its preferred CPU convolution
+        # layout on common x86 hosts. It is a no-op fallback if unsupported.
+        try:
+            if not bool(getattr(self, "_h3s_channels_last", False)):
+                self.decoder = decoder.to(memory_format=torch.channels_last)
+                decoder = self.decoder
+                self._h3s_channels_last = True
+            latent = latent.contiguous(memory_format=torch.channels_last)
+        except Exception:
+            pass
+
         with torch.inference_mode():
             image = decoder(latent).clamp(0, 1)
             image = _rgb_preview_limit(torch, image, self.max_resolution).clamp(0, 1)
