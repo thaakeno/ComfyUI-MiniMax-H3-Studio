@@ -11,7 +11,6 @@ except ImportError:  # pragma: no cover - only used outside ComfyUI
     comfy_nodes = None
 
 from ..context import H3StudioContext
-from ..telemetry import record_generation_success
 
 
 def _saved_image_count(images: Any) -> int:
@@ -127,11 +126,7 @@ class H3StudioSaveImage(_SaveImageBase):
         extra_pnginfo=None,
     ):
         saved_prompt, saved_extra = completed_png_metadata(prompt, extra_pnginfo, studio_context)
-        result = super().save_images(images, filename_prefix, saved_prompt, saved_extra)
-        # Count only after ComfyUI has actually completed every requested save.
-        # The reporter accepts an integer only and performs network work later.
-        record_generation_success(_saved_image_count(images))
-        return result
+        return super().save_images(images, filename_prefix, saved_prompt, saved_extra)
 
 
 NODE_CLASS_MAPPINGS = {"H3StudioSaveImage": H3StudioSaveImage}
