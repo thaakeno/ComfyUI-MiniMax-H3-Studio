@@ -66,8 +66,9 @@ jobs:
           match = re.search(pattern, changelog, flags=re.MULTILINE | re.DOTALL)
           if match is None:
               raise SystemExit(f"Missing changelog section for {version}")
+          body = match.group("body").strip()
           Path("release-notes.md").write_text(
-              "## What's Changed\n\n" + match.group("body").strip() + "\n",
+              "" if not body else "## What's Changed\n\n" + body + "\n",
               encoding="utf-8",
           )
           PY
