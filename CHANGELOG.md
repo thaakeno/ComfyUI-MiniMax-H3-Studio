@@ -2,6 +2,8 @@
 
 All notable changes are recorded here. The format follows Keep a Changelog; versions use semantic versioning with prerelease identifiers while runtime validation is incomplete.
 
+## [0.1.0-alpha.20] - 2026-08-17
+
 ## [0.1.0-alpha.19] - 2026-08-17
 
 ### Added
