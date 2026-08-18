@@ -56,4 +56,5 @@ jobs:
           update-readme: true
           readme: README.md
           readme-format: picture
+          commit: ${{ github.ref_name == 'dev' }}
           commit-message: "docs: refresh star history chart [skip ci]"

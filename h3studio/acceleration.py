@@ -338,7 +338,7 @@ def _composite_bypass_injection(injections: tuple[Any, ...]) -> tuple[Any, tuple
             raise first_error
 
     composite = PatcherInjection(inject=inject_all, eject=eject_all)
-    setattr(composite, "_h3studio_bypass_children", children)
+    composite._h3studio_bypass_children = children
     return composite, children
 
 

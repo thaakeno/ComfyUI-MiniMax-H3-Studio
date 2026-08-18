@@ -125,7 +125,7 @@ def test_bypass_injections_are_composed_and_ejected_in_reverse_order() -> None:
     assert count == 3
     assert len(patcher.injections["bypass_lora"]) == 1
     composite = patcher.injections["bypass_lora"][0]
-    assert tuple(getattr(composite, "_h3studio_bypass_children")) == (lightx, style_a, custom_new)
+    assert tuple(composite._h3studio_bypass_children) == (lightx, style_a, custom_new)
 
     composite.inject(patcher)
     composite.eject(patcher)
