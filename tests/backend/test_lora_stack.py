@@ -92,10 +92,22 @@ def test_acceleration_lora_cannot_be_stacked_twice() -> None:
         )
 
 
-def test_bypass_injections_are_additive_instead_of_last_lora_wins() -> None:
+def test_bypass_injections_are_composed_and_ejected_in_reverse_order() -> None:
+    events: list[str] = []
+
+    class FakeInjection:
+        def __init__(self, name: str):
+            self.name = name
+
+        def inject(self, _patcher):
+            events.append(f"inject:{self.name}")
+
+        def eject(self, _patcher):
+            events.append(f"eject:{self.name}")
+
     class FakePatcher:
-        def __init__(self):
-            self.injections = {"bypass_lora": ["custom-new"]}
+        def __init__(self, current):
+            self.injections = {"bypass_lora": list(current)}
 
         def get_injections(self, key):
             return self.injections.get(key)
@@ -103,8 +115,87 @@ def test_bypass_injections_are_additive_instead_of_last_lora_wins() -> None:
         def set_injections(self, key, value):
             self.injections[key] = list(value)
 
-    patcher = FakePatcher()
-    count = _restore_stacked_bypass_injections(patcher, ("lightx", "style-a"))
+    lightx = FakeInjection("lightx")
+    style_a = FakeInjection("style-a")
+    custom_new = FakeInjection("custom-new")
+    patcher = FakePatcher([custom_new])
+
+    count = _restore_stacked_bypass_injections(patcher, (lightx, style_a))
 
     assert count == 3
-    assert patcher.injections["bypass_lora"] == ["lightx", "style-a", "custom-new"]
+    assert len(patcher.injections["bypass_lora"]) == 1
+    composite = patcher.injections["bypass_lora"][0]
+    assert tuple(getattr(composite, "_h3studio_bypass_children")) == (lightx, style_a, custom_new)
+
+    composite.inject(patcher)
+    composite.eject(patcher)
+    assert events == [
+        "inject:lightx",
+        "inject:style-a",
+        "inject:custom-new",
+        "eject:custom-new",
+        "eject:style-a",
+        "eject:lightx",
+    ]
+
+
+def test_bypass_forward_stack_survives_repeated_generation_cycles() -> None:
+    class FakeModule:
+        pass
+
+    module = FakeModule()
+
+    def base_forward(value):
+        return value
+
+    module.forward = base_forward
+
+    class ForwardWrapperInjection:
+        def __init__(self):
+            self.original_forward = None
+            self.wrapper = None
+
+        def inject(self, _patcher):
+            if self.original_forward is not None:
+                return
+            self.original_forward = module.forward
+
+            def wrapped(value):
+                return self.original_forward(value) + 1
+
+            self.wrapper = wrapped
+            module.forward = wrapped
+
+        def eject(self, _patcher):
+            if self.original_forward is None:
+                return
+            module.forward = self.original_forward
+            self.original_forward = None
+
+    class FakePatcher:
+        def __init__(self, current):
+            self.injections = {"bypass_lora": list(current)}
+
+        def get_injections(self, key):
+            return self.injections.get(key)
+
+        def set_injections(self, key, value):
+            self.injections[key] = list(value)
+
+    first = ForwardWrapperInjection()
+    second = ForwardWrapperInjection()
+    patcher = FakePatcher([second])
+    assert _restore_stacked_bypass_injections(patcher, (first,)) == 2
+    composite = patcher.injections["bypass_lora"][0]
+
+    # This is the failure mode from the real traceback. With Comfy's normal
+    # forward-order top-level ejection, the first wrapper is restored after its
+    # owner has cleared original_forward; the next injection then captures its
+    # own wrapper as original_forward and recurses forever. The composite must
+    # survive many generation-style inject/eject cycles without leaving a hook.
+    for _ in range(200):
+        composite.inject(patcher)
+        assert module.forward(7) == 9
+        composite.eject(patcher)
+        assert module.forward is base_forward
+        assert module.forward(7) == 7

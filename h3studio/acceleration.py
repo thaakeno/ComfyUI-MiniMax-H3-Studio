@@ -265,14 +265,96 @@ def _existing_bypass_injections(model: Any) -> tuple[Any, ...]:
         return ()
 
 
-def _restore_stacked_bypass_injections(model: Any, previous: tuple[Any, ...]) -> int:
-    """Preserve previous bypass LoRAs when Comfy's loader replaces its shared key.
+def _flatten_bypass_injections(injections: tuple[Any, ...]) -> tuple[Any, ...]:
+    """Flatten Studio composites while preserving adapter injection order."""
 
-    ComfyUI's public bypass loader stores every call under the fixed
-    ``bypass_lora`` injection key. ModelPatcher clones inherit previous
-    injections, but a second loader call replaces that key. Combining the old
-    and newly-created injection lists makes ordered LightX + custom LoRA stacks
-    additive without ever merging/requantizing the H3 base weights.
+    flattened: list[Any] = []
+    for injection in injections:
+        children = getattr(injection, "_h3studio_bypass_children", None)
+        if children:
+            flattened.extend(_flatten_bypass_injections(tuple(children)))
+        else:
+            flattened.append(injection)
+
+    unique: list[Any] = []
+    seen: set[int] = set()
+    for injection in flattened:
+        identity = id(injection)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        unique.append(injection)
+    return tuple(unique)
+
+
+def _composite_bypass_injection(injections: tuple[Any, ...]) -> tuple[Any, tuple[Any, ...]]:
+    """Wrap nested bypass injections so teardown happens in strict LIFO order.
+
+    Bypass LoRAs replace ``module.forward`` and remember the previous callable.
+    When several adapters touch the same module they therefore form a wrapper
+    stack. ComfyUI currently ejects top-level PatcherInjection objects in the
+    same order it injected them, which is unsafe for a wrapper stack. One
+    composite injection lets H3 Studio keep Comfy's public API while reversing
+    teardown internally: A -> B -> C is always ejected C -> B -> A.
+    """
+
+    children = _flatten_bypass_injections(injections)
+
+    try:
+        from comfy.patcher_extension import PatcherInjection
+    except Exception:  # pragma: no cover - pure tests run without ComfyUI
+        class PatcherInjection:  # type: ignore[no-redef]
+            def __init__(self, inject, eject):
+                self.inject = inject
+                self.eject = eject
+
+    def inject_all(model_patcher):
+        injected: list[Any] = []
+        try:
+            for injection in children:
+                injection.inject(model_patcher)
+                injected.append(injection)
+        except Exception:
+            # Do not leave half of a forward-wrapper chain attached when one
+            # child fails to inject.
+            for injection in reversed(injected):
+                try:
+                    injection.eject(model_patcher)
+                except Exception:
+                    continue
+            raise
+
+    def eject_all(model_patcher):
+        first_error: Exception | None = None
+        for injection in reversed(children):
+            try:
+                injection.eject(model_patcher)
+            except Exception as exc:
+                # Continue unwinding the remaining wrappers before surfacing
+                # the first failure; otherwise the shared model stays poisoned.
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
+
+    composite = PatcherInjection(inject=inject_all, eject=eject_all)
+    setattr(composite, "_h3studio_bypass_children", children)
+    return composite, children
+
+
+def _restore_stacked_bypass_injections(model: Any, previous: tuple[Any, ...]) -> int:
+    """Preserve bypass LoRA stacks without creating recursive forward hooks.
+
+    ComfyUI's public bypass loader stores each call under the fixed
+    ``bypass_lora`` injection key, so a later LoRA replaces the earlier key.
+    H3 Studio must preserve both adapter sets, but keeping them as separate
+    top-level injections is unsafe: Comfy injects and ejects that list in the
+    same order, while nested forward wrappers must unwind in reverse order.
+
+    Collapse the full stack into one composite PatcherInjection. It injects
+    children in order and ejects them in strict reverse order, preventing a
+    BypassForwardHook from ever retaining its own ``_bypass_forward`` as the
+    original forward across repeated generations.
     """
 
     if not previous:
@@ -285,9 +367,12 @@ def _restore_stacked_bypass_injections(model: Any, previous: tuple[Any, ...]) ->
         current = tuple(getter("bypass_lora") or ())
         if not current:
             return 0
-        combined = [*previous, *current]
-        setter("bypass_lora", combined)
-        return len(combined)
+        composite, children = _composite_bypass_injection((*previous, *current))
+        if len(children) <= 1:
+            setter("bypass_lora", list(children))
+        else:
+            setter("bypass_lora", [composite])
+        return len(children)
     except Exception:
         return 0
 
@@ -303,7 +388,8 @@ def _load_model_lora(
     Current ComfyUI exposes a bypass adapter path which performs the LoRA
     contribution during each layer's forward pass. This avoids the very slow
     merge -> requantize cycle seen with INT8/FP8 H3 checkpoints. Existing bypass
-    injections are preserved so multiple user LoRAs can be stacked on LightX.
+    injections are preserved as one LIFO-safe composite so multiple user LoRAs
+    can be stacked on LightX without poisoning repeated generation cycles.
     Older ComfyUI builds retain the normal node-loader fallback for compatibility.
     """
 
