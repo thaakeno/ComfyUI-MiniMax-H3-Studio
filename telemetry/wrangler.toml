@@ -1,0 +1,15 @@
+name = "h3-studio-counter"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+logpush = false
+
+[observability]
+enabled = false
+
+[[durable_objects.bindings]]
+name = "GENERATION_COUNTER"
+class_name = "GenerationCounter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GenerationCounter"]
