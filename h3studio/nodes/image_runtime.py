@@ -5,10 +5,12 @@
 # H3 Studio gives every node a unique id so both packages can coexist.
 from __future__ import annotations
 
+import importlib.util
 import logging
 import math
 import re
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import torch
@@ -27,8 +29,41 @@ except Exception as exc:  # pragma: no cover - only reached outside ComfyUI
         "Update ComfyUI before loading this extension."
     ) from exc
 
-from ..telemetry import record_generation_success
 from ..vae_io import detect_vae_io
+
+
+def _load_telemetry_recorder(path: Optional[Path] = None):
+    """Load the optional telemetry recorder from the removable top-level folder."""
+
+    telemetry_path = path or (Path(__file__).resolve().parents[2] / "telemetry" / "telemetry.py")
+    if not telemetry_path.is_file():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("_h3studio_optional_telemetry", telemetry_path)
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        recorder = getattr(module, "record_generation_success", None)
+        return recorder if callable(recorder) else None
+    except Exception:
+        # Telemetry is optional and must never stop H3 Studio from loading.
+        return None
+
+
+_TELEMETRY_RECORDER = _load_telemetry_recorder()
+
+
+def record_generation_success(count: int = 1) -> None:
+    """Record a successful output when the optional telemetry folder is present."""
+
+    if _TELEMETRY_RECORDER is None:
+        return
+    try:
+        _TELEMETRY_RECORDER(count)
+    except Exception:
+        # Generation must never fail because telemetry did.
+        return
 
 
 LOGGER = logging.getLogger(__name__)
