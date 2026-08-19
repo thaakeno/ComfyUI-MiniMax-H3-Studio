@@ -12,10 +12,7 @@ from collections.abc import Callable, Sequence
 from contextlib import suppress
 from pathlib import Path
 
-# Filled with the hosted GoatCounter /count URL at cutover time. Keeping this
-# empty on the migration branch makes the branch fail closed rather than send
-# telemetry to the legacy Cloudflare endpoint.
-DEFAULT_ENDPOINT = ""
+DEFAULT_ENDPOINT = "https://h3-studio.goatcounter.com/count"
 GOATCOUNTER_PATH = "/generated"
 REQUEST_INTERVAL_SECONDS = 0.40
 OPT_OUT_FILE = Path(__file__).resolve().parents[1] / ".h3studio-telemetry-disabled"
@@ -41,7 +38,7 @@ def _send_goatcounter_hit(url: str) -> None:
     request = urllib.request.Request(
         url,
         data=b"",
-        headers={"User-Agent": "H3-Studio-Counter/2"},
+        headers={"User-Agent": "H3-Studio/2 Counter"},
         method="POST",
     )
 
