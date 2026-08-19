@@ -31,12 +31,6 @@ export function badgeSvg(total) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="28" role="img" aria-label="${accessibleLabel}: ${value}"><linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#fff" stop-opacity=".12"/><stop offset="1" stop-opacity=".12"/></linearGradient><clipPath id="r"><rect width="${width}" height="28" rx="6"/></clipPath><g clip-path="url(#r)"><rect width="${left}" height="28" fill="#171b1f"/><rect x="${left}" width="${right}" height="28" fill="#34d3b5"/><rect width="${width}" height="28" fill="url(#s)"/></g><g fill="none" stroke="#67e8d0" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="10" y="8" width="15" height="12" rx="2"/><circle cx="20.5" cy="11.5" r="1.3"/><path d="m12.5 18 3.8-4 2.7 2.6 1.7-1.6 2.2 3"/></g><g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,sans-serif" font-size="10"><text x="66" y="18">GENERATED</text><text x="${left + right / 2}" y="18" fill="#07120f">${value}</text></g></svg>`;
 }
 
-function relayAuthorized(request, env) {
-  const expected = typeof env.RELAY_TOKEN === "string" ? env.RELAY_TOKEN : "";
-  if (!expected) return true;
-  return request.headers.get("X-H3-Relay-Token") === expected;
-}
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -44,7 +38,6 @@ export default {
     const counter = env.GENERATION_COUNTER.get(id);
 
     if (request.method === "POST" && url.pathname === "/v1/report") {
-      if (!relayAuthorized(request, env)) return new Response(null, { status: 403 });
       if (Number(request.headers.get("content-length") || 0) > 128) return new Response(null, { status: 413 });
       const body = await request.json().catch(() => ({}));
       const count = Number.isInteger(body.count) ? body.count : 0;
