@@ -2,6 +2,22 @@
 
 H3 Studio's current generated-image counter uses hosted GoatCounter directly instead of a project-operated telemetry ingress.
 
+The entire network-facing telemetry implementation now lives inside this top-level `telemetry/` directory. `h3studio/telemetry.py` is only a small no-network compatibility bridge so existing H3 Studio code does not break if this directory is missing.
+
+If you want telemetry removed entirely from your local install, delete the whole `telemetry/` directory and restart ComfyUI. H3 Studio will automatically treat telemetry as disabled and generation will continue normally.
+
+Windows PowerShell:
+
+```powershell
+Remove-Item -Recurse -Force .\telemetry
+```
+
+Linux/macOS:
+
+```bash
+rm -rf telemetry
+```
+
 The current client sends only a counter hit for the fixed path `/generated` with GoatCounter's `ns=1` flag. It does **not** send prompts, images, references, seeds, hardware details, file paths, installation identifiers, workflow data, or other generation metadata. No GoatCounter API key is shipped in H3 Studio.
 
 Each successful output count is queued immediately on a daemon background thread; there is no 10-image/60-second local batching delay anymore. If one H3 execution produces multiple successful images, that integer count is expanded into one GoatCounter `/count` hit per image. All sender threads share one lock and keep 0.40 seconds between requests so independent generations cannot burst above GoatCounter's public count rate limit. Generation itself never waits for the network.
@@ -36,6 +52,8 @@ Remove the per-install opt-out with:
 python -m h3studio.telemetry enable
 ```
 
+If the `telemetry/` directory itself has been deleted, the compatibility bridge reports telemetry as disabled and does not attempt any network request.
+
 ### Temporary environment override
 
 `H3STUDIO_TELEMETRY=0` can be set before starting ComfyUI for launch scripts, containers and other advanced setups. An environment override that disables telemetry takes precedence even if the per-install opt-out file is removed.
@@ -62,14 +80,14 @@ GoatCounter documents that its public visitor-counter responses may be cached fo
 
 Older already-installed H3 Studio versions may still have the previous Cloudflare `/v1/report` endpoint baked into their local code. The old deployed Worker can remain online temporarily for those installs even though its source/config are no longer part of the current branch.
 
-The repository includes `tools/migrate_counter_to_goatcounter.py` for the historical migration and later legacy-version delta imports. It reads the API token from `GOATCOUNTER_API_TOKEN` and never writes that token to the repository.
+The repository includes `telemetry/migrate_counter_to_goatcounter.py` for the historical migration and later legacy-version delta imports. It reads the API token from `GOATCOUNTER_API_TOKEN` and never writes that token to the repository.
 
 The migration API batches up to 500 historical hits per request and sets `no_sessions: true`. Never re-import the full historical baseline after cutover; only import the additional legacy Cloudflare delta since the saved cutover checkpoint.
 
 For later syncs, pass the last saved legacy total with `--delta-from`. The script fetches the current legacy total, imports only the increase, and prints the next checkpoint after a successful apply:
 
 ```powershell
-python .\tools\migrate_counter_to_goatcounter.py --code h3-studio --delta-from 9058 --apply
+python .\telemetry\migrate_counter_to_goatcounter.py --code h3-studio --delta-from 9058 --apply
 ```
 
 Replace `9058` with the last `Next legacy checkpoint` value on subsequent syncs.
