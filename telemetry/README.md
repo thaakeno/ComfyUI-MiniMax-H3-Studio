@@ -65,3 +65,11 @@ Older already-installed H3 Studio versions may still have the previous Cloudflar
 The repository includes `tools/migrate_counter_to_goatcounter.py` for the historical migration and later legacy-version delta imports. It reads the API token from `GOATCOUNTER_API_TOKEN` and never writes that token to the repository.
 
 The migration API batches up to 500 historical hits per request and sets `no_sessions: true`. Never re-import the full historical baseline after cutover; only import the additional legacy Cloudflare delta since the saved cutover checkpoint.
+
+For later syncs, pass the last saved legacy total with `--delta-from`. The script fetches the current legacy total, imports only the increase, and prints the next checkpoint after a successful apply:
+
+```powershell
+python .\tools\migrate_counter_to_goatcounter.py --code h3-studio --delta-from 9058 --apply
+```
+
+Replace `9058` with the last `Next legacy checkpoint` value on subsequent syncs.
