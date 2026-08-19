@@ -12,7 +12,7 @@ Text-to-image, image editing, multi-reference generation, LightX acceleration, s
   <img alt="ComfyUI custom nodes" src="https://img.shields.io/badge/ComfyUI-Custom%20Nodes-0EA5E9?style=for-the-badge&labelColor=171B1F">
   <img alt="H3 profiles" src="https://img.shields.io/badge/H3-Base%20%C2%B7%20LightX%20%C2%B7%20PDD-A855F7?style=for-the-badge&labelColor=171B1F">
   <img alt="Status alpha" src="https://img.shields.io/badge/Status-Alpha-F59E0B?style=for-the-badge&labelColor=171B1F">
-  <img alt="Images generated" src="https://h3-studio.goatcounter.com/counter/generated.svg?no_branding=1">
+  <img alt="Images generated" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fh3-studio.goatcounter.com%2Fcounter%2Fgenerated.json&query=%24.count&label=GENERATED&color=34D3B5&labelColor=171B1F&style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHJlY3QgeD0iMyIgeT0iNCIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE2IiByeD0iMiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8%2BPGNpcmNsZSBjeD0iOC41IiBjeT0iOSIgcj0iMS41IiBmaWxsPSJ3aGl0ZSIvPjxwYXRoIGQ9Ik01IDE3bDQuNS00LjUgMyAzIDItMiA0LjUgMy41IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg%3D%3D">
 </p>
 
 **One maintained workflow. H3 underneath. Far less wiring.**
@@ -357,7 +357,6 @@ H3 Studio integrates its registered execution surface; it does not copy or bundl
 <img width="3264" height="1408" alt="H3 Studio example" src="https://github.com/user-attachments/assets/160a2623-34a2-48ea-9d4b-1b3fc9699970" />
 
 <img width="1920" height="1088" alt="H3 Studio example" src="https://github.com/user-attachments/assets/8054886b-49b9-4642-a97e-59c59a2fcf02" />
-
 <img width="1920" height="1088" alt="H3 Studio example" src="https://github.com/user-attachments/assets/c1e28ee6-9587-4117-8f10-012e45e8c41d" />
 
 <img width="3264" height="1824" alt="H3 Studio example" src="https://github.com/user-attachments/assets/1a2133f0-a95d-4680-9baf-4dc64575f5e6" />
@@ -434,7 +433,7 @@ If H3 Studio makes H3 less painful to use, leave a star.
 </div>
 
 > [!NOTE]
-> **What the GENERATED badge counts:** successful images saved through H3 Studio. It sends only a batched number — never prompts, images, references, seeds, hardware details, paths or identifiers. Set `H3STUDIO_TELEMETRY=0` to opt out; [implementation details](telemetry/README.md) are public.
+> **What the GENERATED badge counts:** successful images saved through H3 Studio. It sends only a fixed `/generated` counter hit with session tracking disabled — never prompts, images, references, seeds, hardware details, paths or identifiers. Set `H3STUDIO_TELEMETRY=0` to opt out; [implementation details](telemetry/README.md) are public.
 
 ## License
 
