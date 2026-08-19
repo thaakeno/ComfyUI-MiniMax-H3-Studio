@@ -8,6 +8,8 @@ htmlcov/
 .mypy_cache/
 node_modules/
 .wrangler/
+.dev.vars*
+.env*
 dist/
 build/
 *.egg-info/
