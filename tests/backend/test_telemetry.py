@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import ast  # noqa: I001 - isolated loader namespace keeps these imports explicit
+import ast
 import importlib.util
 import subprocess
 import sys
