@@ -36,11 +36,12 @@ export class ReportMixer {
     await this.state.storage.transaction(async (storage) => {
       const pending = Number(await storage.get("pending")) || 0;
       await storage.put("pending", pending + count);
-      const alarm = await storage.getAlarm();
-      if (alarm === null) {
-        await storage.setAlarm(Date.now() + randomDelay(MIN_FLUSH_MS, MAX_FLUSH_MS));
-      }
     });
+
+    const alarm = await this.state.storage.getAlarm();
+    if (alarm === null) {
+      await this.state.storage.setAlarm(Date.now() + randomDelay(MIN_FLUSH_MS, MAX_FLUSH_MS));
+    }
 
     return new Response(null, { status: 202, headers: noStore() });
   }

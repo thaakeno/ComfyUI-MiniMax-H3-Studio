@@ -25,17 +25,13 @@ npx wrangler secret put RELAY_TOKEN
 npx wrangler deploy
 ```
 
-Once the independent relay URL exists, point H3 Studio at `https://<relay-host>/v1/report`. For a local test before changing the built-in default:
+Once the independent relay URL exists, verify the relay itself first:
 
 ```bash
-H3STUDIO_TELEMETRY_ENDPOINT=https://<relay-host>/v1/report python -m h3studio.telemetry status
+curl -fsS https://<relay-host>/healthz
+curl -i -X POST https://<relay-host>/v1/report -H "Content-Type: application/json" --data '{"count":1,"schema":1}'
 ```
 
-On PowerShell:
-
-```powershell
-$env:H3STUDIO_TELEMETRY_ENDPOINT = "https://<relay-host>/v1/report"
-python -m h3studio.telemetry status
-```
+The POST should return HTTP `202`. Because reports are deliberately mixed and delayed, the counter backend will increase within roughly 5-15 minutes rather than immediately. For a local H3 Studio test before changing the built-in default, set `H3STUDIO_TELEMETRY_ENDPOINT=https://<relay-host>/v1/report`, generate an image, then wait for the mixing window and check `/v1/count`.
 
 After the relay has been verified, the built-in `DEFAULT_ENDPOINT` can be changed to the relay URL in a normal release. Do not enable `RELAY_TOKEN` on the counter before clients have been moved to the relay, otherwise older direct clients will receive HTTP 403 and their counts will be dropped.
