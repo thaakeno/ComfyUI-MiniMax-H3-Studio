@@ -6,8 +6,13 @@ import threading
 import urllib.parse
 from pathlib import Path
 
-from h3studio import telemetry
-from h3studio.telemetry import ImmediateReporter
+from h3studio import telemetry as telemetry_bridge
+
+telemetry = telemetry_bridge._CLIENT
+if telemetry is None:  # pragma: no cover - repository tests include telemetry/client.py
+    raise RuntimeError("telemetry/client.py is required for telemetry implementation tests")
+
+ImmediateReporter = telemetry.ImmediateReporter
 
 
 def test_default_goatcounter_endpoint_is_finalized() -> None:
@@ -135,3 +140,13 @@ def test_module_disable_command_works_end_to_end() -> None:
         assert opt_out.is_file()
     finally:
         opt_out.unlink(missing_ok=True)
+
+
+def test_missing_telemetry_folder_is_clean_noop(monkeypatch, tmp_path, capsys) -> None:
+    assert telemetry_bridge._load_client(tmp_path / "missing-client.py") is None
+
+    monkeypatch.setattr(telemetry_bridge, "_CLIENT", None)
+    assert telemetry_bridge.telemetry_enabled() is False
+    assert telemetry_bridge.record_generation_success(10) is None
+    assert telemetry_bridge._cli(["status"]) == 0
+    assert capsys.readouterr().out.strip() == "H3 telemetry: DISABLED"
