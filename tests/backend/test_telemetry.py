@@ -7,7 +7,7 @@ import urllib.parse
 from pathlib import Path
 
 from h3studio import telemetry
-from h3studio.telemetry import AggregateReporter
+from h3studio.telemetry import ImmediateReporter
 
 
 def test_default_goatcounter_endpoint_is_finalized() -> None:
@@ -19,7 +19,7 @@ def test_default_goatcounter_endpoint_is_finalized() -> None:
     assert urllib.parse.parse_qs(parsed.query) == {"p": ["/generated"], "ns": ["1"]}
 
 
-def test_goatcounter_sender_expands_batch_into_no_session_hits(monkeypatch) -> None:
+def test_goatcounter_sender_expands_count_into_paced_no_session_hits(monkeypatch) -> None:
     captured = []
     sleeps = []
 
@@ -57,7 +57,7 @@ def test_goatcounter_sender_expands_batch_into_no_session_hits(monkeypatch) -> N
         assert "Authorization" not in headers
         assert timeout == 2.5
 
-    assert sleeps == [telemetry.REQUEST_INTERVAL_SECONDS, telemetry.REQUEST_INTERVAL_SECONDS]
+    assert sleeps == [telemetry.REQUEST_INTERVAL_SECONDS] * 3
 
 
 def test_goatcounter_sender_rejects_non_https_endpoint(monkeypatch) -> None:
@@ -74,7 +74,7 @@ def test_goatcounter_sender_rejects_non_https_endpoint(monkeypatch) -> None:
     assert called is False
 
 
-def test_aggregate_reporter_sends_only_batched_integer_counts() -> None:
+def test_immediate_reporter_dispatches_without_batch_wait() -> None:
     sent: list[int] = []
     delivered = threading.Event()
 
@@ -82,28 +82,27 @@ def test_aggregate_reporter_sends_only_batched_integer_counts() -> None:
         sent.append(count)
         delivered.set()
 
-    reporter = AggregateReporter(batch_size=3, flush_seconds=60, sender=sender, enabled=lambda: True)
-    reporter.record()
-    reporter.record(2)
+    reporter = ImmediateReporter(sender=sender, enabled=lambda: True)
+    reporter.record(3)
     assert delivered.wait(1)
     assert sent == [3]
 
 
-def test_aggregate_reporter_opt_out_drops_counts() -> None:
+def test_immediate_reporter_opt_out_drops_counts() -> None:
     sent: list[int] = []
-    reporter = AggregateReporter(batch_size=1, sender=sent.append, enabled=lambda: False)
+    reporter = ImmediateReporter(sender=sent.append, enabled=lambda: False)
     reporter.record(5)
     assert sent == []
 
 
-def test_aggregate_reporter_network_failure_never_reaches_caller() -> None:
+def test_immediate_reporter_network_failure_never_reaches_caller() -> None:
     delivered = threading.Event()
 
     def failing_sender(_count: int) -> None:
         delivered.set()
         raise OSError("offline")
 
-    reporter = AggregateReporter(batch_size=1, sender=failing_sender, enabled=lambda: True)
+    reporter = ImmediateReporter(sender=failing_sender, enabled=lambda: True)
     reporter.record()
     assert delivered.wait(1)
 
