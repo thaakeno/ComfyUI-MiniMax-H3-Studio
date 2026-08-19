@@ -1,6 +1,6 @@
 # H3 Studio generated-image counter
 
-H3 Studio's current generated-image counter uses hosted GoatCounter instead of a project-operated telemetry ingress.
+H3 Studio's current generated-image counter uses hosted GoatCounter directly instead of a project-operated telemetry ingress.
 
 The current client sends only a counter hit for the fixed path `/generated` with GoatCounter's `ns=1` flag. It does **not** send prompts, images, references, seeds, hardware details, file paths, installation identifiers, workflow data, or other generation metadata. No GoatCounter API key is shipped in H3 Studio.
 
@@ -54,13 +54,13 @@ Each generated image becomes one GoatCounter hit for `/generated` with session t
 
 ### README badge
 
-The README uses the existing Cloudflare Worker URL only as a **display proxy** for the badge. `/badge.svg` fetches the current GoatCounter aggregate with a per-request cache-busting query, formats it with an English comma thousands separator, and returns `Cache-Control: no-cache, no-store` so GitHub's image proxy revalidates instead of holding the old number.
+The README badge reads the public GoatCounter aggregate directly. There is no Cloudflare badge proxy in the current telemetry path. GoatCounter formats the public count using the configured comma thousands separator.
 
-The badge proxy never receives reports from current H3 Studio builds. Current telemetry goes directly to GoatCounter.
+GoatCounter documents that its public visitor-counter responses may be cached for up to four hours, so the README display can lag behind the ingest even though generation reports themselves are sent immediately.
 
-The Worker still keeps the old `/v1/report` and `/v1/count` routes temporarily for backward compatibility with already-installed H3 Studio versions. Those old versions still have the Cloudflare endpoint baked into their local code; keeping the route alive lets their remaining generations be measured and delta-imported during the cutover. Once old-version coverage is no longer needed, the legacy report route and Durable Object can be retired.
+### Legacy Cloudflare cutover
 
-### One-time migration from the old counter
+Older already-installed H3 Studio versions may still have the previous Cloudflare `/v1/report` endpoint baked into their local code. The old deployed Worker can remain online temporarily for those installs even though its source/config are no longer part of the current branch.
 
 The repository includes `tools/migrate_counter_to_goatcounter.py` for the historical migration and later legacy-version delta imports. It reads the API token from `GOATCOUNTER_API_TOKEN` and never writes that token to the repository.
 
