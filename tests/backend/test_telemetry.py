@@ -10,9 +10,13 @@ from h3studio import telemetry
 from h3studio.telemetry import AggregateReporter
 
 
-def test_migration_branch_fails_closed_without_goatcounter_endpoint() -> None:
-    assert telemetry.DEFAULT_ENDPOINT == ""
-    assert telemetry._goatcounter_hit_url(telemetry.DEFAULT_ENDPOINT) == ""
+def test_default_goatcounter_endpoint_is_finalized() -> None:
+    assert telemetry.DEFAULT_ENDPOINT == "https://h3-studio.goatcounter.com/count"
+    parsed = urllib.parse.urlsplit(telemetry._goatcounter_hit_url(telemetry.DEFAULT_ENDPOINT))
+    assert parsed.scheme == "https"
+    assert parsed.netloc == "h3-studio.goatcounter.com"
+    assert parsed.path == "/count"
+    assert urllib.parse.parse_qs(parsed.query) == {"p": ["/generated"], "ns": ["1"]}
 
 
 def test_goatcounter_sender_expands_batch_into_no_session_hits(monkeypatch) -> None:
@@ -33,7 +37,7 @@ def test_goatcounter_sender_expands_batch_into_no_session_hits(monkeypatch) -> N
         captured.append((request, timeout))
         return Response()
 
-    monkeypatch.setenv("H3STUDIO_TELEMETRY_ENDPOINT", "https://h3studio.goatcounter.com/count")
+    monkeypatch.setenv("H3STUDIO_TELEMETRY_ENDPOINT", "https://h3-studio.goatcounter.com/count")
     monkeypatch.setattr(telemetry.urllib.request, "urlopen", open_request)
     monkeypatch.setattr(telemetry.time, "sleep", sleeps.append)
 
@@ -43,13 +47,13 @@ def test_goatcounter_sender_expands_batch_into_no_session_hits(monkeypatch) -> N
     for request, timeout in captured:
         parsed = urllib.parse.urlsplit(request.full_url)
         assert parsed.scheme == "https"
-        assert parsed.netloc == "h3studio.goatcounter.com"
+        assert parsed.netloc == "h3-studio.goatcounter.com"
         assert parsed.path == "/count"
         assert urllib.parse.parse_qs(parsed.query) == {"p": ["/generated"], "ns": ["1"]}
         assert request.method == "POST"
         assert request.data == b""
         headers = dict(request.header_items())
-        assert headers["User-agent"] == "H3-Studio-Counter/2"
+        assert headers["User-agent"] == "H3-Studio/2 Counter"
         assert "Authorization" not in headers
         assert timeout == 2.5
 
