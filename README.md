@@ -12,7 +12,7 @@ Text-to-image, image editing, multi-reference generation, LightX acceleration, s
   <img alt="ComfyUI custom nodes" src="https://img.shields.io/badge/ComfyUI-Custom%20Nodes-0EA5E9?style=for-the-badge&labelColor=171B1F">
   <img alt="H3 profiles" src="https://img.shields.io/badge/H3-Base%20%C2%B7%20LightX%20%C2%B7%20PDD-A855F7?style=for-the-badge&labelColor=171B1F">
   <img alt="Status alpha" src="https://img.shields.io/badge/Status-Alpha-F59E0B?style=for-the-badge&labelColor=171B1F">
-  <img alt="Images generated" src="https://h3-studio-counter.h3-studio-counter.workers.dev/badge.svg">
+  <img alt="Images generated" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fh3-studio.goatcounter.com%2Fcounter%2Fgenerated.json%3Fstart%3D2026-08-02&query=%24.count&label=GENERATED&color=34D3B5&labelColor=171B1F&style=for-the-badge&cacheSeconds=300&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHJlY3QgeD0iMyIgeT0iNCIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE2IiByeD0iMiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8%2BPGNpcmNsZSBjeD0iOC41IiBjeT0iOSIgcj0iMS41IiBmaWxsPSJ3aGl0ZSIvPjxwYXRoIGQ9Ik01IDE3bDQuNS00LjUgMyAzIDItMiA0LjUgMy41IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg%3D%3D">
 </p>
 
 **One maintained workflow. H3 underneath. Far less wiring.**
@@ -341,7 +341,7 @@ git log -1 --format='Updated H3 Studio %h · %s'
 | MiniMax H3 32B conditioning encoder             | `models/text_encoders/`              | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3)                                                                                     |
 | H3 Video VAE                                    | `models/vae/`                        | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3)                                                                                     |
 | Qwen3-VL 4B/8B analyzer / writer, optional      | `models/text_encoders/`              | [Comfy-Org/Qwen3-VL](https://huggingface.co/Comfy-Org/Qwen3-VL)                                                                                         |
-| LightX H3 LoRAs, optional                       | `models/loras/`                      | [LightX2V/MiniMax-H3-Turbo](https://huggingface.co/lightx2v/Minimax-h3-Turbo) / [Kijai/MiniMax-H3_comfy](https://huggingface.co/Kijai/MiniMax-H3_comfy) |
+| LightX H3 LoRAs, optional                       | `models/loras/`                      | [LightX2V/MiniMax-H3-Turbo](https://huggingface.co/lightxv/Minimax-h3-Turbo) / [Kijai/MiniMax-H3_comfy](https://huggingface.co/Kijai/MiniMax-H3_comfy) |
 | TAEH3 preview model, optional                   | `models/vae_approx/`                 | [Kijai/MiniMax-H3-TAE](https://huggingface.co/Kijai/MiniMax-H3-TAE)                                                                                     |
 | PDD LoRA + heads, optional                      | `models/loras/`, `models/pdd_heads/` | [Mamad8 PDD](https://huggingface.co/Mamad8/MiniMaxH3_R2V-PDD-Turbo-LoRA-Mamad8)                                                                         |
 | T=1 Image VAE, experimental                     | `models/vae/`                        | [Mamad8 Image VAE](https://huggingface.co/Mamad8/MiniMax-H3-Image-VAE)                                                                                  |
