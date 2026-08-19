@@ -18,6 +18,15 @@ Linux/macOS:
 rm -rf telemetry
 ```
 
+If you also want it to stay disabled if a future `git pull` restores the tracked `telemetry/` directory, create the persistent opt-out first and then remove the folder:
+
+```powershell
+New-Item -ItemType File -Force .\.h3studio-telemetry-disabled | Out-Null
+Remove-Item -Recurse -Force .\telemetry
+```
+
+The folder removal deletes the telemetry implementation itself. The opt-out file keeps telemetry disabled if a later update restores that folder.
+
 The runtime telemetry file is `telemetry/telemetry.py`. It contains the GoatCounter endpoint, request code, background reporter and persistent opt-out handling.
 
 The current client sends only a counter hit for the fixed path `/generated` with GoatCounter's `ns=1` flag. It does **not** send prompts, images, references, seeds, hardware details, file paths, installation identifiers, workflow data, or other generation metadata. No GoatCounter API key is shipped in H3 Studio.
