@@ -9,7 +9,6 @@ import urllib.parse
 from pathlib import Path
 from typing import Optional
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TELEMETRY_PATH = REPO_ROOT / "telemetry" / "telemetry.py"
 
