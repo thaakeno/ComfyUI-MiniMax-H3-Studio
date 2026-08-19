@@ -17,6 +17,7 @@ import urllib.request
 LEGACY_COUNT_URL = "https://h3-studio-counter.h3-studio-counter.workers.dev/v1/count"
 PATH = "/generated"
 MAX_HITS_PER_REQUEST = 500
+API_BATCH_INTERVAL_SECONDS = 2.1
 
 
 def _https_json(url: str, *, request: urllib.request.Request | None = None) -> dict:
@@ -42,6 +43,7 @@ def seed_batch(code: str, token: str, count: int) -> None:
     payload = json.dumps(
         {
             "no_sessions": True,
+            "filter": [],
             "hits": [{"path": PATH} for _ in range(count)],
         },
         separators=(",", ":"),
@@ -99,7 +101,9 @@ def main() -> int:
         remaining -= size
         print(f"Migrated {migrated:,}/{total:,}")
         if remaining:
-            time.sleep(0.35)
+            # GoatCounter's /api/v0/count has its own 60 requests / 120 seconds
+            # limit; this keeps even larger migrations inside that default.
+            time.sleep(API_BATCH_INTERVAL_SECONDS)
 
     print("Migration accepted by GoatCounter. Allow a few seconds for background persistence.")
     return 0
