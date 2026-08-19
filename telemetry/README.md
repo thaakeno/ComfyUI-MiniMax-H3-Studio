@@ -2,9 +2,9 @@
 
 H3 Studio's current generated-image counter uses hosted GoatCounter directly instead of a project-operated telemetry ingress.
 
-The entire network-facing telemetry implementation now lives inside this top-level `telemetry/` directory. `h3studio/telemetry.py` is only a small no-network compatibility bridge so existing H3 Studio code does not break if this directory is missing.
+The entire telemetry implementation now lives inside this top-level `telemetry/` directory. The main H3 Studio runtime only contains an optional loader at the generation call site. If this directory is missing, that loader resolves to a no-op and H3 Studio continues normally without telemetry.
 
-If you want telemetry removed entirely from your local install, delete the whole `telemetry/` directory and restart ComfyUI. H3 Studio will automatically treat telemetry as disabled and generation will continue normally.
+If you want telemetry removed entirely from your local install, delete the whole `telemetry/` directory and restart ComfyUI.
 
 Windows PowerShell:
 
@@ -17,6 +17,8 @@ Linux/macOS:
 ```bash
 rm -rf telemetry
 ```
+
+The runtime telemetry file is `telemetry/telemetry.py`. It contains the GoatCounter endpoint, request code, background reporter and persistent opt-out handling.
 
 The current client sends only a counter hit for the fixed path `/generated` with GoatCounter's `ns=1` flag. It does **not** send prompts, images, references, seeds, hardware details, file paths, installation identifiers, workflow data, or other generation metadata. No GoatCounter API key is shipped in H3 Studio.
 
@@ -35,24 +37,24 @@ Telemetry is enabled by default and can be disabled at any time.
 From the H3 Studio directory, run:
 
 ```bash
-python -m h3studio.telemetry disable
+python telemetry/telemetry.py disable
 ```
 
-This works on Windows, Linux and macOS. The command creates the per-install opt-out and prints `H3 telemetry: DISABLED` only after H3 Studio's own telemetry check confirms that reporting is disabled.
+This works on Windows, Linux and macOS. The command creates the per-install opt-out and prints `H3 telemetry: DISABLED` only after the telemetry check confirms that reporting is disabled.
 
 Check the current effective state with:
 
 ```bash
-python -m h3studio.telemetry status
+python telemetry/telemetry.py status
 ```
 
 Remove the per-install opt-out with:
 
 ```bash
-python -m h3studio.telemetry enable
+python telemetry/telemetry.py enable
 ```
 
-If the `telemetry/` directory itself has been deleted, the compatibility bridge reports telemetry as disabled and does not attempt any network request.
+If the whole `telemetry/` directory has been deleted, telemetry is already fully removed and no disable command is needed.
 
 ### Temporary environment override
 
@@ -80,14 +82,14 @@ GoatCounter documents that its public visitor-counter responses may be cached fo
 
 Older already-installed H3 Studio versions may still have the previous Cloudflare `/v1/report` endpoint baked into their local code. The old deployed Worker can remain online temporarily for those installs even though its source/config are no longer part of the current branch.
 
-The repository includes `telemetry/migrate_counter_to_goatcounter.py` for the historical migration and later legacy-version delta imports. It reads the API token from `GOATCOUNTER_API_TOKEN` and never writes that token to the repository.
+`telemetry/migrate_legacy_counter.py` is a maintainer-only migration helper for the historical Cloudflare count and later legacy-version delta imports. It is not imported or executed by H3 Studio during normal use. It reads the API token from `GOATCOUNTER_API_TOKEN` and never writes that token to the repository.
 
 The migration API batches up to 500 historical hits per request and sets `no_sessions: true`. Never re-import the full historical baseline after cutover; only import the additional legacy Cloudflare delta since the saved cutover checkpoint.
 
 For later syncs, pass the last saved legacy total with `--delta-from`. The script fetches the current legacy total, imports only the increase, and prints the next checkpoint after a successful apply:
 
 ```powershell
-python .\telemetry\migrate_counter_to_goatcounter.py --code h3-studio --delta-from 9058 --apply
+python .\telemetry\migrate_legacy_counter.py --code h3-studio --delta-from 9058 --apply
 ```
 
 Replace `9058` with the last `Next legacy checkpoint` value on subsequent syncs.
