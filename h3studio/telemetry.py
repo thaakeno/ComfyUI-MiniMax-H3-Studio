@@ -1,4 +1,4 @@
-"""Privacy-minimal, non-blocking aggregate generation counter."""
+"""Privacy-minimal, non-blocking generated-image counter."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def _send_goatcounter_hit(url: str) -> None:
 
 
 def _post_count(count: int) -> None:
-    """Expand a local aggregate into anonymous no-session GoatCounter hits."""
+    """Send successful outputs to GoatCounter immediately, paced below its public limit."""
 
     endpoint = os.getenv("H3STUDIO_TELEMETRY_ENDPOINT", DEFAULT_ENDPOINT).strip()
     url = _goatcounter_hit_url(endpoint)
@@ -67,76 +67,43 @@ def _post_count(count: int) -> None:
     if not url or not value:
         return
 
-    # GoatCounter's public /count endpoint is rate-limited per source. Serialize
-    # all background batches and stay comfortably below its 4 requests/s default.
+    # All reporting is background-only. Keep the lock across the pacing delay so
+    # independent generations cannot burst above GoatCounter's public 4 req/s limit.
     with _SEND_LOCK:
-        for index in range(value):
+        for _ in range(value):
             _send_goatcounter_hit(url)
-            if index + 1 < value:
-                time.sleep(REQUEST_INTERVAL_SECONDS)
+            time.sleep(REQUEST_INTERVAL_SECONDS)
 
 
-class AggregateReporter:
-    """Batch anonymous integer increments without delaying image execution."""
+class ImmediateReporter:
+    """Dispatch successful output counts immediately without delaying generation."""
 
     def __init__(
         self,
         *,
-        batch_size: int = 10,
-        flush_seconds: float = 60.0,
         sender: Callable[[int], None] = _post_count,
         enabled: Callable[[], bool] = telemetry_enabled,
     ) -> None:
-        self.batch_size = max(1, int(batch_size))
-        self.flush_seconds = max(1.0, float(flush_seconds))
         self.sender = sender
         self.enabled = enabled
-        self._pending = 0
-        self._timer: threading.Timer | None = None
-        self._lock = threading.Lock()
 
     def record(self, count: int = 1) -> None:
         value = max(0, int(count))
         if not value or not self.enabled():
             return
-        flush = 0
-        with self._lock:
-            self._pending = min(10_000, self._pending + value)
-            if self._pending >= self.batch_size:
-                flush = self._drain_locked()
-            elif self._timer is None:
-                self._timer = threading.Timer(self.flush_seconds, self.flush)
-                self._timer.daemon = True
-                self._timer.start()
-        if flush:
-            self._send_async(flush)
 
-    def _drain_locked(self) -> int:
-        count, self._pending = self._pending, 0
-        if self._timer is not None:
-            self._timer.cancel()
-            self._timer = None
-        return count
-
-    def flush(self) -> None:
-        with self._lock:
-            count = self._drain_locked()
-        if count:
-            self._send_async(count)
-
-    def _send_async(self, count: int) -> None:
         def send() -> None:
             with suppress(Exception):
-                self.sender(count)
+                self.sender(value)
 
-        threading.Thread(target=send, name="h3studio-aggregate-counter", daemon=True).start()
+        threading.Thread(target=send, name="h3studio-counter", daemon=True).start()
 
 
-_REPORTER = AggregateReporter()
+_REPORTER = ImmediateReporter()
 
 
 def record_generation_success(count: int = 1) -> None:
-    """Record only a successful output count; no generation data is accepted."""
+    """Immediately queue successful outputs for anonymous background counting."""
 
     if os.getenv("PYTEST_CURRENT_TEST"):
         return
