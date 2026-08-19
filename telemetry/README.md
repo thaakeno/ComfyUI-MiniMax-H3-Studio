@@ -52,39 +52,12 @@ https://h3-studio.goatcounter.com/count
 
 Each generated image becomes one GoatCounter hit for `/generated` with session tracking disabled.
 
-## Read-only README badge proxy
-
-`telemetry/worker.js` is no longer a telemetry receiver. It is a **read-only badge/count proxy** for the README.
-
-H3 Studio clients never send generation reports to this Worker. It accepts only `GET`/`HEAD` and exposes:
-
-```text
-/badge.svg
-/v1/count
-/count.json
-/healthz
-```
-
-For a near-live badge, the Worker can use GoatCounter's authenticated statistics API and cache the aggregate for only 10 seconds. GoatCounter itself persists incoming pageviews in the background, so this is near-real-time rather than literally instantaneous. The public GoatCounter visitor-counter endpoint remains a fallback if the read-only API token is missing or temporarily unavailable.
-
-The Worker secret must be a **separate GoatCounter API token with only `Read statistics` permission** for the `h3-studio` site. Do not reuse or ship a pageview-recording token. GoatCounter defines `Read statistics` separately from `Record pageviews`, so the badge Worker does not need permission to write any analytics data.
-
-From the repository after pulling this branch:
-
-```powershell
-cd telemetry
-npx wrangler secret put GOATCOUNTER_API_TOKEN
-npx wrangler deploy
-```
-
-`wrangler secret put` prompts for the token value so it is not written to shell history or the repository.
-
-The Worker retains the existing `h3-studio-counter` name so the README can keep the same clean `/badge.svg` URL and visual style. The legacy Durable Object counter is retired with the `v2` deletion migration; its old stored number is no longer needed because the historical total has already been migrated to GoatCounter.
-
-The badge response asks downstream proxies not to cache it, but GitHub renders external README images through its own image proxy, so GitHub can still add some refresh delay outside H3 Studio's control.
+The README badge reads GoatCounter's public aggregate counter. GoatCounter may cache that public visitor-counter response for up to four hours, so the badge is intentionally not treated as a real-time telemetry feed.
 
 ### One-time migration from the old counter
 
 The repository includes `tools/migrate_counter_to_goatcounter.py` only for the completed one-time historical migration from the old Cloudflare counter. It reads the API token from `GOATCOUNTER_API_TOKEN` and never writes that token to the repository.
 
 The migration API batches up to 500 historical hits per request and sets `no_sessions: true`. It must **not** be run again against the already-seeded H3 Studio site because that would duplicate the historical total.
+
+The old Cloudflare Worker may stay deployed temporarily only so older H3 Studio releases already pointing at it do not break. Current H3 Studio builds do not use it, and the Worker source/config are no longer part of the new telemetry path.
