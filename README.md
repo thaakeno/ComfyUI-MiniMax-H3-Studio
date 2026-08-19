@@ -12,7 +12,7 @@ Text-to-image, image editing, multi-reference generation, LightX acceleration, s
   <img alt="ComfyUI custom nodes" src="https://img.shields.io/badge/ComfyUI-Custom%20Nodes-0EA5E9?style=for-the-badge&labelColor=171B1F">
   <img alt="H3 profiles" src="https://img.shields.io/badge/H3-Base%20%C2%B7%20LightX%20%C2%B7%20PDD-A855F7?style=for-the-badge&labelColor=171B1F">
   <img alt="Status alpha" src="https://img.shields.io/badge/Status-Alpha-F59E0B?style=for-the-badge&labelColor=171B1F">
-  <img alt="Images generated" src="https://h3-studio-counter.h3-studio-counter.workers.dev/badge.svg">
+  <img alt="Images generated" src="https://h3-studio.goatcounter.com/counter/generated.svg?no_branding=1">
 </p>
 
 **One maintained workflow. H3 underneath. Far less wiring.**
