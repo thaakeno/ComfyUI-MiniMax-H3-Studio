@@ -6,10 +6,10 @@ logpush = false
 [observability]
 enabled = false
 
-[[durable_objects.bindings]]
-name = "GENERATION_COUNTER"
-class_name = "GenerationCounter"
-
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GenerationCounter"]
+
+[[migrations]]
+tag = "v2"
+deleted_classes = ["GenerationCounter"]
