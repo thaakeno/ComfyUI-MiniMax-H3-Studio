@@ -129,7 +129,7 @@ Auto routing selects the valid path for the current request instead of silently 
 
 Impossible PDD, REF2VA, forced-route and missing-reference combinations are rejected before expensive model work begins.
 
-<img width="1600" height="1000" alt="H3 Studio comparison" src="https://github.com/user-attachments/assets/9e68b1dc-e7d1-4a4e-8baf-4dc64575f5e6" />
+<img width="1600" height="1000" alt="H3 Studio comparison" src="https://github.com/user-attachments/assets/9e68b1dc-e7d1-4a4e-8c1c-d4379fa081c5" />
 
 ## Sampling and acceleration
 
