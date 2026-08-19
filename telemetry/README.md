@@ -1,8 +1,8 @@
 # H3 Studio generated-image counter
 
-H3 Studio's optional generated-image counter uses hosted GoatCounter instead of a project-operated telemetry ingress.
+H3 Studio's current generated-image counter uses hosted GoatCounter instead of a project-operated telemetry ingress.
 
-The client sends only a counter hit for the fixed path `/generated` with GoatCounter's `ns=1` flag. It does **not** send prompts, images, references, seeds, hardware details, file paths, installation identifiers, workflow data, or other generation metadata. No GoatCounter API key is shipped in H3 Studio.
+The current client sends only a counter hit for the fixed path `/generated` with GoatCounter's `ns=1` flag. It does **not** send prompts, images, references, seeds, hardware details, file paths, installation identifiers, workflow data, or other generation metadata. No GoatCounter API key is shipped in H3 Studio.
 
 Each successful output count is queued immediately on a daemon background thread; there is no 10-image/60-second local batching delay anymore. If one H3 execution produces multiple successful images, that integer count is expanded into one GoatCounter `/count` hit per image. All sender threads share one lock and keep 0.40 seconds between requests so independent generations cannot burst above GoatCounter's public count rate limit. Generation itself never waits for the network.
 
@@ -44,7 +44,7 @@ python -m h3studio.telemetry enable
 
 ### Counter endpoint
 
-The built-in endpoint is:
+The current client endpoint is:
 
 ```text
 https://h3-studio.goatcounter.com/count
@@ -52,12 +52,16 @@ https://h3-studio.goatcounter.com/count
 
 Each generated image becomes one GoatCounter hit for `/generated` with session tracking disabled.
 
-The README badge reads GoatCounter's public aggregate counter. GoatCounter may cache that public visitor-counter response for up to four hours, so the badge is intentionally not treated as a real-time telemetry feed.
+### README badge
+
+The README uses the existing Cloudflare Worker URL only as a **display proxy** for the badge. `/badge.svg` fetches the current GoatCounter aggregate with a per-request cache-busting query, formats it with an English comma thousands separator, and returns `Cache-Control: no-cache, no-store` so GitHub's image proxy revalidates instead of holding the old number.
+
+The badge proxy never receives reports from current H3 Studio builds. Current telemetry goes directly to GoatCounter.
+
+The Worker still keeps the old `/v1/report` and `/v1/count` routes temporarily for backward compatibility with already-installed H3 Studio versions. Those old versions still have the Cloudflare endpoint baked into their local code; keeping the route alive lets their remaining generations be measured and delta-imported during the cutover. Once old-version coverage is no longer needed, the legacy report route and Durable Object can be retired.
 
 ### One-time migration from the old counter
 
-The repository includes `tools/migrate_counter_to_goatcounter.py` only for the completed one-time historical migration from the old Cloudflare counter. It reads the API token from `GOATCOUNTER_API_TOKEN` and never writes that token to the repository.
+The repository includes `tools/migrate_counter_to_goatcounter.py` for the historical migration and later legacy-version delta imports. It reads the API token from `GOATCOUNTER_API_TOKEN` and never writes that token to the repository.
 
-The migration API batches up to 500 historical hits per request and sets `no_sessions: true`. It must **not** be run again against the already-seeded H3 Studio site because that would duplicate the historical total.
-
-The old Cloudflare Worker may stay deployed temporarily only so older H3 Studio releases already pointing at it do not break. Current H3 Studio builds do not use it, and the Worker source/config are no longer part of the new telemetry path.
+The migration API batches up to 500 historical hits per request and sets `no_sessions: true`. Never re-import the full historical baseline after cutover; only import the additional legacy Cloudflare delta since the saved cutover checkpoint.
