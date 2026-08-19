@@ -21,7 +21,7 @@ jobs:
           node-version: "24"
       - run: uv sync --extra dev --locked
       - run: uv run pytest -q
-      - run: uv run ruff check h3studio tests/backend tools --output-format=github
+      - run: uv run ruff check h3studio telemetry tests/backend tools --output-format=github
       - name: Frontend lint
         run: npm run lint
       - name: Frontend tests
