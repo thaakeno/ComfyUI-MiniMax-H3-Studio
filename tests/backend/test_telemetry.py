@@ -1,17 +1,42 @@
 from __future__ import annotations
 
+import ast
+import importlib.util
 import subprocess
 import sys
 import threading
 import urllib.parse
 from pathlib import Path
+from typing import Optional
 
-from h3studio import telemetry as telemetry_bridge
 
-telemetry = telemetry_bridge._CLIENT
-if telemetry is None:  # pragma: no cover - repository tests include telemetry/client.py
-    raise RuntimeError("telemetry/client.py is required for telemetry implementation tests")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TELEMETRY_PATH = REPO_ROOT / "telemetry" / "telemetry.py"
 
+
+def _load_telemetry_module():
+    spec = importlib.util.spec_from_file_location("h3studio_test_telemetry", TELEMETRY_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("telemetry/telemetry.py is required for telemetry implementation tests")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_runtime_loader_function():
+    runtime_path = REPO_ROOT / "h3studio" / "nodes" / "image_runtime.py"
+    tree = ast.parse(runtime_path.read_text(encoding="utf-8"), filename=str(runtime_path))
+    function_node = next(
+        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_load_telemetry_recorder"
+    )
+    isolated = ast.Module(body=[function_node], type_ignores=[])
+    ast.fix_missing_locations(isolated)
+    namespace = {"importlib": __import__("importlib"), "Path": Path, "Optional": Optional}
+    exec(compile(isolated, str(runtime_path), "exec"), namespace)
+    return namespace["_load_telemetry_recorder"]
+
+
+telemetry = _load_telemetry_module()
 ImmediateReporter = telemetry.ImmediateReporter
 
 
@@ -123,14 +148,13 @@ def test_cli_disable_creates_persistent_opt_out_and_verifies_state(monkeypatch, 
     assert capsys.readouterr().out.strip() == "H3 telemetry: DISABLED"
 
 
-def test_module_disable_command_works_end_to_end() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    opt_out = repo_root / ".h3studio-telemetry-disabled"
+def test_script_disable_command_works_end_to_end() -> None:
+    opt_out = REPO_ROOT / ".h3studio-telemetry-disabled"
     opt_out.unlink(missing_ok=True)
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "h3studio.telemetry", "disable"],
-            cwd=repo_root,
+            [sys.executable, str(TELEMETRY_PATH), "disable"],
+            cwd=REPO_ROOT,
             capture_output=True,
             text=True,
             check=False,
@@ -142,11 +166,24 @@ def test_module_disable_command_works_end_to_end() -> None:
         opt_out.unlink(missing_ok=True)
 
 
-def test_missing_telemetry_folder_is_clean_noop(monkeypatch, tmp_path, capsys) -> None:
-    assert telemetry_bridge._load_client(tmp_path / "missing-client.py") is None
+def test_missing_telemetry_folder_resolves_to_noop() -> None:
+    loader = _load_runtime_loader_function()
+    assert loader(REPO_ROOT / "telemetry" / "definitely-missing.py") is None
 
-    monkeypatch.setattr(telemetry_bridge, "_CLIENT", None)
-    assert telemetry_bridge.telemetry_enabled() is False
-    assert telemetry_bridge.record_generation_success(10) is None
-    assert telemetry_bridge._cli(["status"]) == 0
-    assert capsys.readouterr().out.strip() == "H3 telemetry: DISABLED"
+
+def test_runtime_loader_finds_only_explicit_telemetry_file(tmp_path) -> None:
+    loader = _load_runtime_loader_function()
+    module_path = tmp_path / "telemetry.py"
+    module_path.write_text(
+        "def record_generation_success(count=1):\n    return count\n",
+        encoding="utf-8",
+    )
+    recorder = loader(module_path)
+    assert recorder is not None
+    assert recorder(7) == 7
+
+
+def test_all_telemetry_implementation_files_live_in_top_level_folder() -> None:
+    assert TELEMETRY_PATH.is_file()
+    assert (REPO_ROOT / "telemetry" / "migrate_legacy_counter.py").is_file()
+    assert not (REPO_ROOT / "h3studio" / "telemetry.py").exists()
