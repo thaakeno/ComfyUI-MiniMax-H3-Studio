@@ -1,17 +1,73 @@
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 import threading
+import urllib.parse
 from pathlib import Path
 
 from h3studio import telemetry
 from h3studio.telemetry import AggregateReporter
 
 
-def test_default_endpoint_targets_the_deployed_counter() -> None:
-    assert telemetry.DEFAULT_ENDPOINT == "https://h3-studio-counter.h3-studio-counter.workers.dev/v1/report"
+def test_migration_branch_fails_closed_without_goatcounter_endpoint() -> None:
+    assert telemetry.DEFAULT_ENDPOINT == ""
+    assert telemetry._goatcounter_hit_url(telemetry.DEFAULT_ENDPOINT) == ""
+
+
+def test_goatcounter_sender_expands_batch_into_no_session_hits(monkeypatch) -> None:
+    captured = []
+    sleeps = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self, _size):
+            return b""
+
+    def open_request(request, timeout):
+        captured.append((request, timeout))
+        return Response()
+
+    monkeypatch.setenv("H3STUDIO_TELEMETRY_ENDPOINT", "https://h3studio.goatcounter.com/count")
+    monkeypatch.setattr(telemetry.urllib.request, "urlopen", open_request)
+    monkeypatch.setattr(telemetry.time, "sleep", sleeps.append)
+
+    telemetry._post_count(3)
+
+    assert len(captured) == 3
+    for request, timeout in captured:
+        parsed = urllib.parse.urlsplit(request.full_url)
+        assert parsed.scheme == "https"
+        assert parsed.netloc == "h3studio.goatcounter.com"
+        assert parsed.path == "/count"
+        assert urllib.parse.parse_qs(parsed.query) == {"p": ["/generated"], "ns": ["1"]}
+        assert request.method == "POST"
+        assert request.data == b""
+        headers = dict(request.header_items())
+        assert headers["User-agent"] == "H3-Studio-Counter/2"
+        assert "Authorization" not in headers
+        assert timeout == 2.5
+
+    assert sleeps == [telemetry.REQUEST_INTERVAL_SECONDS, telemetry.REQUEST_INTERVAL_SECONDS]
+
+
+def test_goatcounter_sender_rejects_non_https_endpoint(monkeypatch) -> None:
+    called = False
+
+    def open_request(_request, _timeout):
+        nonlocal called
+        called = True
+        raise AssertionError("network should not be called")
+
+    monkeypatch.setenv("H3STUDIO_TELEMETRY_ENDPOINT", "http://example.test/count")
+    monkeypatch.setattr(telemetry.urllib.request, "urlopen", open_request)
+    telemetry._post_count(5)
+    assert called is False
 
 
 def test_aggregate_reporter_sends_only_batched_integer_counts() -> None:
@@ -46,34 +102,6 @@ def test_aggregate_reporter_network_failure_never_reaches_caller() -> None:
     reporter = AggregateReporter(batch_size=1, sender=failing_sender, enabled=lambda: True)
     reporter.record()
     assert delivered.wait(1)
-
-
-def test_network_payload_contains_no_generation_or_installation_data(monkeypatch) -> None:
-    captured = {}
-
-    class Response:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return None
-
-        def read(self, _size):
-            return b"{}"
-
-    def open_request(request, timeout):
-        captured["body"] = json.loads(request.data)
-        captured["headers"] = dict(request.header_items())
-        captured["timeout"] = timeout
-        return Response()
-
-    monkeypatch.setenv("H3STUDIO_TELEMETRY_ENDPOINT", "https://counter.example/v1/report")
-    monkeypatch.setattr(telemetry.urllib.request, "urlopen", open_request)
-    telemetry._post_count(7)
-
-    assert captured["body"] == {"count": 7, "schema": 1}
-    assert captured["timeout"] == 2.5
-    assert "Authorization" not in captured["headers"]
 
 
 def test_cli_disable_creates_persistent_opt_out_and_verifies_state(monkeypatch, tmp_path, capsys) -> None:
