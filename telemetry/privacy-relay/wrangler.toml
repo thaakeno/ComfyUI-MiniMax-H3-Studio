@@ -1,0 +1,18 @@
+name = "h3-studio-privacy-relay"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+logpush = false
+
+[observability]
+enabled = false
+
+[vars]
+COUNTER_URL = "https://h3-studio-counter.h3-studio-counter.workers.dev/v1/report"
+
+[[durable_objects.bindings]]
+name = "REPORT_MIXER"
+class_name = "ReportMixer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ReportMixer"]
