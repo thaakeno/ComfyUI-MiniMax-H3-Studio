@@ -43,6 +43,15 @@ test("manifest includes H3 role-aware destinations and current LightX profiles",
   assert.match(source, /destination:"vae_approx"/);
 });
 
+test("model setup exposes the Comfy-ready 500K single-frame VAE without replacing the legacy option", () => {
+  assert.match(source, /minimax_h3_single_frame_500k_comfy\.safetensors/);
+  assert.match(source, /Alissonerdx\/MiniMax-H3-Single-Frame-VAE-500K-Comfy/);
+  assert.match(source, /Single-frame Image VAE 500K · Comfy/);
+  assert.match(source, /minimax_h3_t1_image_vae_step1597\.safetensors/);
+  assert.match(source, /Legacy T=1 Image VAE · Mamad8/);
+  assert.match(source, /id:"t1vae500k"[\s\S]*recommended:false/);
+});
+
 test("Model Setup node computeSize is static to prevent runaway expansion while widget fills node height", () => {
   assert.match(source, /node\.computeSize\s*=\s*function h3ModelSetupComputeSize/);
   assert.match(source, /widget\.computeSize\s*=\s*\(width\)\s*=>/);
