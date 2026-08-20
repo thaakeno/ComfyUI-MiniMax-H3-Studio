@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import importlib
 import threading
 from types import SimpleNamespace
 
-import h3studio.single_frame_vae_500k as support
+support = importlib.import_module("h3studio.single_frame_vae_500k")
 
 
 COMFY_500K = "minimax_h3_single_frame_vae_500k_comfy.safetensors"
