@@ -23,7 +23,8 @@ const ASSETS = [
   { id:"ref4", group:"accel-alternative", kind:"LoRA", required:false, recommended:false, name:"REF2VA · LightX v0.1 · 4-step · Kijai rank-20", filename:"minimax_h3_ref2v_lightx2v_turbo_4step_v0.1_resized_avg_rank_20_bf16.safetensors", destination:"loras", url:"https://huggingface.co/Kijai/MiniMax-H3_comfy/resolve/main/loras/minimax_h3_ref2v_lightx2v_turbo_4step_v0.1_resized_avg_rank_20_bf16.safetensors?download=true" },
 
   { id:"taeh3", group:"extras", kind:"Preview VAE", required:false, recommended:true, name:"TAEH3 live preview", filename:"taeh3.safetensors", destination:"vae_approx", url:"https://huggingface.co/Kijai/MiniMax-H3-TAE/resolve/main/vae_approx/taeh3.safetensors?download=true" },
-  { id:"t1vae", group:"extras", kind:"Experimental VAE", required:false, recommended:false, name:"Experimental T=1 Image VAE", filename:"minimax_h3_t1_image_vae_step1597.safetensors", destination:"vae", url:"https://huggingface.co/Mamad8/MiniMax-H3-Image-VAE/resolve/main/minimax_h3_t1_image_vae_step1597.safetensors?download=true" },
+  { id:"t1vae500k", group:"extras", kind:"Experimental VAE", required:false, recommended:false, name:"Single-frame Image VAE 500K · Comfy", filename:"minimax_h3_single_frame_500k_comfy.safetensors", destination:"vae", url:"https://huggingface.co/Alissonerdx/MiniMax-H3-Single-Frame-VAE-500K-Comfy/resolve/main/minimax_h3_single_frame_500k_comfy.safetensors?download=true" },
+  { id:"t1vae", group:"extras", kind:"Experimental VAE", required:false, recommended:false, name:"Legacy T=1 Image VAE · Mamad8", filename:"minimax_h3_t1_image_vae_step1597.safetensors", destination:"vae", url:"https://huggingface.co/Mamad8/MiniMax-H3-Image-VAE/resolve/main/minimax_h3_t1_image_vae_step1597.safetensors?download=true" },
   { id:"qwen8", group:"extras", kind:"Prompt writer", required:false, recommended:false, name:"Optional Qwen3-VL 8B writer", filename:"qwen3vl_8b_fp8_scaled.safetensors", destination:"text_encoders", url:"https://huggingface.co/Comfy-Org/Qwen3-VL/resolve/main/text_encoders/qwen3vl_8b_fp8_scaled.safetensors?download=true" },
 ];
 
@@ -45,7 +46,7 @@ function bytesLabel(bytes) {
 }
 function maintained(graphData) {
   const nodes = graphData?.nodes || [];
-  return String(graphData?.id || "") === WORKFLOW_ID || (nodes.some(n => String(n?.type || "") === DIRECTOR) && nodes.some(n => Number(n?.id) === 28 && String(n?.type || "") === NOTE));
+  return String(graphData?.id || "") === WORKFLOW_ID || (nodes.some(n => String(n?.type || "") === DIRECTOR) && nodes.some(n=>Number(n?.id)===28 && String(n?.type||"")===NOTE));
 }
 function ensureSerializedSetup(graphData) {
   if (!maintained(graphData)) return;
