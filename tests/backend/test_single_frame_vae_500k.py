@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 from types import SimpleNamespace
 
-from h3studio import single_frame_vae_500k as support
+import h3studio.single_frame_vae_500k as support
 
 
 COMFY_500K = "minimax_h3_single_frame_vae_500k_comfy.safetensors"
