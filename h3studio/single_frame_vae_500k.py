@@ -86,9 +86,9 @@ def mark_loaded_vae(vae: Any, name: str) -> Any:
         if target is None:
             continue
         with suppress(Exception):
-            setattr(target, "_h3studio_image_vae_name", str(name))
-            setattr(target, "_h3studio_auto_tile_size", int(tile))
-            setattr(target, "_h3studio_auto_tile_overlap", int(overlap))
+            object.__setattr__(target, "_h3studio_image_vae_name", str(name))
+            object.__setattr__(target, "_h3studio_auto_tile_size", int(tile))
+            object.__setattr__(target, "_h3studio_auto_tile_overlap", int(overlap))
     return vae
 
 
