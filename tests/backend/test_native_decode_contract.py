@@ -34,6 +34,12 @@ def test_decoder_uses_native_pixels_and_instance_scoped_restore() -> None:
     assert "model.tiling = previous_tiling" in text
 
 
+def test_adapter_accepts_core_frames_selection() -> None:
+    text = _source()
+    assert "def adapter(instance, z, frames=slice(None)):" in text
+    assert "_batched_tiled_decode(instance, z, progress)[:, :, frames]" in text
+
+
 def test_decoder_has_native_tile_batching_progress_and_oom_backoff() -> None:
     text = _source()
     assert "torch.cat(latent_tiles, dim=0)" in text
