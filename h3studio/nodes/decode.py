@@ -325,8 +325,8 @@ def _native_decode_adapter(
         had_instance_method = "tiled_decode" in getattr(model, "__dict__", {})
         previous_instance_method = getattr(model, "__dict__", {}).get("tiled_decode")
 
-        def adapter(instance, z):
-            return _batched_tiled_decode(instance, z, progress)
+        def adapter(instance, z, frames=slice(None)):
+            return _batched_tiled_decode(instance, z, progress)[:, :, frames]
 
         try:
             model.tile_size = int(tile_size)
